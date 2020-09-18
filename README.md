@@ -21,7 +21,7 @@ L'extension PostgreSQL ASGARD est un logiciel libre publié sous licence CeCILL-
 
 ## Crédits
 
-Copyright République Française, 2020.
+République Française, 2020.
 Secrétariat général du Ministère de la transition écologique, du Ministère de la cohésion des territoires et des relations avec les collectivités territoriales et du Ministère de la Mer.
 Service du numérique.
 
