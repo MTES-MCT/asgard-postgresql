@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.1.0
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.1
 -- > Script de recette.
 --
 -- Copyright République Française, 2020.
@@ -29,20 +29,13 @@
    
 /* Les tests sont à exécuter :
 - sur une base vierge où ont simplement été installées les
-extensions postgres_fdw, postgis et asgard ;
+extensions postgres_fdw et asgard ;
 - avec un super-utilisateur.
 
 SELECT * FROM z_asgard_recette.execute_recette() ;
 
 Tous les tests existent en deux versions, une forme avec noms d'objets
-normalisés et une forme "b" avec noms d'objets ésotériques.
-
-NB :
-- les tests t038 et t039 ne fonctionnent pas avec les
-installations basées sur une version d'ASGARD antérieure à la 0.7.0 ;
-- les tests t040 et t041 ne fonctionnent pas avec les
-installations basées sur une version d'ASGARD antérieure à la 1.0.0
-ou de PG inférieur à 10 */   
+normalisés et une forme "b" avec noms d'objets ésotériques. */   
    
 /*
 -- FUNCTION: z_asgard_recette.t000()
@@ -73,7 +66,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t000 IS 'ASGARD recette. TEST : .' ;
+COMMENT ON FUNCTION z_asgard_recette.t000() IS 'ASGARD recette. TEST : .' ;
 */
    
    
@@ -102,6 +95,9 @@ DECLARE
     test record ;
     succes boolean ;
 BEGIN
+    SET LOCAL client_min_messages = 'ERROR' ;
+    -- empêche l'affichage des messages d'ASGARD
+    
     FOR test IN (
             SELECT oid::regprocedure::text AS nom, proname::text AS ref
                 FROM pg_catalog.pg_proc
@@ -199,7 +195,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t001 IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
+COMMENT ON FUNCTION z_asgard_recette.t001() IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
 
 
 -- FUNCTION: z_asgard_recette.t001b()
@@ -265,7 +261,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t001b IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
+COMMENT ON FUNCTION z_asgard_recette.t001b() IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
 
 
 
@@ -324,7 +320,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t002 IS 'ASGARD recette. TEST : changement de nom d''un schéma par commande directe.' ;
+COMMENT ON FUNCTION z_asgard_recette.t002() IS 'ASGARD recette. TEST : changement de nom d''un schéma par commande directe.' ;
 
 
 -- FUNCTION: z_asgard_recette.t002b()
@@ -382,7 +378,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t002b IS 'ASGARD recette. TEST : changement de nom d''un schéma par commande directe.' ;
+COMMENT ON FUNCTION z_asgard_recette.t002b() IS 'ASGARD recette. TEST : changement de nom d''un schéma par commande directe.' ;
 
 
 -- FUNCTION: z_asgard_recette.t003()
@@ -427,7 +423,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t003 IS 'ASGARD recette. TEST : changement de propriétaire d''un schéma par commande directe.' ;
+COMMENT ON FUNCTION z_asgard_recette.t003() IS 'ASGARD recette. TEST : changement de propriétaire d''un schéma par commande directe.' ;
 
 -- FUNCTION: z_asgard_recette.t003b()
 
@@ -475,7 +471,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t003b IS 'ASGARD recette. TEST : changement de propriétaire d''un schéma par commande directe.' ;
+COMMENT ON FUNCTION z_asgard_recette.t003b() IS 'ASGARD recette. TEST : changement de propriétaire d''un schéma par commande directe.' ;
 
 
 -- FUNCTION: z_asgard_recette.t004()
@@ -511,7 +507,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t004 IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (une étape).' ;
+COMMENT ON FUNCTION z_asgard_recette.t004() IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (une étape).' ;
 
 
 -- FUNCTION: z_asgard_recette.t004b()
@@ -551,7 +547,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t004b IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (une étape).' ;
+COMMENT ON FUNCTION z_asgard_recette.t004b() IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (une étape).' ;
 
 
 -- FUNCTION: z_asgard_recette.t005()
@@ -599,7 +595,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t005 IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (deux étapes).' ;
+COMMENT ON FUNCTION z_asgard_recette.t005() IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (deux étapes).' ;
 
 
 -- FUNCTION: z_asgard_recette.t005b()
@@ -651,7 +647,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t005b IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (deux étapes).' ;
+COMMENT ON FUNCTION z_asgard_recette.t005b() IS 'ASGARD recette. TEST : création d''un schéma par la table de gestion (deux étapes).' ;
 
 
 -- FUNCTION: z_asgard_recette.t006()
@@ -690,7 +686,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t006 IS 'ASGARD recette. TEST : modification du producteur par la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t006() IS 'ASGARD recette. TEST : modification du producteur par la table de gestion.' ;
 
 -- FUNCTION: z_asgard_recette.t006b()
 
@@ -732,7 +728,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t006b IS 'ASGARD recette. TEST : modification du producteur par la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t006b() IS 'ASGARD recette. TEST : modification du producteur par la table de gestion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t007()
@@ -769,7 +765,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t007 IS 'ASGARD recette. TEST : interdiction passage true/false de creation.' ;
+COMMENT ON FUNCTION z_asgard_recette.t007() IS 'ASGARD recette. TEST : interdiction passage true/false de creation.' ;
 
 -- FUNCTION: z_asgard_recette.t007b()
 
@@ -805,7 +801,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t007b IS 'ASGARD recette. TEST : interdiction passage true/false de creation.' ;
+COMMENT ON FUNCTION z_asgard_recette.t007b() IS 'ASGARD recette. TEST : interdiction passage true/false de creation.' ;
 
 
 -- FUNCTION: z_asgard_recette.t008()
@@ -841,7 +837,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t008 IS 'ASGARD recette. TEST : interdiction de l''effacement si creation vaut True.' ;
+COMMENT ON FUNCTION z_asgard_recette.t008() IS 'ASGARD recette. TEST : interdiction de l''effacement si creation vaut True.' ;
 
 -- FUNCTION: z_asgard_recette.t008b()
 
@@ -876,7 +872,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t008b IS 'ASGARD recette. TEST : interdiction de l''effacement si creation vaut True.' ;
+COMMENT ON FUNCTION z_asgard_recette.t008b() IS 'ASGARD recette. TEST : interdiction de l''effacement si creation vaut True.' ;
 
 
 -- FUNCTION: z_asgard_recette.t009()
@@ -920,7 +916,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t009 IS 'ASGARD recette. TEST : création d''une table et d''une séquence.' ;
+COMMENT ON FUNCTION z_asgard_recette.t009() IS 'ASGARD recette. TEST : création d''une table et d''une séquence.' ;
 
 -- FUNCTION: z_asgard_recette.t009b()
 
@@ -967,7 +963,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t009b IS 'ASGARD recette. TEST : création d''une table et d''une séquence.' ;
+COMMENT ON FUNCTION z_asgard_recette.t009b() IS 'ASGARD recette. TEST : création d''une table et d''une séquence.' ;
 
 
 -- FUNCTION: z_asgard_recette.t010()
@@ -1012,7 +1008,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t010 IS 'ASGARD recette. TEST : annulation de la modification du propriétaire d''une table (avec séquence associée).' ;
+COMMENT ON FUNCTION z_asgard_recette.t010() IS 'ASGARD recette. TEST : annulation de la modification du propriétaire d''une table (avec séquence associée).' ;
 
 -- FUNCTION: z_asgard_recette.t010b()
 
@@ -1062,7 +1058,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t010b IS 'ASGARD recette. TEST : annulation de la modification du propriétaire d''une table (avec séquence associée).' ;
+COMMENT ON FUNCTION z_asgard_recette.t010b() IS 'ASGARD recette. TEST : annulation de la modification du propriétaire d''une table (avec séquence associée).' ;
 
 
 -- FUNCTION: z_asgard_recette.t011()
@@ -1108,7 +1104,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t011 IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (schéma).' ;
+COMMENT ON FUNCTION z_asgard_recette.t011() IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (schéma).' ;
 
 -- FUNCTION: z_asgard_recette.t011b()
 
@@ -1159,7 +1155,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t011b IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (schéma).' ;
+COMMENT ON FUNCTION z_asgard_recette.t011b() IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (schéma).' ;
 
 
 -- FUNCTION: z_asgard_recette.t012()
@@ -1206,7 +1202,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t012 IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (table).' ;
+COMMENT ON FUNCTION z_asgard_recette.t012() IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (table).' ;
 
 -- FUNCTION: z_asgard_recette.t012b()
 
@@ -1258,7 +1254,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t012b IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (table).' ;
+COMMENT ON FUNCTION z_asgard_recette.t012b() IS 'ASGARD recette. TEST : transmission des modifications manuelles des droits du producteur (table).' ;
 
 
 -- FUNCTION: z_asgard_recette.t013()
@@ -1304,7 +1300,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t013 IS 'ASGARD recette. TEST : permission de g_admin sur le producteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t013() IS 'ASGARD recette. TEST : permission de g_admin sur le producteur.' ;
 
 -- FUNCTION: z_asgard_recette.t013b()
 
@@ -1349,7 +1345,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t013b IS 'ASGARD recette. TEST : permission de g_admin sur le producteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t013b() IS 'ASGARD recette. TEST : permission de g_admin sur le producteur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t014()
@@ -1395,7 +1391,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t014 IS 'ASGARD recette. TEST : modification du nom du schéma par la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t014() IS 'ASGARD recette. TEST : modification du nom du schéma par la table de gestion.' ;
 
 -- FUNCTION: z_asgard_recette.t014b()
 
@@ -1440,7 +1436,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t014b IS 'ASGARD recette. TEST : modification du nom du schéma par la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t014b() IS 'ASGARD recette. TEST : modification du nom du schéma par la table de gestion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t015()
@@ -1510,7 +1506,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t015 IS 'ASGARD recette. TEST : désignation d''un éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t015() IS 'ASGARD recette. TEST : désignation d''un éditeur.' ;
 
 -- FUNCTION: z_asgard_recette.t015b()
 
@@ -1583,7 +1579,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t015b IS 'ASGARD recette. TEST : désignation d''un éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t015b() IS 'ASGARD recette. TEST : désignation d''un éditeur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t016()
@@ -1653,7 +1649,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t016 IS 'ASGARD recette. TEST : désignation d''un lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t016() IS 'ASGARD recette. TEST : désignation d''un lecteur.' ;
 
 -- FUNCTION: z_asgard_recette.t016b()
 
@@ -1726,7 +1722,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t016b IS 'ASGARD recette. TEST : désignation d''un lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t016b() IS 'ASGARD recette. TEST : désignation d''un lecteur.' ;
 
 
 
@@ -1806,7 +1802,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t017 IS 'ASGARD recette. TEST : modification de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t017() IS 'ASGARD recette. TEST : modification de l''éditeur.' ;
 
 -- FUNCTION: z_asgard_recette.t017b()
 
@@ -1890,7 +1886,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t017b IS 'ASGARD recette. TEST : modification de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t017b() IS 'ASGARD recette. TEST : modification de l''éditeur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t018()
@@ -1969,7 +1965,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t018 IS 'ASGARD recette. TEST : modification du lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t018() IS 'ASGARD recette. TEST : modification du lecteur.' ;
 
 -- FUNCTION: z_asgard_recette.t018b()
 
@@ -2053,7 +2049,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t018b IS 'ASGARD recette. TEST : modification du lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t018b() IS 'ASGARD recette. TEST : modification du lecteur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t019()
@@ -2111,7 +2107,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t019 IS 'ASGARD recette. TEST : suppression de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t019() IS 'ASGARD recette. TEST : suppression de l''éditeur.' ;
 
 -- FUNCTION: z_asgard_recette.t019b()
 
@@ -2172,7 +2168,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t019b IS 'ASGARD recette. TEST : suppression de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t019b() IS 'ASGARD recette. TEST : suppression de l''éditeur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t020()
@@ -2230,7 +2226,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t020 IS 'ASGARD recette. TEST : suppression du lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t020() IS 'ASGARD recette. TEST : suppression du lecteur.' ;
 
 -- FUNCTION: z_asgard_recette.t020b()
 
@@ -2291,7 +2287,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t020b IS 'ASGARD recette. TEST : suppression du lecteur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t020b() IS 'ASGARD recette. TEST : suppression du lecteur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t021()
@@ -2353,7 +2349,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t021 IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur).' ;
+COMMENT ON FUNCTION z_asgard_recette.t021() IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur).' ;
 
 -- FUNCTION: z_asgard_recette.t021b()
 
@@ -2420,7 +2416,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t021b IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur).' ;
+COMMENT ON FUNCTION z_asgard_recette.t021b() IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur).' ;
 
 
 -- FUNCTION: z_asgard_recette.t022()
@@ -2482,7 +2478,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t022 IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur).' ;
+COMMENT ON FUNCTION z_asgard_recette.t022() IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur).' ;
 
 -- FUNCTION: z_asgard_recette.t022b()
 
@@ -2549,7 +2545,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t022b IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur).' ;
+COMMENT ON FUNCTION z_asgard_recette.t022b() IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur).' ;
 
 
 -- FUNCTION: z_asgard_recette.t023()
@@ -2619,7 +2615,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t023 IS 'ASGARD recette. TEST : désignation d''un éditeur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t023() IS 'ASGARD recette. TEST : désignation d''un éditeur public.' ;
 
 -- FUNCTION: z_asgard_recette.t023b()
 
@@ -2688,7 +2684,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t023b IS 'ASGARD recette. TEST : désignation d''un éditeur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t023b() IS 'ASGARD recette. TEST : désignation d''un éditeur public.' ;
 
 
 
@@ -2759,7 +2755,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t024 IS 'ASGARD recette. TEST : désignation d''un lecteur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t024() IS 'ASGARD recette. TEST : désignation d''un lecteur public.' ;
 
 -- FUNCTION: z_asgard_recette.t024b()
 
@@ -2828,7 +2824,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t024b IS 'ASGARD recette. TEST : désignation d''un lecteur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t024b() IS 'ASGARD recette. TEST : désignation d''un lecteur public.' ;
 
 
 
@@ -2887,7 +2883,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t025 IS 'ASGARD recette. TEST : suppression de l''éditeur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t025() IS 'ASGARD recette. TEST : suppression de l''éditeur public.' ;
 
 -- FUNCTION: z_asgard_recette.t025b()
 
@@ -2944,7 +2940,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t025b IS 'ASGARD recette. TEST : suppression de l''éditeur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t025b() IS 'ASGARD recette. TEST : suppression de l''éditeur public.' ;
 
 
 -- FUNCTION: z_asgard_recette.t026()
@@ -3002,7 +2998,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t026 IS 'ASGARD recette. TEST : suppression du lecteur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t026() IS 'ASGARD recette. TEST : suppression du lecteur public.' ;
 
 -- FUNCTION: z_asgard_recette.t026b()
 
@@ -3059,7 +3055,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t026b IS 'ASGARD recette. TEST : suppression du lecteur public.' ;
+COMMENT ON FUNCTION z_asgard_recette.t026b() IS 'ASGARD recette. TEST : suppression du lecteur public.' ;
 
 
 -- FUNCTION: z_asgard_recette.t027()
@@ -3148,7 +3144,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t027 IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur public).' ;
+COMMENT ON FUNCTION z_asgard_recette.t027() IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur public).' ;
 
 -- FUNCTION: z_asgard_recette.t027b()
 
@@ -3240,7 +3236,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t027b IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur public).' ;
+COMMENT ON FUNCTION z_asgard_recette.t027b() IS 'ASGARD recette. TEST : transmission des modifications manuelles (éditeur public).' ;
 
 
 
@@ -3330,7 +3326,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t028 IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur public).' ;
+COMMENT ON FUNCTION z_asgard_recette.t028() IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur public).' ;
 
 -- FUNCTION: z_asgard_recette.t028b()
 
@@ -3421,7 +3417,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t028b IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur public).' ;
+COMMENT ON FUNCTION z_asgard_recette.t028b() IS 'ASGARD recette. TEST : transmission des modifications manuelles (lecteur public).' ;
 
 
 -- FUNCTION: z_asgard_recette.t029()
@@ -3458,7 +3454,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t029 IS 'ASGARD recette. TEST : interdiction producteur rôle de connexion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t029() IS 'ASGARD recette. TEST : interdiction producteur rôle de connexion.' ;
 
 -- FUNCTION: z_asgard_recette.t029b()
 
@@ -3498,7 +3494,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t029b IS 'ASGARD recette. TEST : interdiction producteur rôle de connexion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t029b() IS 'ASGARD recette. TEST : interdiction producteur rôle de connexion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t030()
@@ -3654,7 +3650,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t030 IS 'ASGARD recette. TEST : annulation de la modification manuelle des OID.' ;
+COMMENT ON FUNCTION z_asgard_recette.t030() IS 'ASGARD recette. TEST : annulation de la modification manuelle des OID.' ;
 
 -- FUNCTION: z_asgard_recette.t030b()
 
@@ -3815,7 +3811,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t030b IS 'ASGARD recette. TEST : annulation de la modification manuelle des OID.' ;
+COMMENT ON FUNCTION z_asgard_recette.t030b() IS 'ASGARD recette. TEST : annulation de la modification manuelle des OID.' ;
 
 
 -- FUNCTION: z_asgard_recette.t031()
@@ -3854,7 +3850,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t031 IS 'ASGARD recette. TEST : mise à la corbeille.' ;
+COMMENT ON FUNCTION z_asgard_recette.t031() IS 'ASGARD recette. TEST : mise à la corbeille.' ;
 
 -- FUNCTION: z_asgard_recette.t031b()
 
@@ -3892,7 +3888,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t031b IS 'ASGARD recette. TEST : mise à la corbeille.' ;
+COMMENT ON FUNCTION z_asgard_recette.t031b() IS 'ASGARD recette. TEST : mise à la corbeille.' ;
 
 
 -- FUNCTION: z_asgard_recette.t032()
@@ -3935,7 +3931,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t032 IS 'ASGARD recette. TEST : sortie de la corbeille (restauration).' ;
+COMMENT ON FUNCTION z_asgard_recette.t032() IS 'ASGARD recette. TEST : sortie de la corbeille (restauration).' ;
 
 -- FUNCTION: z_asgard_recette.t032b()
 
@@ -3977,7 +3973,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t032b IS 'ASGARD recette. TEST : sortie de la corbeille (restauration).' ;
+COMMENT ON FUNCTION z_asgard_recette.t032b() IS 'ASGARD recette. TEST : sortie de la corbeille (restauration).' ;
 
 
 -- FUNCTION: z_asgard_recette.t033()
@@ -4019,7 +4015,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t033 IS 'ASGARD recette. TEST : suppression d''un schéma mis à la corbeille.' ;
+COMMENT ON FUNCTION z_asgard_recette.t033() IS 'ASGARD recette. TEST : suppression d''un schéma mis à la corbeille.' ;
 
 -- FUNCTION: z_asgard_recette.t033b()
 
@@ -4060,7 +4056,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t033b IS 'ASGARD recette. TEST : suppression d''un schéma mis à la corbeille.' ;
+COMMENT ON FUNCTION z_asgard_recette.t033b() IS 'ASGARD recette. TEST : suppression d''un schéma mis à la corbeille.' ;
 
 
 -- FUNCTION: z_asgard_recette.t034()
@@ -4256,7 +4252,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t034 IS 'ASGARD recette. TEST : verrouillage des champs de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t034() IS 'ASGARD recette. TEST : verrouillage des champs de la nomenclature.' ;
 
 -- FUNCTION: z_asgard_recette.t034b()
 
@@ -4456,7 +4452,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t034b IS 'ASGARD recette. TEST : verrouillage des champs de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t034b() IS 'ASGARD recette. TEST : verrouillage des champs de la nomenclature.' ;
 
 
 -- FUNCTION: z_asgard_recette.t035()
@@ -4513,7 +4509,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t035 IS 'ASGARD recette. TEST : création d''un schéma de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t035() IS 'ASGARD recette. TEST : création d''un schéma de la nomenclature.' ;
 
 -- FUNCTION: z_asgard_recette.t035b()
 
@@ -4575,7 +4571,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t035b IS 'ASGARD recette. TEST : création d''un schéma de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t035b() IS 'ASGARD recette. TEST : création d''un schéma de la nomenclature.' ;
 
 
 -- FUNCTION: z_asgard_recette.t036()
@@ -4614,7 +4610,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t036 IS 'ASGARD recette. TEST : effacement d''un schéma de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t036() IS 'ASGARD recette. TEST : effacement d''un schéma de la nomenclature.' ;
 
 -- FUNCTION: z_asgard_recette.t036b()
 
@@ -4658,7 +4654,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t036b IS 'ASGARD recette. TEST : effacement d''un schéma de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t036b() IS 'ASGARD recette. TEST : effacement d''un schéma de la nomenclature.' ;
 
 
 -- FUNCTION: z_asgard_recette.t037()
@@ -4785,7 +4781,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t037 IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (hors corbeille).' ;
+COMMENT ON FUNCTION z_asgard_recette.t037() IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (hors corbeille).' ;
 
 -- FUNCTION: z_asgard_recette.t037b()
 
@@ -4911,7 +4907,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t037b IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (hors corbeille).' ;
+COMMENT ON FUNCTION z_asgard_recette.t037b() IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (hors corbeille).' ;
 
 
 
@@ -4958,7 +4954,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t038 IS 'ASGARD recette. TEST : import de la nomenclature.' ;
+COMMENT ON FUNCTION z_asgard_recette.t038() IS 'ASGARD recette. TEST : import de la nomenclature.' ;
 
 
 
@@ -5008,7 +5004,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t039 IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
+COMMENT ON FUNCTION z_asgard_recette.t039() IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
 
 -- FUNCTION: z_asgard_recette.t039b()
 
@@ -5061,7 +5057,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t039b IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
+COMMENT ON FUNCTION z_asgard_recette.t039b() IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
 
 
 -- FUNCTION: z_asgard_recette.t040()
@@ -5086,9 +5082,12 @@ BEGIN
     ALTER TABLE c_bibliotheque.journal_du_mur OWNER TO g_admin_ext ;
     
     -- avec un champ identity
-    -- (échouera pour les versions antérieures à PG10)
-    CREATE TABLE c_bibliotheque.journal_du_mur_bis (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
-    ALTER TABLE c_bibliotheque.journal_du_mur_bis OWNER TO g_admin_ext ;
+    -- (échouerait pour les versions antérieures à PG10)
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_bis (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+        ALTER TABLE c_bibliotheque.journal_du_mur_bis OWNER TO g_admin_ext ;
+    END IF ;
     
     ------ référencement avec asgard_initialise_schema ------
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
@@ -5100,12 +5099,15 @@ BEGIN
         
     r := b ;
     
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = 'g_admin'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis' ;
+            
+        r := r AND b ;
+    END IF ;
     
     SELECT relowner::regrole::text = 'g_admin'
         INTO STRICT b
@@ -5114,12 +5116,15 @@ BEGIN
         
     r := r AND b ;
     
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis_id_seq' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = 'g_admin'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis_id_seq' ;
+            
+        r := r AND b ;
+    END IF ;
 
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
@@ -5132,7 +5137,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t040 IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialise_schema.' ;
+COMMENT ON FUNCTION z_asgard_recette.t040() IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialise_schema.' ;
 
 -- FUNCTION: z_asgard_recette.t040b()
 
@@ -5159,9 +5164,12 @@ BEGIN
     ALTER TABLE "c_Bibliothèque"."Journal du mur" OWNER TO "Admin EXT" ;
     
     -- avec un champ identity
-    -- (échouera pour les versions antérieures à PG10)
-    CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
-    ALTER TABLE "c_Bibliothèque"."Journal du mur_bis" OWNER TO "Admin EXT" ;
+    -- (échouerait pour les versions antérieures à PG10)
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+        ALTER TABLE "c_Bibliothèque"."Journal du mur_bis" OWNER TO "Admin EXT" ;
+    END IF ;
     
     ------ référencement avec asgard_initialise_schema ------
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
@@ -5173,12 +5181,15 @@ BEGIN
         
     r := b ;
     
-    SELECT relowner::regrole::text = '"Admin"'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = '"Admin"'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis' ;
+            
+        r := r AND b ;
+    END IF ;
     
     SELECT relowner::regrole::text = '"Admin"'
         INTO STRICT b
@@ -5187,12 +5198,15 @@ BEGIN
         
     r := r AND b ;
     
-    SELECT relowner::regrole::text = '"Admin"'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis_id_seq' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = '"Admin"'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis_id_seq' ;
+            
+        r := r AND b ;
+    END IF ;
 
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
@@ -5208,7 +5222,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t040b IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialise_schema.' ;
+COMMENT ON FUNCTION z_asgard_recette.t040b() IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialise_schema.' ;
 
 
 -- FUNCTION: z_asgard_recette.t041()
@@ -5234,9 +5248,12 @@ BEGIN
     ALTER TABLE c_bibliotheque.journal_du_mur OWNER TO g_admin_ext ;
     
     -- avec un champ identity
-    -- (échouera pour les versions antérieures à PG10)
-    CREATE TABLE c_bibliotheque.journal_du_mur_bis (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
-    ALTER TABLE c_bibliotheque.journal_du_mur_bis OWNER TO g_admin_ext ;
+    -- (échouerait pour les versions antérieures à PG10)
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_bis (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+        ALTER TABLE c_bibliotheque.journal_du_mur_bis OWNER TO g_admin_ext ;
+    END IF ;
     
     ------ référencement avec asgard_initialisation_gestion_schema ------
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema() ;
@@ -5248,12 +5265,15 @@ BEGIN
         
     r := b ;
     
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = 'g_admin'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis' ;
+            
+        r := r AND b ;
+    END IF ;
     
     SELECT relowner::regrole::text = 'g_admin'
         INTO STRICT b
@@ -5262,12 +5282,15 @@ BEGIN
         
     r := r AND b ;
     
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis_id_seq' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = 'g_admin'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis_id_seq' ;
+            
+        r := r AND b ;
+    END IF ;
 
     ------ remise à zéro ------
     DROP SCHEMA c_bibliotheque CASCADE ;
@@ -5287,7 +5310,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t041 IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialisation_gestion_schema.' ;
+COMMENT ON FUNCTION z_asgard_recette.t041() IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialisation_gestion_schema.' ;
 
 -- FUNCTION: z_asgard_recette.t041b()
 
@@ -5315,9 +5338,12 @@ BEGIN
     ALTER TABLE "c_Bibliothèque"."Journal du mur" OWNER TO "Admin EXT" ;
     
     -- avec un champ identity
-    -- (échouera pour les versions antérieures à PG10)
-    CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
-    ALTER TABLE "c_Bibliothèque"."Journal du mur_bis" OWNER TO "Admin EXT" ;
+    -- (échouerait pour les versions antérieures à PG10)
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+        ALTER TABLE "c_Bibliothèque"."Journal du mur_bis" OWNER TO "Admin EXT" ;
+    END IF ;
     
     ------ référencement avec asgard_initialisation_gestion_schema ------
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema() ;
@@ -5329,12 +5355,15 @@ BEGIN
         
     r := b ;
     
-    SELECT relowner::regrole::text = '"Admin"'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = '"Admin"'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis' ;
+            
+        r := r AND b ;
+    END IF ;
     
     SELECT relowner::regrole::text = '"Admin"'
         INTO STRICT b
@@ -5343,12 +5372,15 @@ BEGIN
         
     r := r AND b ;
     
-    SELECT relowner::regrole::text = '"Admin"'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis_id_seq' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT relowner::regrole::text = '"Admin"'
+            INTO STRICT b
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = '"c_Bibliothèque"'::regnamespace::oid AND relname = 'Journal du mur_bis_id_seq' ;
+            
+        r := r AND b ;
+    END IF ;
 
     ------ remise à zéro ------
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
@@ -5371,7 +5403,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t041b IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialisation_gestion_schema.' ;
+COMMENT ON FUNCTION z_asgard_recette.t041b() IS 'ASGARD recette. TEST : mise en cohérence des propriétaires lors du référencement avec asgard_initialisation_gestion_schema.' ;
 
 
 -- FUNCTION: z_asgard_recette.t042()
@@ -5414,7 +5446,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t042 IS 'ASGARD recette. TEST : création de nouveaux rôles via un UPDATE dans la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t042() IS 'ASGARD recette. TEST : création de nouveaux rôles via un UPDATE dans la table de gestion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t042b()
@@ -5457,7 +5489,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t042b IS 'ASGARD recette. TEST : création de nouveaux rôles via un UPDATE dans la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t042b() IS 'ASGARD recette. TEST : création de nouveaux rôles via un UPDATE dans la table de gestion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t043()
@@ -5495,7 +5527,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t043 IS 'ASGARD recette. TEST : création de nouveaux rôles via un INSERT dans la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t043() IS 'ASGARD recette. TEST : création de nouveaux rôles via un INSERT dans la table de gestion.' ;
 
 
 -- FUNCTION: z_asgard_recette.t043b()
@@ -5533,7 +5565,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t043b IS 'ASGARD recette. TEST : création de nouveaux rôles via un INSERT dans la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_recette.t043b() IS 'ASGARD recette. TEST : création de nouveaux rôles via un INSERT dans la table de gestion.' ;
 
 
 
@@ -5576,7 +5608,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t044 IS 'ASGARD recette. TEST : création de nouveaux rôles par bascule de creation.' ;
+COMMENT ON FUNCTION z_asgard_recette.t044() IS 'ASGARD recette. TEST : création de nouveaux rôles par bascule de creation.' ;
 
 
 
@@ -5619,7 +5651,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t044b IS 'ASGARD recette. TEST : création de nouveaux rôles par bascule de creation.' ;
+COMMENT ON FUNCTION z_asgard_recette.t044b() IS 'ASGARD recette. TEST : création de nouveaux rôles par bascule de creation.' ;
 
 
 -- FUNCTION: z_asgard_recette.t045()
@@ -5822,7 +5854,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t045 IS 'ASGARD recette. TEST : tentative d''action par g_admin sur les objets d''un super-utilisateur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t045() IS 'ASGARD recette. TEST : tentative d''action par g_admin sur les objets d''un super-utilisateur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t045b()
@@ -6025,7 +6057,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t045b IS 'ASGARD recette. TEST : tentative d''action par g_admin sur les objets d''un super-utilisateur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t045b() IS 'ASGARD recette. TEST : tentative d''action par g_admin sur les objets d''un super-utilisateur.' ;
 
 
 -- FUNCTION: z_asgard_recette.t046()
@@ -6054,7 +6086,10 @@ BEGIN
     ALTER DEFAULT PRIVILEGES FOR ROLE g_admin_ext IN SCHEMA c_bibliotheque GRANT ALL ON SEQUENCES TO g_asgard_rec1 ;
     ALTER DEFAULT PRIVILEGES FOR ROLE g_admin IN SCHEMA c_librairie GRANT ALL ON TABLES TO g_asgard_rec1 ;
     ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO g_asgard_rec1 ;
-    ALTER DEFAULT PRIVILEGES FOR ROLE g_admin GRANT ALL ON SCHEMAS TO g_asgard_rec1 ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE g_admin GRANT ALL ON SCHEMAS TO g_asgard_rec1' ;
+    END IF ;
     
     ------ g_admin ------
     -- doit retourner une erreur puisque certains privilèges ont été conférés par postgres
@@ -6076,7 +6111,11 @@ BEGIN
     RESET ROLE ;
 
     ------ transfert à g_asgard_rec2 (schémas référencés) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', False, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', False, True, True) = ARRAY[current_database()::text]
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46-2 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6086,7 +6125,7 @@ BEGIN
             AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
         
     r := r AND b ;
-    RAISE NOTICE '46-2 > %', r::text ;
+    RAISE NOTICE '46-2b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6101,18 +6140,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46-3 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-4 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46-4 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6167,7 +6209,11 @@ BEGIN
     RAISE NOTICE '46-8 > %', r::text ;
     
     ------ transfert à g_asgard_rec2 (hors ASGARD) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', True, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', True, True, True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46-9 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6176,7 +6222,7 @@ BEGIN
         WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole) ;
         
     r := r AND b ;
-    RAISE NOTICE '46-9 > %', r::text ;
+    RAISE NOTICE '46-9b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6191,18 +6237,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46-10 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-11 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46-11 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6218,7 +6267,11 @@ BEGIN
     RAISE NOTICE '46-12 > %', r::text ;
     
     ------ suppression (schémas référencés) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, False, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, False, True, True)  = ARRAY[current_database()::text]
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46-13 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6228,7 +6281,7 @@ BEGIN
             AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
     
     r := r AND b ;
-    RAISE NOTICE '46-13 > %', r::text ;
+    RAISE NOTICE '46-13b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6243,18 +6296,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46-14 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-15 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46-15 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6270,7 +6326,11 @@ BEGIN
     RAISE NOTICE '46-16 > %', r::text ;
     
     ------ suppression (tout) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, True, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, True, True, True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46-17 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6279,7 +6339,7 @@ BEGIN
         WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole) ;
     
     r := r AND b ;
-    RAISE NOTICE '46-17 > %', r::text ;
+    RAISE NOTICE '46-18 > %', r::text ;
     
     DROP ROLE g_asgard_rec1 ;
     DROP ROLE g_asgard_rec2 ;
@@ -6296,7 +6356,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t046 IS 'ASGARD recette. TEST : (asgard_reaffecte_role) réaffectation/suppression des privilèges par défaut d''un rôle.' ;
+COMMENT ON FUNCTION z_asgard_recette.t046() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) réaffectation/suppression des privilèges par défaut d''un rôle.' ;
 
 
 -- FUNCTION: z_asgard_recette.t046b()
@@ -6325,7 +6385,10 @@ BEGIN
     ALTER DEFAULT PRIVILEGES FOR ROLE g_admin_ext IN SCHEMA "c_Bibliothèque" GRANT ALL ON SEQUENCES TO "g_ASGARD_REC1" ;
     ALTER DEFAULT PRIVILEGES FOR ROLE g_admin IN SCHEMA "c_Librairie" GRANT ALL ON TABLES TO "g_ASGARD_REC1" ;
     ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO "g_ASGARD_REC1" ;
-    ALTER DEFAULT PRIVILEGES FOR ROLE g_admin GRANT ALL ON SCHEMAS TO "g_ASGARD_REC1" ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER DEFAULT PRIVILEGES FOR ROLE g_admin GRANT ALL ON SCHEMAS TO "g_ASGARD_REC1"' ;
+    END IF ;
     
     ------ g_admin ------
     -- doit retourner une erreur puisque certains privilèges ont été conférés par postgres
@@ -6347,7 +6410,11 @@ BEGIN
     RESET ROLE ;
 
     ------ transfert à "g_ASGARD *REC2" (schémas référencés) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', False, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', False, True, True)  = ARRAY[current_database()::text]
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46b-2 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6357,7 +6424,7 @@ BEGIN
             AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
         
     r := r AND b ;
-    RAISE NOTICE '46b-2 > %', r::text ;
+    RAISE NOTICE '46b-2b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6372,18 +6439,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46b-3 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-4 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46b-4 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6438,7 +6508,11 @@ BEGIN
     RAISE NOTICE '46b-8 > %', r::text ;
     
     ------ transfert à "g_ASGARD *REC2" (hors ASGARD) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', True, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', True, True, True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46b-9 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6447,7 +6521,7 @@ BEGIN
         WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole) ;
         
     r := r AND b ;
-    RAISE NOTICE '46b-9 > %', r::text ;
+    RAISE NOTICE '46b-9b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6462,18 +6536,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46b-10 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-11 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46b-11 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6489,7 +6566,11 @@ BEGIN
     RAISE NOTICE '46b-12 > %', r::text ;
     
     ------ suppression (schémas référencés) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, False, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, False, True, True) = ARRAY[current_database()::text]
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46b-13 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6499,7 +6580,7 @@ BEGIN
             AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
     
     r := r AND b ;
-    RAISE NOTICE '46b-13 > %', r::text ;
+    RAISE NOTICE '46b-13b > %', r::text ;
     
     SELECT
         count(*) = 1
@@ -6514,18 +6595,21 @@ BEGIN
     r := r AND b ;
     RAISE NOTICE '46b-14 > %', r::text ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'n'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][UC]{2}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-15 > %', r::text ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        SELECT
+            count(*) = 1
+            INTO STRICT b 
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'n'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
+                        || '[=][UC]{2}[/]') ;
+        
+        r := r AND b ;
+        RAISE NOTICE '46b-15 > %', r::text ;
+    END IF ;
     
     SELECT
         count(*) = 1
@@ -6541,7 +6625,11 @@ BEGIN
     RAISE NOTICE '46b-16 > %', r::text ;
     
     ------ suppression (tout) ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, True, True, True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, True, True, True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '46b-17 > %', r::text ;
     
     SELECT
         count(*) = 0
@@ -6550,7 +6638,7 @@ BEGIN
         WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole) ;
     
     r := r AND b ;
-    RAISE NOTICE '46b-17 > %', r::text ;
+    RAISE NOTICE '46b-18 > %', r::text ;
     
     DROP ROLE "g_ASGARD_REC1" ;
     DROP ROLE "g_ASGARD *REC2" ;
@@ -6567,7 +6655,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t046b IS 'ASGARD recette. TEST : (asgard_reaffecte_role) réaffectation/suppression des privilèges par défaut d''un rôle.' ;
+COMMENT ON FUNCTION z_asgard_recette.t046b() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) réaffectation/suppression des privilèges par défaut d''un rôle.' ;
 
 
 -- FUNCTION: z_asgard_recette.t047()
@@ -6771,7 +6859,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t047 IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (corbeille).' ;
+COMMENT ON FUNCTION z_asgard_recette.t047() IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (corbeille).' ;
 
 
 -- FUNCTION: z_asgard_recette.t047b()
@@ -6975,7 +7063,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t047b IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (corbeille).' ;
+COMMENT ON FUNCTION z_asgard_recette.t047b() IS 'ASGARD recette. TEST : cohérence bloc et nom schéma (corbeille).' ;
 
 
 -- FUNCTION: z_asgard_recette.t048()
@@ -7066,7 +7154,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t048 IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des privilèges par défaut.' ;
+COMMENT ON FUNCTION z_asgard_recette.t048() IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des privilèges par défaut.' ;
 
 
 -- FUNCTION: z_asgard_recette.t048b()
@@ -7157,7 +7245,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t048b IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des privilèges par défaut.' ;
+COMMENT ON FUNCTION z_asgard_recette.t048b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des privilèges par défaut.' ;
 
 
 -- FUNCTION: z_asgard_recette.t049()
@@ -7218,7 +7306,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t049 IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
+COMMENT ON FUNCTION z_asgard_recette.t049() IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
 
 -- FUNCTION: z_asgard_recette.t049b()
 
@@ -7278,7 +7366,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t049b IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
+COMMENT ON FUNCTION z_asgard_recette.t049b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
 
 
 -- FUNCTION: z_asgard_recette.t050()
@@ -7367,7 +7455,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t050 IS 'ASGARD recette. TEST : (asgard_initialise_schema) application des droits du lecteur et de l''éditeur lors du référencement d''un schéma pré-existant pré-référencé.' ;
+COMMENT ON FUNCTION z_asgard_recette.t050() IS 'ASGARD recette. TEST : (asgard_initialise_schema) application des droits du lecteur et de l''éditeur lors du référencement d''un schéma pré-existant pré-référencé.' ;
 
 
 -- FUNCTION: z_asgard_recette.t050b()
@@ -7464,7 +7552,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t050b IS 'ASGARD recette. TEST : (asgard_initialise_schema) application des droits du lecteur et de l''éditeur lors du référencement d''un schéma pré-existant pré-référencé.' ;
+COMMENT ON FUNCTION z_asgard_recette.t050b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) application des droits du lecteur et de l''éditeur lors du référencement d''un schéma pré-existant pré-référencé.' ;
 
 
 -- FUNCTION: z_asgard_recette.t051()
@@ -7476,6 +7564,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t051()
 DECLARE
    b boolean ;
    r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE g_asgard_rec_lec ;
@@ -7489,7 +7579,7 @@ BEGIN
             lecteur = 'g_asgard_rec_lec'
         WHERE nom_schema = 'c_bibliotheque' ;
             
-    CREATE VIEW c_bibliotheque.vue_du_mur AS (SELECT 'C''est haut !' AS observation) ;
+    CREATE VIEW c_bibliotheque.vue_du_mur AS (SELECT 'C''est haut !'::text AS observation) ;
     CREATE SEQUENCE c_bibliotheque.compteur ;
             
     PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
@@ -7501,7 +7591,7 @@ BEGIN
     ALTER EVENT TRIGGER asgard_on_alter_objet ENABLE ;
     
     -- #1
-    SELECT count(*) = 3
+    SELECT count(*) = 1
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
         
@@ -7511,7 +7601,7 @@ BEGIN
     -- #2
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'vue_du_mur' AND critique
             AND anomalie ~ 'propriétaire'
@@ -7537,7 +7627,7 @@ BEGIN
     -- #4
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'vue_du_mur' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7550,7 +7640,7 @@ BEGIN
     -- #5
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'schéma' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'c_bibliotheque' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7576,7 +7666,7 @@ BEGIN
     -- #7
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'vue_du_mur' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7628,7 +7718,7 @@ BEGIN
     -- #11
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'compteur' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7655,7 +7745,7 @@ BEGIN
     -- #13
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'compteur' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7681,7 +7771,7 @@ BEGIN
     -- #15.1
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'compteur' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -7694,7 +7784,7 @@ BEGIN
     -- #15.2
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'attribut' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'vue_du_mur (observation)' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -7719,7 +7809,7 @@ BEGIN
     -- #17
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_bibliotheque'
             AND nom_objet = 'compteur' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -7751,7 +7841,7 @@ BEGIN
     -- #19
     SELECT count(*) = 3
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'privilège par défaut' AND nom_schema = 'c_bibliotheque'
             AND nom_objet IS NULL AND NOT critique
             AND anomalie ~ 'séquence'
@@ -7764,7 +7854,7 @@ BEGIN
     -- #20
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE typ_objet = 'privilège par défaut' AND nom_schema = 'c_bibliotheque'
             AND nom_objet IS NULL AND NOT critique
             AND anomalie ~ 'fonction'
@@ -7781,16 +7871,15 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
     REVOKE USAGE ON SCHEMA z_asgard_admin FROM g_admin_ext ;
-    REVOKE SELECT ON TABLE z_asgard_admin.asgard_parametre FROM g_admin_ext ;
     REVOKE UPDATE, DELETE, INSERT ON TABLE z_asgard_admin.gestion_schema FROM g_admin_ext ;
     REVOKE USAGE ON SCHEMA z_asgard FROM g_consult ;
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_etr FROM g_consult ;
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_usr FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.qgis_menubuilder_metadata FROM g_consult ;
     REVOKE SELECT ON TABLE z_asgard.asgardmenu_metadata FROM g_consult ;
+    REVOKE SELECT ON TABLE z_asgard.asgardmanager_metadata FROM g_consult ;
 
     -- #21
-    SELECT count(*) = 10
+    SELECT count(*) = 9
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -7798,21 +7887,20 @@ BEGIN
     RAISE NOTICE '51-21 > %', r::text ;
     
     -- #22
-    SELECT count(*) = 10
+    SELECT count(*) = 9
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['z_asgard', 'z_asgard_admin'])
             LEFT JOIN (
                 VALUES
                 ('z_asgard_admin', 'z_asgard_admin', 'schéma', 'USAGE', 'g_admin_ext'),
-                ('z_asgard_admin', 'asgard_parametre', 'table', 'SELECT', 'g_admin_ext'),
                 ('z_asgard_admin', 'gestion_schema', 'table', 'INSERT', 'g_admin_ext'),
                 ('z_asgard_admin', 'gestion_schema', 'table', 'UPDATE', 'g_admin_ext'),
                 ('z_asgard_admin', 'gestion_schema', 'table', 'DELETE', 'g_admin_ext'),
                 ('z_asgard', 'z_asgard', 'schéma', 'USAGE', 'g_consult'),
                 ('z_asgard', 'gestion_schema_usr', 'vue', 'SELECT', 'g_consult'),
                 ('z_asgard', 'gestion_schema_etr', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'qgis_menubuilder_metadata', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'asgardmenu_metadata', 'vue', 'SELECT', 'g_consult')
+                ('z_asgard', 'asgardmenu_metadata', 'vue', 'SELECT', 'g_consult'),
+                ('z_asgard', 'asgardmanager_metadata', 'vue', 'SELECT', 'g_consult')
             ) AS t (a_schema, a_objet, a_type, a_commande, a_role)
         ON typ_objet = a_type AND nom_schema = a_schema
             AND nom_objet = a_objet
@@ -7838,12 +7926,16 @@ BEGIN
     RETURN r ;
     
 EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
     RETURN False ;
     
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t051 IS 'ASGARD recette. TEST : (asgard_diagnostic) repérage effectif des anomalies.' ;
+COMMENT ON FUNCTION z_asgard_recette.t051() IS 'ASGARD recette. TEST : (asgard_diagnostic) repérage effectif des anomalies.' ;
 
 
 -- FUNCTION: z_asgard_recette.t051b()
@@ -7855,6 +7947,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t051b()
 DECLARE
    b boolean ;
    r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE "g_ASGARD rec*LEC" ;
@@ -7868,7 +7962,7 @@ BEGIN
             lecteur = 'g_ASGARD rec*LEC'
         WHERE nom_schema = 'c_Bibliothèque' ;
             
-    CREATE VIEW "c_Bibliothèque"."Vue du mur !" AS (SELECT 'C''est haut !' AS "OBServation :)") ;
+    CREATE VIEW "c_Bibliothèque"."Vue du mur !" AS (SELECT 'C''est haut !'::text AS "OBServation :)") ;
     CREATE SEQUENCE "c_Bibliothèque"."$compteur$" ;
     
     ------ désynchronisation des propriétaires ------
@@ -7877,7 +7971,7 @@ BEGIN
     ALTER EVENT TRIGGER asgard_on_alter_objet ENABLE ;
     
     -- #1
-    SELECT count(*) = 3
+    SELECT count(*) = 1
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
         
@@ -7887,7 +7981,7 @@ BEGIN
     -- #2
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'Vue du mur !' AND critique
             AND anomalie ~ 'propriétaire'
@@ -7913,7 +8007,7 @@ BEGIN
     -- #4
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'Vue du mur !' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7926,7 +8020,7 @@ BEGIN
     -- #5
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'schéma' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'c_Bibliothèque' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7952,7 +8046,7 @@ BEGIN
     -- #7
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'Vue du mur !' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -7978,7 +8072,7 @@ BEGIN
     -- #9
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'vue' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'Vue du mur !' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -8004,7 +8098,7 @@ BEGIN
     -- #11
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = '$compteur$' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -8031,7 +8125,7 @@ BEGIN
     -- #13
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = '$compteur$' AND NOT critique
             AND anomalie ~ 'manquant'
@@ -8057,7 +8151,7 @@ BEGIN
     -- #15.1
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = '$compteur$' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -8070,7 +8164,7 @@ BEGIN
     -- #15.2
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'attribut' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = 'Vue du mur ! (OBServation :))' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -8095,7 +8189,7 @@ BEGIN
     -- #17
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'séquence' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet = '$compteur$' AND NOT critique
             AND anomalie ~ 'supplémentaire'
@@ -8127,7 +8221,7 @@ BEGIN
     -- #19
     SELECT count(*) = 3
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'privilège par défaut' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet IS NULL AND NOT critique
             AND anomalie ~ 'séquence'
@@ -8140,7 +8234,7 @@ BEGIN
     -- #20
     SELECT count(*) = 1
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE typ_objet = 'privilège par défaut' AND nom_schema = 'c_Bibliothèque'
             AND nom_objet IS NULL AND NOT critique
             AND anomalie ~ 'fonction'
@@ -8161,12 +8255,16 @@ BEGIN
     RETURN r ;
     
 EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
     RETURN False ;
     
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t051b IS 'ASGARD recette. TEST : (asgard_diagnostic) repérage effectif des anomalies.' ;
+COMMENT ON FUNCTION z_asgard_recette.t051b() IS 'ASGARD recette. TEST : (asgard_diagnostic) repérage effectif des anomalies.' ;
 
 
 -- FUNCTION: z_asgard_recette.t052()
@@ -8195,16 +8293,22 @@ BEGIN
     ------ création des objets ------
     CREATE SEQUENCE c_bibliotheque.compteur ;
     
-    CREATE TABLE c_bibliotheque.journal_du_mur
-        (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
-        
-    CREATE TABLE c_bibliotheque.journal_du_mur_jon
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Ingrid') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
+            
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_jon
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Ingrid'')' ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW c_bibliotheque.entree_du_jour AS (SELECT * FROM c_bibliotheque.journal_du_mur WHERE jour = now()::date) ;
     CREATE MATERIALIZED VIEW c_bibliotheque.histoire AS (SELECT * FROM c_bibliotheque.journal_du_mur WHERE jour < now()::date) ;
@@ -8253,10 +8357,19 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'histoire', 'materialized view', c, v) ;
         RAISE NOTICE '-- v% - 7 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'entree_du_jour', 'view', c, v) ;
+        
         RAISE NOTICE '-- v% - 8 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur_jon', 'table', c, v) ;
+        IF current_setting('server_version_num')::int >= 100000
+        THEN
+            PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur_jon', 'table', c, v) ;
+        END IF ;
+        
         RAISE NOTICE '-- v% - 9 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur', 'partitioned table', c, v) ;
+        IF current_setting('server_version_num')::int >= 100000
+        THEN
+            PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur', 'partitioned table', c, v) ;
+        END IF ;
+        
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'compteur', 'sequence', c, v) ;
     
@@ -8288,7 +8401,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t052 IS 'ASGARD recette. TEST : (asgard_deplace_obj) prise en charge de tous les types d''objets par toutes les variantes.' ;
+COMMENT ON FUNCTION z_asgard_recette.t052() IS 'ASGARD recette. TEST : (asgard_deplace_obj) prise en charge de tous les types d''objets par toutes les variantes.' ;
 
 
 -- FUNCTION: z_asgard_recette.t052b()
@@ -8317,16 +8430,22 @@ BEGIN
     ------ création des objets ------
     CREATE SEQUENCE "c_Bibliothèque"."COMP~^teur" ;
     
-    CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
-        (id int DEFAULT nextval('"c_Bibliothèque"."COMP~^teur"'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
-        
-    CREATE TABLE "c_Bibliothèque"."journal du mur{jon}"
-        PARTITION OF "c_Bibliothèque"."Journal&du&mur"
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE "c_Bibliothèque"."Journal&du&mur{ingrid}"
-        PARTITION OF "c_Bibliothèque"."Journal&du&mur"
-        FOR VALUES IN ('Ingrid') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
+            (id int DEFAULT nextval(''"c_Bibliothèque"."COMP~^teur"''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
+            
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."journal du mur{jon}"
+            PARTITION OF "c_Bibliothèque"."Journal&du&mur"
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur{ingrid}"
+            PARTITION OF "c_Bibliothèque"."Journal&du&mur"
+            FOR VALUES IN (''Ingrid'')' ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
+            (id int DEFAULT nextval('"c_Bibliothèque"."COMP~^teur"'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW "c_Bibliothèque"."entrée du jour" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour = now()::date) ;
     CREATE MATERIALIZED VIEW "c_Bibliothèque"."Histoire" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour < now()::date) ;
@@ -8375,10 +8494,19 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'Histoire', 'materialized view', c, v) ;
         RAISE NOTICE '-- v% - 7 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'entrée du jour', 'view', c, v) ;
+        
         RAISE NOTICE '-- v% - 8 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, 'journal du mur{jon}', 'table', c, v) ;
+        IF current_setting('server_version_num')::int >= 100000
+        THEN
+            PERFORM z_asgard.asgard_deplace_obj(o, 'journal du mur{jon}', 'table', c, v) ;
+        END IF ;
+        
         RAISE NOTICE '-- v% - 9 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, 'Journal&du&mur', 'partitioned table', c, v) ;
+        IF current_setting('server_version_num')::int >= 100000
+        THEN
+            PERFORM z_asgard.asgard_deplace_obj(o, 'Journal&du&mur', 'partitioned table', c, v) ;
+        END IF ;
+        
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'COMP~^teur', 'sequence', c, v) ;
     
@@ -8410,7 +8538,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t052b IS 'ASGARD recette. TEST : (asgard_deplace_obj) prise en charge de tous les types d''objets par toutes les variantes.' ;
+COMMENT ON FUNCTION z_asgard_recette.t052b() IS 'ASGARD recette. TEST : (asgard_deplace_obj) prise en charge de tous les types d''objets par toutes les variantes.' ;
 
 
 -- FUNCTION: z_asgard_recette.t053()
@@ -8439,18 +8567,24 @@ BEGIN
     CREATE SEQUENCE c_bibliotheque.compteur ;
     REVOKE USAGE ON SEQUENCE c_bibliotheque.compteur FROM g_asgard_rec1 ;
     
-    CREATE TABLE c_bibliotheque.journal_du_mur
-        (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
-    GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
-        
-    CREATE TABLE c_bibliotheque.journal_du_mur_jon
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Ingrid') ;
-    REVOKE SELECT ON TABLE c_bibliotheque.journal_du_mur_jon FROM public ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
+        GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
+            
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_jon
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Ingrid'')' ;
+        REVOKE SELECT ON TABLE c_bibliotheque.journal_du_mur_jon FROM public ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW c_bibliotheque.entree_du_jour AS (SELECT * FROM c_bibliotheque.journal_du_mur WHERE jour = now()::date) ;
     REVOKE UPDATE ON TABLE c_bibliotheque.entree_du_jour FROM g_asgard_rec2 ;
@@ -8507,11 +8641,22 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'histoire', 'materialized view') ;
     RAISE NOTICE '-- 7 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'entree_du_jour', 'view') ;
+    
     RAISE NOTICE '-- 8 ------------' ;
-    PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur_jon', 'table') ;
-    PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur_ingrid', 'table') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur_jon', 'table') ;
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur_ingrid', 'table') ;
+    END IF ;
+    
     RAISE NOTICE '-- 9 ------------' ;
-    PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur', 'partitioned table') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur', 'partitioned table') ;
+    ELSE
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur', 'table') ;
+    END IF ;    
+
     RAISE NOTICE '-- 10 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'compteur', 'sequence') ;  
     
@@ -8540,7 +8685,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t053 IS 'ASGARD recette. TEST : (asgard_initialise_obj) prise en charge de tous les types d''objets.' ;
+COMMENT ON FUNCTION z_asgard_recette.t053() IS 'ASGARD recette. TEST : (asgard_initialise_obj) prise en charge de tous les types d''objets.' ;
 
 
 -- FUNCTION: z_asgard_recette.t053b()
@@ -8568,16 +8713,22 @@ BEGIN
     
     CREATE SEQUENCE "c_Bibliothèque"."COMP~^teur" ;
     
-    CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
-        (id int DEFAULT nextval('"c_Bibliothèque"."COMP~^teur"'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
+            (id int DEFAULT nextval(''"c_Bibliothèque"."COMP~^teur"''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
         
-    CREATE TABLE "c_Bibliothèque"."journal du mur{jon}"
-        PARTITION OF "c_Bibliothèque"."Journal&du&mur"
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE "c_Bibliothèque"."Journal&du&mur{ingrid}"
-        PARTITION OF "c_Bibliothèque"."Journal&du&mur"
-        FOR VALUES IN ('Ingrid') ;
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."journal du mur{jon}"
+            PARTITION OF "c_Bibliothèque"."Journal&du&mur"
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur{ingrid}"
+            PARTITION OF "c_Bibliothèque"."Journal&du&mur"
+            FOR VALUES IN (''Ingrid'')' ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
+            (id int DEFAULT nextval('"c_Bibliothèque"."COMP~^teur"'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW "c_Bibliothèque"."entrée du jour" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour = now()::date) ;
     CREATE MATERIALIZED VIEW "c_Bibliothèque"."Histoire" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour < now()::date) ;
@@ -8626,11 +8777,22 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Histoire', 'materialized view') ;
     RAISE NOTICE '-- 7 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'entrée du jour', 'view') ;
+    
     RAISE NOTICE '-- 8 ------------' ;
-    PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'journal du mur{jon}', 'table') ;
-    PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal&du&mur{ingrid}', 'table') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'journal du mur{jon}', 'table') ;
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal&du&mur{ingrid}', 'table') ;
+    END IF ;
+    
     RAISE NOTICE '-- 9 ------------' ;
-    PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal&du&mur', 'partitioned table') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal&du&mur', 'partitioned table') ;
+    ELSE
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal&du&mur', 'table') ;
+    END IF ;
+    
     RAISE NOTICE '-- 10 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'COMP~^teur', 'sequence') ;
     
@@ -8658,7 +8820,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t053b IS 'ASGARD recette. TEST : (asgard_initialise_obj) prise en charge de tous les types d''objets.' ;
+COMMENT ON FUNCTION z_asgard_recette.t053b() IS 'ASGARD recette. TEST : (asgard_initialise_obj) prise en charge de tous les types d''objets.' ;
 
 
 -- FUNCTION: z_asgard_recette.t054()
@@ -8687,18 +8849,24 @@ BEGIN
     CREATE SEQUENCE c_bibliotheque.compteur ;
     REVOKE USAGE ON SEQUENCE c_bibliotheque.compteur FROM g_asgard_rec1 ;
     
-    CREATE TABLE c_bibliotheque.journal_du_mur
-        (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
-    GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
-        
-    CREATE TABLE c_bibliotheque.journal_du_mur_jon
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
-        PARTITION OF c_bibliotheque.journal_du_mur
-        FOR VALUES IN ('Ingrid') ;
-    REVOKE SELECT ON TABLE c_bibliotheque.journal_du_mur_jon FROM public ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
+        GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
+            
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_jon
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_ingrid
+            PARTITION OF c_bibliotheque.journal_du_mur
+            FOR VALUES IN (''Ingrid'')' ;
+        REVOKE SELECT ON TABLE c_bibliotheque.journal_du_mur_jon FROM public ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur
+            (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW c_bibliotheque.entree_du_jour AS (SELECT * FROM c_bibliotheque.journal_du_mur WHERE jour = now()::date) ;
     REVOKE UPDATE ON TABLE c_bibliotheque.entree_du_jour FROM g_asgard_rec2 ;
@@ -8768,7 +8936,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t054 IS 'ASGARD recette. TEST : (asgard_initialise_schema) prise en charge de tous les types d''objets avec ACL.' ;
+COMMENT ON FUNCTION z_asgard_recette.t054() IS 'ASGARD recette. TEST : (asgard_initialise_schema) prise en charge de tous les types d''objets avec ACL.' ;
 
 -- FUNCTION: z_asgard_recette.t054b()
 
@@ -8796,18 +8964,24 @@ BEGIN
     CREATE SEQUENCE "c_Bibliothèque"."?Compteur?" ;
     REVOKE USAGE ON SEQUENCE "c_Bibliothèque"."?Compteur?" FROM "g_asgard_rec1*" ;
     
-    CREATE TABLE "c_Bibliothèque"."JournalDuMur"
-        (id int DEFAULT nextval('"c_Bibliothèque"."?Compteur?"'::regclass), jour date, entree text, auteur text)
-        PARTITION BY LIST (auteur) ;
-    GRANT ALL ON TABLE "c_Bibliothèque"."JournalDuMur" TO "g_asgard REC#2" ;
-        
-    CREATE TABLE "c_Bibliothèque"."journal du mur | JON"
-        PARTITION OF "c_Bibliothèque"."JournalDuMur"
-        FOR VALUES IN ('Jon Snow');
-    CREATE TABLE "c_Bibliothèque"."journal du mur | INGRID"
-        PARTITION OF "c_Bibliothèque"."JournalDuMur"
-        FOR VALUES IN ('Ingrid') ;
-    REVOKE SELECT ON TABLE "c_Bibliothèque"."journal du mur | JON" FROM public ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."JournalDuMur"
+            (id int DEFAULT nextval(''"c_Bibliothèque"."?Compteur?"''::regclass), jour date, entree text, auteur text)
+            PARTITION BY LIST (auteur)' ;
+        GRANT ALL ON TABLE "c_Bibliothèque"."JournalDuMur" TO "g_asgard REC#2" ;
+            
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."journal du mur | JON"
+            PARTITION OF "c_Bibliothèque"."JournalDuMur"
+            FOR VALUES IN (''Jon Snow'')' ;
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."journal du mur | INGRID"
+            PARTITION OF "c_Bibliothèque"."JournalDuMur"
+            FOR VALUES IN (''Ingrid'')' ;
+        REVOKE SELECT ON TABLE "c_Bibliothèque"."journal du mur | JON" FROM public ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."JournalDuMur"
+            (id int DEFAULT nextval('"c_Bibliothèque"."?Compteur?"'::regclass), jour date, entree text, auteur text) ;
+    END IF ;
     
     CREATE VIEW "c_Bibliothèque"."--Entrée/du/jour" AS (SELECT * FROM "c_Bibliothèque"."JournalDuMur" WHERE jour = now()::date) ;
     REVOKE UPDATE ON TABLE "c_Bibliothèque"."--Entrée/du/jour" FROM "g_asgard REC#2" ;
@@ -8877,7 +9051,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t054b IS 'ASGARD recette. TEST : (asgard_initialise_schema) prise en charge de tous les types d''objets avec ACL.' ;
+COMMENT ON FUNCTION z_asgard_recette.t054b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) prise en charge de tous les types d''objets avec ACL.' ;
 
 
 -- FUNCTION: z_asgard_recette.t055()
@@ -8917,7 +9091,12 @@ BEGIN
             lecteur = 'g_asgard_lec2'
         WHERE nom_schema = 'c_librairie' ;
     
-    CREATE TABLE c_bibliotheque.journal_du_mur(idi integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur(idi integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur(idi serial PRIMARY KEY, jour date, entree text) ;
+    END IF ;
     CREATE TABLE c_bibliotheque.tours_de_garde(ids serial PRIMARY KEY, jour date, nom text) ;
     
     ------ application des 6 variantes -------
@@ -9148,7 +9327,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t055 IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
+COMMENT ON FUNCTION z_asgard_recette.t055() IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
 
 
 -- FUNCTION: z_asgard_recette.t055b()
@@ -9188,7 +9367,12 @@ BEGIN
             lecteur = 'g_asg@rd lec2'
         WHERE nom_schema = 'c_LIB rairie' ;
     
-    CREATE TABLE "c_Bibliothèque"."Journal du mur"("i*di" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal du mur"("i*di" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text)' ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."Journal du mur"("i*di" serial PRIMARY KEY, jour date, entree text) ;
+    END IF ;
     CREATE TABLE "c_Bibliothèque"."tours-de-garde"("IDS" serial PRIMARY KEY, jour date, nom text) ;
     
     ------ application des 6 variantes -------
@@ -9419,7 +9603,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t055b IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
+COMMENT ON FUNCTION z_asgard_recette.t055b() IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
 
 
 -- FUNCTION: z_asgard_recette.t056()
@@ -9447,7 +9631,12 @@ BEGIN
     ------ synchronisation à la création ------
     
     -- #1
-    CREATE COLLATION c_bibliotheque.biblicoll (provider = icu, locale = 'fr@colNumeric=yes') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        CREATE COLLATION c_bibliotheque.biblicoll (provider = icu, locale = 'fr@colNumeric=yes') ;
+    ELSE
+        CREATE COLLATION c_bibliotheque.biblicoll FROM pg_catalog.default ;
+    END IF ;
     
     SELECT count(*) = 1
         INTO STRICT b
@@ -9458,7 +9647,7 @@ BEGIN
     RAISE NOTICE '56-1 > %', r::text ;
     
     -- #2
-    CREATE CONVERSION c_bibliotheque.biblicon FOR 'SQL_ASCII' TO 'UTF8' FROM ascii_to_utf8 ;
+    CREATE CONVERSION c_bibliotheque.biblicon FOR 'WIN' TO 'UTF8' FROM win_to_utf8 ;
     
     SELECT count(*) = 1
         INTO STRICT b
@@ -9652,7 +9841,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t056 IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
+COMMENT ON FUNCTION z_asgard_recette.t056() IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
 
 
 -- FUNCTION: z_asgard_recette.t056b()
@@ -9680,7 +9869,12 @@ BEGIN
     ------ synchronisation à la création ------
     
     -- #1
-    CREATE COLLATION "c_Bibliothèque"."BIBLIcoll" (provider = icu, locale = 'fr@colNumeric=yes') ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        CREATE COLLATION "c_Bibliothèque"."BIBLIcoll" (provider = icu, locale = 'fr@colNumeric=yes') ;
+    ELSE
+        CREATE COLLATION "c_Bibliothèque"."BIBLIcoll" FROM pg_catalog.default ;
+    END IF ;
     
     SELECT count(*) = 1
         INTO STRICT b
@@ -9691,7 +9885,7 @@ BEGIN
     RAISE NOTICE '56b-1 > %', r::text ;
     
     -- #2
-    CREATE CONVERSION "c_Bibliothèque"."BIBLI CO^N" FOR 'SQL_ASCII' TO 'UTF8' FROM ascii_to_utf8 ;
+    CREATE CONVERSION "c_Bibliothèque"."BIBLI CO^N" FOR 'WIN' TO 'UTF8' FROM win_to_utf8 ;
     
     SELECT count(*) = 1
         INTO STRICT b
@@ -9885,7 +10079,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t056b IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
+COMMENT ON FUNCTION z_asgard_recette.t056b() IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
 
 
 -- FUNCTION: z_asgard_recette.t057()
@@ -9919,8 +10113,14 @@ BEGIN
         CONSTRAINT chiffre_pair_check CHECK (VALUE > 0 AND VALUE % 2 = 0) ;
     GRANT USAGE ON TYPE c_bibliotheque.chiffre_pair TO g_asgard_rec ; 
     
-    CREATE TABLE c_librairie.journal_du_mur
-        (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text, auteur text) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_librairie.journal_du_mur
+            (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text, auteur text)' ;
+    ELSE
+        CREATE TABLE c_librairie.journal_du_mur
+            (id serial PRIMARY KEY, jour date, entree text, auteur text) ;
+    END IF ;
     REVOKE USAGE ON SEQUENCE c_librairie.journal_du_mur_id_seq FROM g_asgard_rec ;
 
     CREATE FUNCTION c_archives.normalise(text)
@@ -9938,7 +10138,7 @@ BEGIN
     -- #1
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE nom_schema = 'c_bibliotheque' ;
     
     r := b ;
@@ -9947,7 +10147,7 @@ BEGIN
     -- #2
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_librairie'])
         WHERE nom_schema = 'c_librairie' ;
     
     r := r AND b ;
@@ -9956,7 +10156,7 @@ BEGIN
     -- #3
     SELECT count(*) = 0
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_archives'])
         WHERE nom_schema = 'c_archives' ;
     
     r := r AND b ;
@@ -9964,7 +10164,11 @@ BEGIN
     
 
     ------ réaffectation ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec', 'g_asgard_rec_bis', b_hors_asgard := True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec', 'g_asgard_rec_bis', b_hors_asgard := True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '57-4 > %', r::text ;
     
     DROP ROLE g_asgard_rec ;
     
@@ -9976,12 +10180,12 @@ BEGIN
             AND editeur = 'g_asgard_rec_bis' ;
             
     r := r AND b ;
-    RAISE NOTICE '57-4 > %', r::text ;
+    RAISE NOTICE '57-4b > %', r::text ;
     
     -- #5
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_librairie'])
         WHERE nom_schema = 'c_librairie' ;
     
     r := r AND b ;
@@ -9990,7 +10194,7 @@ BEGIN
     -- #6
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
         WHERE nom_schema = 'c_bibliotheque' ;
     
     r := r AND b ;
@@ -10009,7 +10213,7 @@ BEGIN
     -- #8
     SELECT count(*) = 0
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_archives'])
         WHERE nom_schema = 'c_archives' ;
     
     r := r AND b ;
@@ -10029,11 +10233,15 @@ BEGIN
     IF NOT has_database_privilege('g_asgard_rec_bis', current_database()::text, 'CREATE')
     THEN
         r := False ;
-        RAISE NOTICE '57b-10 > %', r::text ;
+        RAISE NOTICE '57-10 > %', r::text ;
     END IF ;
     
     ------ suppression ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec_bis', b_hors_asgard := True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec_bis', b_hors_asgard := True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '57-11 > %', r::text ;
     
     DROP ROLE g_asgard_rec_bis ;
     
@@ -10045,7 +10253,7 @@ BEGIN
             AND producteur = 'g_admin' ;
     
     r := r AND b ;
-    RAISE NOTICE '57-11 > %', r::text ;
+    RAISE NOTICE '57-11b > %', r::text ;
     
     -- #12
     SELECT count(*) = 1
@@ -10094,7 +10302,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t057 IS 'ASGARD recette. TEST : (asgard_reaffecte_role) transmission/suppression des droits (hors privilèges par défaut).' ;
+COMMENT ON FUNCTION z_asgard_recette.t057() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) transmission/suppression des droits (hors privilèges par défaut).' ;
 
 
 
@@ -10129,8 +10337,14 @@ BEGIN
         CONSTRAINT "Chiffre /2_check" CHECK (VALUE > 0 AND VALUE % 2 = 0) ;
     GRANT USAGE ON TYPE "c_Bibliothèque"."Chiffre /2" TO "g_asgard_REC" ; 
     
-    CREATE TABLE "c_LIB air Ie"."Journal du Mur§"
-        (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text, auteur text) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_LIB air Ie"."Journal du Mur§"
+            (id int PRIMARY KEY GENERATED ALWAYS AS IDENTITY, jour date, entree text, auteur text)' ;
+    ELSE
+        CREATE TABLE "c_LIB air Ie"."Journal du Mur§"
+            (id serial PRIMARY KEY, jour date, entree text, auteur text) ;
+    END IF ;
     REVOKE USAGE ON SEQUENCE "c_LIB air Ie"."Journal du Mur§_id_seq" FROM "g_asgard_REC" ;
 
     CREATE FUNCTION "c_Archives"."norm-alise"(text)
@@ -10148,7 +10362,7 @@ BEGIN
     -- #1
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE nom_schema = 'c_Bibliothèque' ;
     
     r := b ;
@@ -10157,7 +10371,7 @@ BEGIN
     -- #2
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_LIB air Ie'])
         WHERE nom_schema = 'c_LIB air Ie' ;
     
     r := r AND b ;
@@ -10166,7 +10380,7 @@ BEGIN
     -- #3
     SELECT count(*) = 0
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Archives'])
         WHERE nom_schema = 'c_Archives' ;
     
     r := r AND b ;
@@ -10174,7 +10388,11 @@ BEGIN
     
 
     ------ réaffectation ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_REC', 'g_asgard REC*', b_hors_asgard := True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_REC', 'g_asgard REC*', b_hors_asgard := True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '57b-4 > %', r::text ;
     
     DROP ROLE "g_asgard_REC" ;
     
@@ -10186,12 +10404,12 @@ BEGIN
             AND editeur = 'g_asgard REC*' ;
             
     r := r AND b ;
-    RAISE NOTICE '57b-4 > %', r::text ;
+    RAISE NOTICE '57b-4b > %', r::text ;
     
     -- #5
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_LIB air Ie'])
         WHERE nom_schema = 'c_LIB air Ie' ;
     
     r := r AND b ;
@@ -10200,7 +10418,7 @@ BEGIN
     -- #6
     SELECT count(*) = 1
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
         WHERE nom_schema = 'c_Bibliothèque' ;
     
     r := r AND b ;
@@ -10219,7 +10437,7 @@ BEGIN
     -- #8
     SELECT count(*) = 0
         INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic()
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Archives'])
         WHERE nom_schema = 'c_Archives' ;
     
     r := r AND b ;
@@ -10243,7 +10461,11 @@ BEGIN
     END IF ;
     
     ------ suppression ------
-    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard REC*', b_hors_asgard := True) ;
+    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard REC*', b_hors_asgard := True) IS NULL
+        INTO STRICT b ;
+        
+    r := r AND b ;
+    RAISE NOTICE '57b-11 > %', r::text ;
     
     DROP ROLE "g_asgard REC*" ;
     
@@ -10255,7 +10477,7 @@ BEGIN
             AND producteur = 'g_admin' ;
     
     r := r AND b ;
-    RAISE NOTICE '57b-11 > %', r::text ;
+    RAISE NOTICE '57b-11b > %', r::text ;
     
     -- #12
     SELECT count(*) = 1
@@ -10304,4 +10526,1166 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t057b IS 'ASGARD recette. TEST : (asgard_reaffecte_role) transmission/suppression des droits (hors privilèges par défaut).' ;
+COMMENT ON FUNCTION z_asgard_recette.t057b() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) transmission/suppression des droits (hors privilèges par défaut).' ;
+
+-- FUNCTION: z_asgard_recette.t058()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t058()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_1 ;
+    CREATE ROLE g_asgard_rec_2 ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_1 ;
+    CREATE SCHEMA c_librairie AUTHORIZATION g_asgard_rec_2 ;
+
+    CREATE TABLE c_bibliotheque.table_1 (id serial PRIMARY KEY, nom text) ;
+    CREATE MATERIALIZED VIEW c_librairie.vue_mat AS (SELECT * FROM c_bibliotheque.table_1) ;
+    CREATE VIEW c_librairie.vue_spl AS (SELECT * FROM c_bibliotheque.table_1) ;
+    
+    -- #1
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := b ;
+    RAISE NOTICE '58-1 > %', r::text ;
+
+    -- #2
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_librairie'])
+        WHERE nom_schema = 'c_librairie'
+            AND typ_objet = 'vue'
+            AND nom_objet = 'vue_spl'
+            AND anomalie ~ ALL (ARRAY['membre', 'source', 'table_1']) ;
+            
+    r := r AND b ;
+    RAISE NOTICE '58-2 > %', r::text ;
+    
+    -- #3
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_librairie'])
+        WHERE nom_schema = 'c_librairie'
+            AND typ_objet = 'vue matérialisée'
+            AND nom_objet = 'vue_mat'
+            AND anomalie ~ ALL (ARRAY['membre', 'source', 'table_1']) ;
+            
+    r := r AND b ;
+    RAISE NOTICE '58-3 > %', r::text ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_rec_2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    -- #4
+    SELECT count(*) = 0
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := r AND b ;
+    RAISE NOTICE '58-4 > %', r::text ;
+    
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA c_librairie CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    DROP ROLE g_asgard_rec_1 ;
+    DROP ROLE g_asgard_rec_2 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t058() IS 'ASGARD recette. TEST : (asgard_diagnostic) détection des droits manquants pour le producteur du schéma d''une vue sur les données sources.' ;
+
+-- FUNCTION: z_asgard_recette.t058b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t058b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_ASGARD_rec_1" ;
+    CREATE ROLE "g_ASGARD_rec 2$" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_ASGARD_rec_1" ;
+    CREATE SCHEMA "c_Lib'rai rie" AUTHORIZATION "g_ASGARD_rec 2$" ;
+
+    CREATE TABLE "c_Bibliothèque"."table 1" (id serial PRIMARY KEY, nom text) ;
+    CREATE MATERIALIZED VIEW "c_Lib'rai rie"."VUE_MAT" AS (SELECT * FROM "c_Bibliothèque"."table 1") ;
+    CREATE VIEW "c_Lib'rai rie"."vue*SPL" AS (SELECT * FROM "c_Bibliothèque"."table 1") ;
+    
+    -- #1
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := b ;
+    RAISE NOTICE '58b-1 > %', r::text ;
+
+    -- #2
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Lib''rai rie'])
+        WHERE nom_schema = 'c_Lib''rai rie'
+            AND typ_objet = 'vue'
+            AND nom_objet = 'vue*SPL'
+            AND anomalie ~ ALL (ARRAY['membre', 'source', 'table 1']) ;
+            
+    r := r AND b ;
+    RAISE NOTICE '58b-2 > %', r::text ;
+    
+    -- #3
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Lib''rai rie'])
+        WHERE nom_schema = 'c_Lib''rai rie'
+            AND typ_objet = 'vue matérialisée'
+            AND nom_objet = 'VUE_MAT'
+            AND anomalie ~ ALL (ARRAY['membre', 'source', 'table 1']) ;
+            
+    r := r AND b ;
+    RAISE NOTICE '58b-3 > %', r::text ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_ASGARD_rec 2$'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    -- #4
+    SELECT count(*) = 0
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := r AND b ;
+    RAISE NOTICE '58b-4 > %', r::text ;
+    
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_Lib'rai rie" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    DROP ROLE "g_ASGARD_rec_1" ;
+    DROP ROLE "g_ASGARD_rec 2$" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t058b() IS 'ASGARD recette. TEST : (asgard_diagnostic) détection des droits manquants pour le producteur du schéma d''une vue sur les données sources.' ;
+
+-- FUNCTION: z_asgard_recette.t059()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t059()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA c_bibliotheque ;
+    GRANT USAGE ON SCHEMA c_bibliotheque TO public ;
+    
+    CREATE SCHEMA c_librairie ;
+    GRANT USAGE ON SCHEMA c_librairie TO public ;
+
+    -- #1
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := b ;
+    RAISE NOTICE '59-1 > %', r::text ;
+    
+    -- #2
+    BEGIN
+        PERFORM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque', 'c_librairie_bis']) ;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                                e_detl = PG_EXCEPTION_DETAIL ;
+                                
+        r := r AND (e_mssg ~ 'FDD1[.]' OR e_detl ~ 'FDD1[.]' OR False) ;
+        RAISE NOTICE '59-2 > %', r::text ;
+    END ;
+
+    -- #3
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-3 > %', r::text ;
+    
+    -- #4
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque', 'c_librairie']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-4 > %', r::text ;
+    
+    -- #5
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-5 > %', r::text ;
+    
+    -- #6
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-6 > %', r::text ;
+    
+    -- #7
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(NULL) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-7 > %', r::text ;
+
+    -- #8
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL, NULL]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-8 > %', r::text ;
+    
+    -- #9
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque', NULL]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-9 > %', r::text ;
+    
+    -- #10
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL, 'c_bibliotheque']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59-10 > %', r::text ;
+    
+    DROP SCHEMA c_bibliotheque ;
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t059() IS 'ASGARD recette. TEST : (asgard_diagnostic) utilisation de la liste de schémas optionnelle.' ;
+
+-- FUNCTION: z_asgard_recette.t059b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t059b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO public ;
+    
+    CREATE SCHEMA "c_LIB rai|rie" ;
+    GRANT USAGE ON SCHEMA "c_LIB rai|rie" TO public ;
+
+    -- #1
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := b ;
+    RAISE NOTICE '59b-1 > %', r::text ;
+    
+    -- #2
+    BEGIN
+        PERFORM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque', '"c_LIB rai|rie"_bis']) ;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                                e_detl = PG_EXCEPTION_DETAIL ;
+                                
+        r := r AND (e_mssg ~ 'FDD1[.]' OR e_detl ~ 'FDD1[.]' OR False) ;
+        RAISE NOTICE '59b-2 > %', r::text ;
+    END ;
+
+    -- #3
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-3 > %', r::text ;
+    
+    -- #4
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque', 'c_LIB rai|rie']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-4 > %', r::text ;
+    
+    -- #5
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-5 > %', r::text ;
+    
+    -- #6
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-6 > %', r::text ;
+    
+    -- #7
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(NULL) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-7 > %', r::text ;
+
+    -- #8
+    SELECT count(*) = 2
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL, NULL]::text[]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-8 > %', r::text ;
+    
+    -- #9
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque', NULL]) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-9 > %', r::text ;
+    
+    -- #10
+    SELECT count(*) = 1
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY[NULL, 'c_Bibliothèque']) ;
+        
+    r := r AND b ;
+    RAISE NOTICE '59b-10 > %', r::text ;
+    
+    DROP SCHEMA "c_Bibliothèque" ;
+    DROP SCHEMA "c_LIB rai|rie" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t059b() IS 'ASGARD recette. TEST : (asgard_diagnostic) utilisation de la liste de schémas optionnelle.' ;
+
+
+-- FUNCTION: z_asgard_recette.t060()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t060()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+    CREATE ROLE g_asgard_rec3 ;
+    CREATE ROLE g_asgard_rec4 ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1',
+            lecteur = 'g_asgard_rec2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    GRANT INSERT ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec3',
+            lecteur = 'g_asgard_rec4'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    r := NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND NOT has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT WITH GRANT OPTION')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'DELETE')
+        AND has_table_privilege('g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+    DROP ROLE g_asgard_rec3 ;
+    DROP ROLE g_asgard_rec4 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t060() IS 'ASGARD recette. TEST : disparition des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
+
+-- FUNCTION: z_asgard_recette.t060b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t060b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    CREATE ROLE "g_asgard REC2" ;
+    CREATE ROLE "g_asgard REC3*" ;
+    CREATE ROLE "g_asgard_REC4" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1',
+            lecteur = 'g_asgard REC2'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard REC2" WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard_REC1" WITH GRANT OPTION ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC3*',
+            lecteur = 'g_asgard_REC4'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    r := NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND NOT has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT WITH GRANT OPTION')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'DELETE')
+        AND has_table_privilege('g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_REC1" ;
+    DROP ROLE "g_asgard REC2" ;
+    DROP ROLE "g_asgard REC3*" ;
+    DROP ROLE "g_asgard_REC4" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t060b() IS 'ASGARD recette. TEST : disparition des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
+
+-- FUNCTION: z_asgard_recette.t061()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t061()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1',
+            lecteur = 'g_asgard_rec2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    GRANT INSERT ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
+    
+    PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur', 'table') ;
+        
+    r := has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t061() IS 'ASGARD recette. TEST : (asgard_initialise_obj) suppression des GRANT OPTION.' ;
+
+-- FUNCTION: z_asgard_recette.t061b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t061b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    CREATE ROLE "g_asgard REC2" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1',
+            lecteur = 'g_asgard REC2'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard REC2" WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard_REC1" WITH GRANT OPTION ;
+    
+    PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal du Mur', 'table') ;
+        
+    r := has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_REC1" ;
+    DROP ROLE "g_asgard REC2" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t061b() IS 'ASGARD recette. TEST : (asgard_initialise_obj) suppression des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t062()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t062()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1',
+            lecteur = 'g_asgard_rec2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    GRANT INSERT ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
+    
+    PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
+        
+    r := has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t062() IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t062b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t062b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    CREATE ROLE "g_asgard REC2" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1',
+            lecteur = 'g_asgard REC2'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard REC2" WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard_REC1" WITH GRANT OPTION ;
+    
+    PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
+        
+    r := has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_REC1" ;
+    DROP ROLE "g_asgard REC2" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t062b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) suppression des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t063()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t063()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1',
+            lecteur = 'g_asgard_rec2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    GRANT INSERT ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
+    
+    PERFORM z_asgard_admin.asgard_initialise_all_schemas() ;
+        
+    r := has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
+        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
+        AND has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard_admin') ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t063() IS 'ASGARD recette. TEST : (asgard_initialise_all_schemas) suppression des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t063b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t063b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    CREATE ROLE "g_asgard REC2" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1',
+            lecteur = 'g_asgard REC2'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard REC2" WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard_REC1" WITH GRANT OPTION ;
+    
+    PERFORM z_asgard_admin.asgard_initialise_all_schemas() ;
+        
+    r := has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
+        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
+        AND has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
+        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
+        
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard_admin') ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_REC1" ;
+    DROP ROLE "g_asgard REC2" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t063b() IS 'ASGARD recette. TEST : (asgard_initialise_all_schemas) suppression des GRANT OPTION.' ;
+
+-- FUNCTION: z_asgard_recette.t064()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t064()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1',
+            lecteur = 'g_asgard_rec2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+        
+    GRANT INSERT ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
+    
+    SELECT
+        count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'INSERT', 'g_asgard_rec2'])) = 1
+            AND count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'UPDATE', 'g_asgard_rec1'])) = 1
+            AND count(*) = 3
+        INTO r
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque']) ;
+        
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t064() IS 'ASGARD recette. TEST : (asgard_diagnostic) détection des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t064b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t064b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    CREATE ROLE "g_asgard REC2" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1',
+            lecteur = 'g_asgard REC2'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+        
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard REC2" WITH GRANT OPTION ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Journal du Mur" TO "g_asgard_REC1" WITH GRANT OPTION ;
+    
+    SELECT
+        count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'INSERT', 'g_asgard.REC2'])) = 1
+            AND count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'UPDATE', 'g_asgard_REC1'])) = 1
+            AND count(*) = 3
+        INTO r
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque']) ;
+        
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard_admin') ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_REC1" ;
+    DROP ROLE "g_asgard REC2" ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t064b() IS 'ASGARD recette. TEST : (asgard_diagnostic) détection des GRANT OPTION.' ;
+
+
+-- FUNCTION: z_asgard_recette.t065()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t065()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    
+    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || current_database()::text || ' TO g_asgard_rec1' ;
+    
+    SELECT
+        unnest(z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', b_hors_asgard := False))::text = current_database()::text
+        INTO r ;
+
+    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', b_hors_asgard := True) ;
+    DROP ROLE g_asgard_rec1 ;
+    
+    RETURN coalesce(r, False) ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t065() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) renvoie effectif de la dépendance par le test final lorsque le rôle a uniquement des privilèges sur la base elle-même.' ;
+
+-- FUNCTION: z_asgard_recette.t065b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t065b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1" ;
+    
+    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || current_database()::text || ' TO "g_asgard_REC1"' ;
+    
+    SELECT
+        unnest(z_asgard_admin.asgard_reaffecte_role('g_asgard_REC1', b_hors_asgard := False))::text = current_database()::text
+        INTO r ;
+
+    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_REC1', b_hors_asgard := True) ;
+    DROP ROLE "g_asgard_REC1" ;
+    
+    RETURN coalesce(r, False) ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t065b() IS 'ASGARD recette. TEST : (asgard_reaffecte_role) renvoie effectif de la dépendance par le test final lorsque le rôle a uniquement des privilèges sur la base elle-même.' ;
+
+
+-- FUNCTION: z_asgard_recette.t066()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t066()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+   t record ;
+BEGIN
+
+    REVOKE USAGE ON SCHEMA z_asgard FROM g_consult ;
+
+    FOR t IN (SELECT * FROM pg_catalog.pg_class WHERE relnamespace = 'z_asgard'::regnamespace AND relkind = ANY (ARRAY['v', 'r', 'm', 'f', 'p']))
+    LOOP
+        EXECUTE 'REVOKE ALL ON TABLE z_asgard.' || quote_ident(t.relname) || ' FROM g_consult' ;
+    END LOOP ;
+    
+    PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
+    
+    SELECT count(*) = 0
+        INTO b
+        FROM z_asgard_admin.asgard_diagnostic() ;
+        
+    r := b ;
+    
+    FOR t IN (SELECT pg_class.oid FROM pg_catalog.pg_class WHERE relnamespace = 'z_asgard'::regnamespace AND relkind = ANY (ARRAY['v', 'r', 'm', 'f', 'p']))
+    LOOP
+        SELECT has_table_privilege('g_consult', t.oid, 'SELECT')
+            INTO b ;
+        r := r AND b ;
+    END LOOP ;
+
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+
+    RETURN r ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t066() IS 'ASGARD recette. TEST : (asgard_initialise_schema) restauration des privilèges de g_consult sur z_asgard.' ;
+
+
+-- FUNCTION: z_asgard_recette.t067()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t067()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    RETURN has_database_privilege('g_admin', current_database(), 'CREATE WITH GRANT OPTION') ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t067() IS 'ASGARD recette. TEST : attribution de CREATE WITH GRANT OPTION sur la base à g_admin.' ;
