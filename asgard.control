@@ -1,7 +1,7 @@
 # extension asgard
-default_version = '1.1.0'
+default_version = '1.2.1'
 comment = 'ASGARD. Gestion des droits pour PostgreSQL.'
 superuser = true
 encoding = 'UTF8'
-requires = 'plpgsql, postgis'
+requires = 'plpgsql'
 relocatable = false
