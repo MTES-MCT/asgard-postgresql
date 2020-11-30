@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.1
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.2
 -- > Script de recette.
 --
 -- Copyright République Française, 2020.
@@ -17,6 +17,12 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
 -- schéma contenant les objets : z_asgard_recette
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+-- MODIFICATIONS : ajout du test 68, correction d'anomalies qui faisaient
+-- échouer certains tests lorsque appliqués à une base dont le nom ne
+-- respecte pas les règles de nommages des identifiants PostgreSQL.
 --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -4073,7 +4079,7 @@ DECLARE
 BEGIN
 
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin_ext ;
-    EXECUTE 'GRANT CREATE ON DATABASE ' || current_database() || ' TO g_admin_ext' ;
+    EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO g_admin_ext' ;
   
     ------ avec g_admin_ext ------
     SET ROLE g_admin_ext ;
@@ -4241,7 +4247,7 @@ BEGIN
 
     DROP SCHEMA c_librairie ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_librairie' ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || current_database() || ' FROM g_admin_ext' ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
     RESET ROLE ;
         
     RETURN r ;
@@ -4271,7 +4277,7 @@ BEGIN
     GRANT g_admin_ext TO "Admin EXT" ;
 
     CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "Admin EXT" ;
-    EXECUTE 'GRANT CREATE ON DATABASE ' || current_database() || ' TO "Admin EXT"' ;
+    EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO "Admin EXT"' ;
   
     ------ avec "Admin EXT" ------
     SET ROLE "Admin EXT" ;
@@ -4441,7 +4447,7 @@ BEGIN
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Librairie' ;
     
     RESET ROLE ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || current_database() || ' FROM "Admin EXT"' ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM "Admin EXT"' ;
     DROP ROLE "Admin EXT" ;
         
     RETURN r ;
@@ -4468,7 +4474,7 @@ DECLARE
    e_detl text ;
 BEGIN
 
-    EXECUTE 'GRANT CREATE ON DATABASE ' || current_database() || ' TO g_admin_ext' ;
+    EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO g_admin_ext' ;
   
     ------ avec g_admin_ext ------
     SET ROLE g_admin_ext ;
@@ -4498,7 +4504,7 @@ BEGIN
         WHERE nom_schema = 'c_bibliotheque' ;
     DROP SCHEMA c_bibliotheque ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || current_database() || ' FROM g_admin_ext' ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
     RESET ROLE ;
         
     RETURN r ;
@@ -4527,7 +4533,7 @@ BEGIN
     CREATE ROLE "Admin EXT" ;
     GRANT g_admin_ext TO "Admin EXT" ;
 
-    EXECUTE 'GRANT CREATE ON DATABASE ' || current_database() || ' TO "Admin EXT"' ;
+    EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO "Admin EXT"' ;
   
     ------ avec "Admin EXT" ------
     SET ROLE "Admin EXT" ;
@@ -4559,7 +4565,7 @@ BEGIN
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
     
     RESET ROLE ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || current_database() || ' FROM "Admin EXT"' ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM "Admin EXT"' ;
     
     DROP ROLE "Admin EXT" ;
         
@@ -11544,7 +11550,7 @@ BEGIN
 
     CREATE ROLE g_asgard_rec1 ;
     
-    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || current_database()::text || ' TO g_asgard_rec1' ;
+    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || quote_ident(current_database())::text || ' TO g_asgard_rec1' ;
     
     SELECT
         unnest(z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', b_hors_asgard := False))::text = current_database()::text
@@ -11583,7 +11589,7 @@ BEGIN
 
     CREATE ROLE "g_asgard_REC1" ;
     
-    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || current_database()::text || ' TO "g_asgard_REC1"' ;
+    EXECUTE 'GRANT CREATE, CONNECT ON DATABASE ' || quote_ident(current_database())::text || ' TO "g_asgard_REC1"' ;
     
     SELECT
         unnest(z_asgard_admin.asgard_reaffecte_role('g_asgard_REC1', b_hors_asgard := False))::text = current_database()::text
@@ -11689,3 +11695,63 @@ END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t067() IS 'ASGARD recette. TEST : attribution de CREATE WITH GRANT OPTION sur la base à g_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t068()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t068()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ------ sans recréation des rôles ------
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard ;
+
+    ------ avec recréation des rôles ------
+    ALTER ROLE g_admin RENAME TO g_admin_temp ;
+    ALTER ROLE g_admin_ext RENAME TO g_admin_ext_temp ;
+    ALTER ROLE g_consult RENAME TO g_consult_temp ;
+    ALTER ROLE "consult.defaut" RENAME TO "consult.defaut_temp" ;
+    
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard ;
+    
+    DROP EXTENSION asgard ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin' ;
+    DROP ROLE g_admin ;
+    DROP ROLE g_admin_ext ;
+    DROP ROLE g_consult ;
+    DROP ROLE "consult.defaut" ;
+    
+    ALTER ROLE g_admin_temp RENAME TO g_admin ;
+    ALTER ROLE g_admin_ext_temp RENAME TO g_admin_ext ;
+    ALTER ROLE g_consult_temp RENAME TO g_consult ;
+    ALTER ROLE "consult.defaut_temp" RENAME TO "consult.defaut" ;
+    ALTER ROLE "consult.defaut" PASSWORD 'consult.defaut' ;
+    
+    CREATE EXTENSION asgard ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t068() IS 'ASGARD recette. TEST : Désinstallation et réinstallation de l''extension.' ;
+
+-- NB : pas de test 068b sur une base avec un nom non standard, car il n'est pas possible
+-- de renommer la base courante.
