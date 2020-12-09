@@ -9,7 +9,7 @@ Elle a été conçue et développée dans le cadre du groupe de travail PostGIS 
 
 ## Compatibilité
 
-PostgreSQL 9.5 ou supérieur. L'extension PostGIS est requise.
+PostgreSQL 9.5 ou supérieur.
 
 ## Installation et utilisation
 
