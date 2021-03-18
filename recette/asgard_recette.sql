@@ -1,28 +1,21 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.2
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.3
 -- > Script de recette.
 --
--- Copyright République Française, 2020.
+-- Copyright République Française, 2020-2021.
 -- Secrétariat général du Ministère de la transition écologique, du
 -- Ministère de la cohésion des territoires et des relations avec les
 -- collectivités territoriales et du Ministère de la Mer.
 -- Service du numérique.
 --
--- contributeurs : Alain Ferraton (SNUM/MSP/DS/GSG) et Leslie Lemaire
--- (SNUM/UNI/DRC).
+-- contributeurs pour la recette : Leslie Lemaire (SNUM/UNI/DRC).
 -- 
 -- mél : drc.uni.snum.sg@developpement-durable.gouv.fr
 --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
 -- schéma contenant les objets : z_asgard_recette
---
--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
---
--- MODIFICATIONS : ajout du test 68, correction d'anomalies qui faisaient
--- échouer certains tests lorsque appliqués à une base dont le nom ne
--- respecte pas les règles de nommages des identifiants PostgreSQL.
 --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -11755,3 +11748,264 @@ COMMENT ON FUNCTION z_asgard_recette.t068() IS 'ASGARD recette. TEST : Désinsta
 
 -- NB : pas de test 068b sur une base avec un nom non standard, car il n'est pas possible
 -- de renommer la base courante.
+
+
+-- FUNCTION: z_asgard_recette.t069()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t069()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text, CONSTRAINT jour_uni UNIQUE (jour)) ;
+    
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t069() IS 'ASGARD recette. TEST : Création d''une table avec contrainte.' ;
+
+
+-- FUNCTION: z_asgard_recette.t069b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t069b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du mur" (id serial PRIMARY KEY, "<jour>" date, entree text, CONSTRAINT "Jour_uni" UNIQUE ("<jour>")) ;
+    
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t069b() IS 'ASGARD recette. TEST : Création d''une table avec contrainte.' ;
+
+
+-- FUNCTION: z_asgard_recette.t070()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t070()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text, CONSTRAINT jour_uni UNIQUE (jour)) ;
+    ALTER TABLE c_bibliotheque.journal_du_mur
+        RENAME CONSTRAINT jour_uni TO journal_jour_uni ;
+    
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t070() IS 'ASGARD recette. TEST : Modification d''une contrainte.' ;
+
+
+-- FUNCTION: z_asgard_recette.t070b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t070b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du mur" (id serial PRIMARY KEY, "<jour>" date, entree text, CONSTRAINT "Jour_uni" UNIQUE ("<jour>")) ;
+    ALTER TABLE "c_Bibliothèque"."Journal du mur"
+        RENAME CONSTRAINT "Jour_uni" TO "JOURNAL Jour_uni*" ;
+    
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t070b() IS 'ASGARD recette. TEST : Modification d''une contrainte.' ;
+
+
+
+-- FUNCTION: z_asgard_recette.t071()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t071()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_1 ;
+    CREATE ROLE g_asgard_rec_2 ;
+    CREATE ROLE g_maker ;
+    GRANT g_asgard_rec_2 TO g_maker ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_1 ;
+    CREATE SCHEMA c_librairie AUTHORIZATION g_asgard_rec_2 ;
+
+    CREATE TABLE c_bibliotheque.table_1 (id serial PRIMARY KEY, nom text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = 'g_maker' WHERE nom_schema = 'c_bibliotheque' ;
+    
+    PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = 'g_maker' WHERE nom_schema = 'z_asgard' ;
+    
+    SET ROLE g_maker ;
+    CREATE MATERIALIZED VIEW c_librairie.vue_mat AS (SELECT * FROM c_bibliotheque.table_1) ;
+    CREATE VIEW c_librairie.vue_spl AS (SELECT * FROM c_bibliotheque.table_1) ;
+    
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA c_librairie CASCADE ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = NULL WHERE nom_schema = 'z_asgard' ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    DROP ROLE g_asgard_rec_1 ;
+    DROP ROLE g_asgard_rec_2 ;
+    DROP ROLE g_maker ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t071() IS 'ASGARD recette. TEST : création d''une vue dont le propriétaire n''a pas les droits nécessaires sur les données sources et tandis que l''utilisateur n''est pas membre du rôle producteur du schéma source.' ;
+
+-- FUNCTION: z_asgard_recette.t071b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t071b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   b boolean ;
+   r boolean ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_ASGARD_rec_1" ;
+    CREATE ROLE "g_ASGARD_rec 2$" ;
+    CREATE ROLE "g_MAKER" ;
+    GRANT "g_ASGARD_rec 2$" TO "g_MAKER" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_ASGARD_rec_1" ;
+    CREATE SCHEMA "c_Lib'rai rie" AUTHORIZATION "g_ASGARD_rec 2$" ;
+
+    CREATE TABLE "c_Bibliothèque"."table 1" (id serial PRIMARY KEY, nom text) ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = 'g_MAKER' WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = 'g_MAKER' WHERE nom_schema = 'z_asgard' ;
+    
+    SET ROLE "g_MAKER" ;
+    CREATE MATERIALIZED VIEW "c_Lib'rai rie"."VUE_MAT" AS (SELECT * FROM "c_Bibliothèque"."table 1") ;
+    CREATE VIEW "c_Lib'rai rie"."vue*SPL" AS (SELECT * FROM "c_Bibliothèque"."table 1") ;
+    
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_Lib'rai rie" CASCADE ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET lecteur = NULL WHERE nom_schema = 'z_asgard' ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    DROP ROLE "g_ASGARD_rec_1" ;
+    DROP ROLE "g_ASGARD_rec 2$" ;
+    DROP ROLE "g_MAKER" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t071b() IS 'ASGARD recette. TEST : création d''une vue dont le propriétaire n''a pas les droits nécessaires sur les données sources et tandis que l''utilisateur n''est pas membre du rôle producteur du schéma source.' ;
+
