@@ -13,16 +13,20 @@ PostgreSQL 9.5 ou supérieur.
 
 ## Installation et utilisation
 
-Se référer à la documentation.
+Documentation de la suite ASGARD (extension PostgreSQL ASGARD et plugins QGIS AsgardManager et AsgardMenu) : https://snum.scenari-community.org/Asgard/Documentation.
 
 ## Licence
 
 L'extension PostgreSQL ASGARD est un logiciel libre publié sous licence CeCILL-B.
 
+Cf. [LICENCE.txt](https://github.com/MTES-MCT/asgard-postgresql/blob/master/LICENCE.txt).
+
 ## Crédits
 
-République Française, 2020.
+République Française, 2020-2021.
 Secrétariat général du Ministère de la transition écologique, du Ministère de la cohésion des territoires et des relations avec les collectivités territoriales et du Ministère de la Mer.
 Service du numérique.
 
-Contributeurs : Alain Ferraton (SNUM/MSP/DS/GSG) et Leslie Lemaire (SNUM/UNI/DRC).
+Contributeurs : Leslie Lemaire (SNUM/UNI/DRC) et Alain Ferraton (SNUM/MSP/DS/GSG).
+
+Mél : drc.uni.snum.sg@developpement-durable.gouv.fr
