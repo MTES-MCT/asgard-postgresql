@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.3
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.4
 -- > Script de recette.
 --
 -- Copyright République Française, 2020-2021.
