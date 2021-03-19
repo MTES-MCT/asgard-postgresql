@@ -17,7 +17,7 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
 -- Note de version :
--- https://snum.scenari-community.org/Asgard/Documentation/#SEC_1-2-3
+-- https://snum.scenari-community.org/Asgard/Documentation/#SEC_1-2-4
 -- 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
@@ -65,13 +65,17 @@
 -- Schémas contenant les objets : z_asgard et z_asgard_admin.
 --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+--
+-- Version corrigée du script, diffusée parallèlement à la 1.2.4.
+--
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
 ---------------------------------------
 ------ 1 - PREPARATION DES ROLES ------
 ---------------------------------------
 
-ALTER ROLE g_admin NOREPLICATION, BYPASSRLS ;
+ALTER ROLE g_admin NOREPLICATION BYPASSRLS ;
 
 
 --------------------------------------------
