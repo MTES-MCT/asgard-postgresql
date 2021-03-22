@@ -12009,3 +12009,42 @@ $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t071b() IS 'ASGARD recette. TEST : création d''une vue dont le propriétaire n''a pas les droits nécessaires sur les données sources et tandis que l''utilisateur n''est pas membre du rôle producteur du schéma source.' ;
 
+
+-- FUNCTION: z_asgard_recette.t072()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t072()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   vref1 text ;
+   vref2 text ;
+BEGIN
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.1' ;
+    ALTER EXTENSION asgard UPDATE ;
+    
+    SELECT installed_version INTO vref2 FROM pg_available_extensions WHERE name = 'asgard' ;
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard ;
+    
+    SELECT installed_version INTO vref1 FROM pg_available_extensions WHERE name = 'asgard' ;
+
+    RETURN coalesce(vref1 = vref2, False) ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t072() IS 'ASGARD recette. TEST : installation de l''extension par montée de version.' ;
