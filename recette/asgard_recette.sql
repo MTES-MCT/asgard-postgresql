@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.2.4
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.3.0
 -- > Script de recette.
 --
 -- Copyright République Française, 2020-2021.
@@ -44,17 +44,15 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t000()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
 
 
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -118,7 +116,7 @@ BEGIN
             CASE WHEN num ~ 'b' THEN ' [noms non normalisés] ' ELSE '' END ||
             substring(
                 obj_description(('z_asgard_recette.' || num || '()')::regprocedure, 'pg_proc'),
-                '^ASGARD.recette[.].TEST.[:].(.*)[.]$'
+                '^ASGARD.recette[.].TEST.[:].(.*)$'
                 )
             FROM unnest(l) AS t (num)
             ORDER BY num ;
@@ -7876,9 +7874,10 @@ BEGIN
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_usr FROM g_consult ;
     REVOKE SELECT ON TABLE z_asgard.asgardmenu_metadata FROM g_consult ;
     REVOKE SELECT ON TABLE z_asgard.asgardmanager_metadata FROM g_consult ;
+    REVOKE SELECT ON TABLE z_asgard.gestion_schema_read_only FROM g_consult ;
 
     -- #21
-    SELECT count(*) = 9
+    SELECT count(*) = 10
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -7886,7 +7885,7 @@ BEGIN
     RAISE NOTICE '51-21 > %', r::text ;
     
     -- #22
-    SELECT count(*) = 9
+    SELECT count(*) = 10
         INTO b
         FROM z_asgard_admin.asgard_diagnostic(ARRAY['z_asgard', 'z_asgard_admin'])
             LEFT JOIN (
@@ -7899,7 +7898,8 @@ BEGIN
                 ('z_asgard', 'gestion_schema_usr', 'vue', 'SELECT', 'g_consult'),
                 ('z_asgard', 'gestion_schema_etr', 'vue', 'SELECT', 'g_consult'),
                 ('z_asgard', 'asgardmenu_metadata', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'asgardmanager_metadata', 'vue', 'SELECT', 'g_consult')
+                ('z_asgard', 'asgardmanager_metadata', 'vue', 'SELECT', 'g_consult'),
+                ('z_asgard', 'gestion_schema_read_only', 'vue', 'SELECT', 'g_consult')
             ) AS t (a_schema, a_objet, a_type, a_commande, a_role)
         ON typ_objet = a_type AND nom_schema = a_schema
             AND nom_objet = a_objet
@@ -12043,8 +12043,3431 @@ EXCEPTION WHEN OTHERS THEN
         USING DETAIL = e_detl ;
         
     RETURN False ;
-    
+
 END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t072() IS 'ASGARD recette. TEST : installation de l''extension par montée de version.' ;
+    
+
+-- FUNCTION: z_asgard_recette.t073()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t073()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+    GRANT g_consult TO g_asgard_rec1 ;
+    GRANT g_consult TO g_asgard_rec2 ;
+    
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec1 ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    ASSERT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur', 'g_asgard_rec1'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur', 'g_asgard_rec2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_librairie', 'journal_du_mur', 'postgres'), 'échec assertion #3' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'le_journal_du_mur', 'postgres'), 'échec assertion #4' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur', 'g_asgard_rec3'), 'échec assertion #5' ; 
+    
+    GRANT g_asgard_rec1 TO g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur', 'g_asgard_rec2'), 'échec assertion #6' ; 
+    
+    SET ROLE g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur'), 'échec assertion #7' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_librairie', 'journal_du_mur'), 'échec assertion #8' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'le_journal_du_mur'), 'échec assertion #9' ; 
+    
+    RESET ROLE ;
+    REVOKE g_asgard_rec1 FROM g_asgard_rec2 ;
+    SET ROLE g_asgard_rec2 ;
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_bibliotheque', 'journal_du_mur'), 'échec assertion #10' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t073() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_relation_owner.' ;
+
+
+-- FUNCTION: z_asgard_recette.t073b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t073b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1*" ;
+    CREATE ROLE "g_asgard REC2" ;
+    GRANT g_consult TO "g_asgard_REC1*" ;
+    GRANT g_consult TO "g_asgard REC2" ;
+    
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_REC1*" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    
+    ASSERT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur', 'g_asgard_REC1*'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur', 'g_asgard REC2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Librairie', 'Journal du mur', 'postgres'), 'échec assertion #3' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'LE Journal du mur', 'postgres'), 'échec assertion #4' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur', 'g_asgard_rec3 XXX'), 'échec assertion #5' ; 
+    
+    GRANT "g_asgard_REC1*" TO "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur', 'g_asgard REC2'), 'échec assertion #6' ; 
+    
+    SET ROLE "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur'), 'échec assertion #7' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Librairie', 'Journal du mur'), 'échec assertion #8' ; 
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'LE Journal du mur'), 'échec assertion #9' ; 
+    
+    RESET ROLE ;
+    REVOKE "g_asgard_REC1*" FROM "g_asgard REC2" ;
+    SET ROLE "g_asgard REC2" ;
+    ASSERT NOT z_asgard.asgard_is_relation_owner('c_Bibliothèque', 'Journal du mur'), 'échec assertion #10' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP ROLE "g_asgard_REC1*" ;
+    DROP ROLE "g_asgard REC2" ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t073b() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_relation_owner.' ;
+
+
+-- FUNCTION: z_asgard_recette.t074()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t074()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+    GRANT g_consult TO g_asgard_rec1 ;
+    GRANT g_consult TO g_asgard_rec2 ;
+    
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec1 ;
+    
+    ASSERT z_asgard.asgard_is_producteur('c_bibliotheque', 'g_asgard_rec1'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_producteur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_producteur('c_librairie', 'postgres'), 'échec assertion #3' ;  
+    ASSERT NOT z_asgard.asgard_is_producteur('c_bibliotheque', 'g_asgard_rec3'), 'échec assertion #4' ; 
+    
+    GRANT g_asgard_rec1 TO g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_producteur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #5' ; 
+    
+    SET ROLE g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_producteur('c_bibliotheque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_producteur('c_librairie'), 'échec assertion #7' ; 
+    
+    RESET ROLE ;
+    REVOKE g_asgard_rec1 FROM g_asgard_rec2 ;
+    SET ROLE g_asgard_rec2 ;
+    ASSERT NOT z_asgard.asgard_is_producteur('c_bibliotheque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t074() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_producteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t074b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t074b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1*" ;
+    CREATE ROLE "g_asgard REC2" ;
+    GRANT g_consult TO "g_asgard_REC1*" ;
+    GRANT g_consult TO "g_asgard REC2" ;
+    
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_REC1*" ;
+    
+    ASSERT z_asgard.asgard_is_producteur('c_Bibliothèque', 'g_asgard_REC1*'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_producteur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_producteur('c_Librairie', 'postgres'), 'échec assertion #3' ; 
+    ASSERT NOT z_asgard.asgard_is_producteur('c_Bibliothèque', 'g_asgard_rec3 XXX'), 'échec assertion #4' ; 
+    
+    GRANT "g_asgard_REC1*" TO "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_producteur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #5' ; 
+    
+    SET ROLE "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_producteur('c_Bibliothèque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_producteur('c_Librairie'), 'échec assertion #7' ;
+    
+    RESET ROLE ;
+    REVOKE "g_asgard_REC1*" FROM "g_asgard REC2" ;
+    SET ROLE "g_asgard REC2" ;
+    ASSERT NOT z_asgard.asgard_is_producteur('c_Bibliothèque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP ROLE "g_asgard_REC1*" ;
+    DROP ROLE "g_asgard REC2" ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t074b() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_producteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t075()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t075()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+    GRANT g_consult TO g_asgard_rec1 ;
+    GRANT g_consult TO g_asgard_rec2 ;
+    
+    CREATE SCHEMA c_bibliotheque ;
+    
+    ASSERT NOT z_asgard.asgard_is_editeur('c_bibliotheque', 'g_asgard_rec1'), 'échec assertion #0' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec1'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    ASSERT z_asgard.asgard_is_editeur('c_bibliotheque', 'g_asgard_rec1'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_editeur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_editeur('c_librairie', 'postgres'), 'échec assertion #3' ;  
+    ASSERT NOT z_asgard.asgard_is_editeur('c_bibliotheque', 'g_asgard_rec3'), 'échec assertion #4' ; 
+    
+    GRANT g_asgard_rec1 TO g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_editeur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #5' ; 
+    
+    SET ROLE g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_editeur('c_bibliotheque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_editeur('c_librairie'), 'échec assertion #7' ; 
+    
+    RESET ROLE ;
+    REVOKE g_asgard_rec1 FROM g_asgard_rec2 ;
+    SET ROLE g_asgard_rec2 ;
+    ASSERT NOT z_asgard.asgard_is_editeur('c_bibliotheque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t075() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_editeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t075b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t075b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1*" ;
+    CREATE ROLE "g_asgard REC2" ;
+    GRANT g_consult TO "g_asgard_REC1*" ;
+    GRANT g_consult TO "g_asgard REC2" ;
+    
+    CREATE SCHEMA "c_Bibliothèque" ;
+    
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Bibliothèque', 'g_asgard_REC1*'), 'échec assertion #0' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_REC1*'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    ASSERT z_asgard.asgard_is_editeur('c_Bibliothèque', 'g_asgard_REC1*'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Librairie', 'postgres'), 'échec assertion #3' ; 
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Bibliothèque', 'g_asgard_rec3 XXX'), 'échec assertion #4' ; 
+    
+    GRANT "g_asgard_REC1*" TO "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_editeur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #5' ; 
+    
+    SET ROLE "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_editeur('c_Bibliothèque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Librairie'), 'échec assertion #7' ;
+    
+    RESET ROLE ;
+    REVOKE "g_asgard_REC1*" FROM "g_asgard REC2" ;
+    SET ROLE "g_asgard REC2" ;
+    ASSERT NOT z_asgard.asgard_is_editeur('c_Bibliothèque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP ROLE "g_asgard_REC1*" ;
+    DROP ROLE "g_asgard REC2" ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t075b() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_editeur.' ;
+
+
+
+-- FUNCTION: z_asgard_recette.t076()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t076()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec1 ;
+    CREATE ROLE g_asgard_rec2 ;
+    GRANT g_consult TO g_asgard_rec1 ;
+    GRANT g_consult TO g_asgard_rec2 ;
+    
+    CREATE SCHEMA c_bibliotheque ;
+    
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_bibliotheque', 'g_asgard_rec1'), 'échec assertion #0' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_rec1'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    ASSERT z_asgard.asgard_is_lecteur('c_bibliotheque', 'g_asgard_rec1'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_librairie', 'postgres'), 'échec assertion #3' ;  
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_bibliotheque', 'g_asgard_rec3'), 'échec assertion #4' ; 
+    
+    GRANT g_asgard_rec1 TO g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_lecteur('c_bibliotheque', 'g_asgard_rec2'), 'échec assertion #5' ; 
+    
+    SET ROLE g_asgard_rec2 ;
+    ASSERT z_asgard.asgard_is_lecteur('c_bibliotheque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_librairie'), 'échec assertion #7' ; 
+    
+    RESET ROLE ;
+    REVOKE g_asgard_rec1 FROM g_asgard_rec2 ;
+    SET ROLE g_asgard_rec2 ;
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_bibliotheque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP ROLE g_asgard_rec1 ;
+    DROP ROLE g_asgard_rec2 ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t076() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_lecteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t076b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t076b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_REC1*" ;
+    CREATE ROLE "g_asgard REC2" ;
+    GRANT g_consult TO "g_asgard_REC1*" ;
+    GRANT g_consult TO "g_asgard REC2" ;
+    
+    CREATE SCHEMA "c_Bibliothèque" ;
+    
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Bibliothèque', 'g_asgard_REC1*'), 'échec assertion #0' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_REC1*'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    ASSERT z_asgard.asgard_is_lecteur('c_Bibliothèque', 'g_asgard_REC1*'), 'échec assertion #1' ; 
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #2' ; 
+    
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Librairie', 'postgres'), 'échec assertion #3' ; 
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Bibliothèque', 'g_asgard_rec3 XXX'), 'échec assertion #4' ; 
+    
+    GRANT "g_asgard_REC1*" TO "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_lecteur('c_Bibliothèque', 'g_asgard REC2'), 'échec assertion #5' ; 
+    
+    SET ROLE "g_asgard REC2" ;
+    ASSERT z_asgard.asgard_is_lecteur('c_Bibliothèque'), 'échec assertion #6' ; 
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Librairie'), 'échec assertion #7' ;
+    
+    RESET ROLE ;
+    REVOKE "g_asgard_REC1*" FROM "g_asgard REC2" ;
+    SET ROLE "g_asgard REC2" ;
+    ASSERT NOT z_asgard.asgard_is_lecteur('c_Bibliothèque'), 'échec assertion #8' ; 
+    
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP ROLE "g_asgard_REC1*" ;
+    DROP ROLE "g_asgard REC2" ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+    
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t076b() IS 'ASGARD recette. TEST : contrôle de la fonction z_asgard.asgard_is_lecteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t077()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t077()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec ;
+    GRANT INSERT ON TABLE z_asgard.gestion_schema_read_only TO g_asgard_rec ;
+    GRANT INSERT ON TABLE z_asgard.asgardmanager_metadata TO g_asgard_rec ;
+    GRANT INSERT ON TABLE z_asgard.asgardmenu_metadata TO g_asgard_rec ;
+    
+    BEGIN
+        INSERT INTO z_asgard.gestion_schema_read_only (nom_schema, producteur) VALUES ('erreur', 'g_admin') ;
+        RAISE NOTICE 'échec #1' ; 
+        RETURN False ;
+    EXCEPTION WHEN object_not_in_prerequisite_state
+    THEN
+    END ;
+
+    BEGIN
+        INSERT INTO z_asgard.asgardmanager_metadata (nom_schema, oid_producteur) VALUES ('erreur', 'g_admin'::regrole::oid) ;
+        RAISE NOTICE 'échec #2' ; 
+        RETURN False ;
+    EXCEPTION WHEN object_not_in_prerequisite_state
+    THEN
+    END ;
+    
+    BEGIN
+        INSERT INTO z_asgard.asgardmenu_metadata (nom_schema) VALUES ('erreur') ;
+        RAISE NOTICE 'échec #3' ; 
+        RETURN False ;
+    EXCEPTION WHEN object_not_in_prerequisite_state
+    THEN
+    END ;
+    
+    PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec', b_hors_asgard := True) ;
+    DROP ROLE g_asgard_rec ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t077() IS 'ASGARD recette. TEST : Les vues en lecture seule sont-elles bien en lecture seule ?' ;
+
+
+-- FUNCTION: z_asgard_recette.t078()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t078()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE z_asgard_rec1 ;
+    CREATE ROLE z_asgard_rec2 ;
+    CREATE ROLE z_asgard_rec3 ;
+    
+    GRANT z_asgard_rec2 TO z_asgard_rec1 ;
+    GRANT g_consult TO z_asgard_rec1 ;
+    
+    ASSERT z_asgard.asgard_has_role_usage('z_asgard_rec2', 'z_asgard_rec1'), 'échec assertion #1' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard_rec3', 'z_asgard_rec1'), 'échec assertion #2' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard_rec2xx', 'z_asgard_rec1'), 'échec assertion #3' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard_rec2', 'z_asgard_rec1xx'), 'échec assertion #4' ;
+    
+    SET ROLE z_asgard_rec1 ;
+    ASSERT z_asgard.asgard_has_role_usage('z_asgard_rec2'), 'échec assertion #5' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard_rec3'), 'échec assertion #6' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard_rec2xx'), 'échec assertion #7' ;
+
+    RESET ROLE ;
+    DROP ROLE z_asgard_rec1 ;
+    DROP ROLE z_asgard_rec2 ;
+    DROP ROLE z_asgard_rec3 ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t078() IS 'ASGARD recette. TEST : Contrôle de la fonction z_asgard.asgard_has_role_usage.' ;
+
+
+-- FUNCTION: z_asgard_recette.t078b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t078b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "z_asgard_REC1*" ;
+    CREATE ROLE "z_asgard rec2" ;
+    CREATE ROLE "z_asgard REC3" ;
+    
+    GRANT "z_asgard rec2" TO "z_asgard_REC1*" ;
+    GRANT g_consult TO "z_asgard_REC1*" ;
+    
+    ASSERT z_asgard.asgard_has_role_usage('z_asgard rec2', 'z_asgard_REC1*'), 'échec assertion #1' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard REC3', 'z_asgard_REC1*'), 'échec assertion #2' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard rec2xx', 'z_asgard_REC1*'), 'échec assertion #3' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard rec2', 'z_asgard_REC1*xx'), 'échec assertion #4' ;
+    
+    SET ROLE "z_asgard_REC1*" ;
+    ASSERT z_asgard.asgard_has_role_usage('z_asgard rec2'), 'échec assertion #5' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard REC3'), 'échec assertion #6' ;
+    ASSERT NOT z_asgard.asgard_has_role_usage('z_asgard rec2xx'), 'échec assertion #7' ;
+
+    RESET ROLE ;
+    DROP ROLE "z_asgard_REC1*" ;
+    DROP ROLE "z_asgard rec2" ;
+    DROP ROLE "z_asgard REC3" ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t078b() IS 'ASGARD recette. TEST : Contrôle de la fonction z_asgard.asgard_has_role_usage.' ;
+
+
+-- FUNCTION: z_asgard_recette.t079()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t079()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT 1') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE'
+        WHERE stylename = 'g_admin INSERT 1' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 1 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_consult INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_consult UPDATE'
+            WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    BEGIN
+        DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    RESET ROLE ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE 2'
+            WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t079() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 0).' ;
+
+
+-- FUNCTION: z_asgard_recette.t079b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t079b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT 1') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE'
+        WHERE stylename = 'g_admin INSERT 1' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 1 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_consult INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_consult UPDATE'
+            WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    BEGIN
+        DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    RESET ROLE ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE 2'
+            WHERE stylename = 'g_admin UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t079b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 0).' ;
+
+
+-- FUNCTION: z_asgard_recette.t080()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t080()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(1) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT', 'g_admin'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for edi', 'g_asgard_rec_edi') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi'
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_lec ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 1 FROM layer_styles) ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin UPDATE for edi' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE for edi' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #19
+    RAISE NOTICE '#19' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t080() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 1).' ;
+
+
+-- FUNCTION: z_asgard_recette.t080b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t080b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(1) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT', 'g_admin'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for edi', 'g_asgard REC edi*') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi'
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard_REC!LEC" ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 1 FROM layer_styles) ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin UPDATE for edi' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE for edi' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #19
+    RAISE NOTICE '#19' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t080b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 1).' ;
+
+
+
+
+-- FUNCTION: z_asgard_recette.t081()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t081()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(2) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT', 'g_admin'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for edi', 'g_asgard_rec_edi'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for lec', 'g_asgard_rec_lec') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_lec ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_bibliotheque', 'journal_du_mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard_rec_edi' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard_rec_edi' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t081() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 2).' ;
+
+
+-- FUNCTION: z_asgard_recette.t081b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t081b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(2) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT', 'g_admin'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for edi', 'g_asgard REC edi*'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for lec', 'g_asgard_REC!LEC') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard_REC!LEC" ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard REC edi*' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard REC edi*' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t081b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 2).' ;
+
+
+-- FUNCTION: z_asgard_recette.t082()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t082()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(3) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT', 'g_admin'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for edi', 'g_asgard_rec_edi'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for lec', 'g_asgard_rec_lec') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_lec ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, useasdefault) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT défaut', True) ;
+    ASSERT FOUND ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard_rec_edi' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard_rec_edi' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t082() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 3).' ;
+
+
+-- FUNCTION: z_asgard_recette.t082b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t082b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(3) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT', 'g_admin'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for edi', 'g_asgard REC edi*'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for lec', 'g_asgard_REC!LEC') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard_REC!LEC" ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, useasdefault) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT défaut', True) ;
+    ASSERT FOUND ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard REC edi*' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard REC edi*' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t082b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 3).' ;
+
+
+-- FUNCTION: z_asgard_recette.t083()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t083()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(4) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT', 'g_admin'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for edi', 'g_asgard_rec_edi'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for lec', 'g_asgard_rec_lec') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_lec ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT for g_admin', 'g_admin') ;
+    ASSERT FOUND ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, useasdefault) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT défaut', True) ;
+    ASSERT FOUND ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE owner = 'g_asgard_rec_lec' ;
+    ASSERT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard_rec_lec' ;
+    ASSERT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard_rec_edi' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t083() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 4).' ;
+
+
+-- FUNCTION: z_asgard_recette.t083b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t083b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(4) ;
+    
+    SET ROLE g_admin ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT', 'g_admin'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for edi', 'g_asgard REC edi*'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for lec', 'g_asgard_REC!LEC') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE for edi',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard_REC!LEC" ;
+    -- #4
+    RAISE NOTICE '#4' ;
+    ASSERT (SELECT count(*) = 2 FROM layer_styles) ;
+    -- #5
+    RAISE NOTICE '#5' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'lec INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #6
+    RAISE NOTICE '#6' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #7
+    RAISE NOTICE '#7' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT for g_admin', 'g_admin') ;
+    ASSERT FOUND ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, useasdefault) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT défaut', True) ;
+    ASSERT FOUND ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE owner = 'g_asgard_REC!LEC' ;
+    ASSERT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard_REC!LEC' ;
+    ASSERT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles WHERE owner = 'g_asgard REC edi*' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- #28
+    RAISE NOTICE '#28' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'g_admin UPDATE for edi 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t083b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 4).' ;
+
+
+-- FUNCTION: z_asgard_recette.t084()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t084()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod ;
+    CREATE ROLE g_asgard_rec_edi ;
+    CREATE ROLE g_asgard_rec_lec ;
+    GRANT g_consult TO g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    ALTER TABLE layer_styles OWNER TO g_admin ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard_rec_edi',
+            lecteur = 'g_asgard_rec_lec'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    SET ROLE g_admin ;
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(5) ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT', 'g_admin'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for edi', 'g_asgard_rec_edi'),
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT for lec', 'g_asgard_rec_lec') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET useasdefault = True,
+            stylename = replace(stylename, 'INSERT', 'UPDATE')
+        WHERE owner IN ('g_asgard_rec_edi', 'g_asgard_rec_lec') ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_bibliotheque', 'journal_du_mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard_rec_edi' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard_rec_edi' ;
+    ASSERT FOUND ;
+    
+    SET ROLE g_asgard_rec_lec ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'lec INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_bibliotheque', 'journal_du_mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'lec INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard_rec_lec' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard_rec_lec' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_prod ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_asgard_rec_edi ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_bibliotheque', 'journal_du_mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- NB : contrairement aux tests des autres variantes,
+    -- g_admin est ici le propriétaire de layer_styles et
+    -- n'est pas supposé perdre ses privilèges
+    -- #28
+    RAISE NOTICE '#28' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_bibliotheque', 'journal_du_mur', 'g_admin INSERT') ;
+    ASSERT FOUND ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE' ;
+    ASSERT FOUND ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    REVOKE g_consult FROM g_asgard_rec_prod, g_asgard_rec_edi, g_asgard_rec_lec ;
+    DROP ROLE g_asgard_rec_prod ;
+    DROP ROLE g_asgard_rec_edi ;
+    DROP ROLE g_asgard_rec_lec ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t084() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 5).' ;
+
+
+-- FUNCTION: z_asgard_recette.t084b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t084b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard REC prod" ;
+    CREATE ROLE "g_asgard REC edi*" ;
+    CREATE ROLE "g_asgard_REC!LEC" ;
+    GRANT g_consult TO "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+    ALTER TABLE layer_styles OWNER TO g_admin ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard REC prod" ;
+    CREATE TABLE "c_Bibliothèque"."Journal du Mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET editeur = 'g_asgard REC edi*',
+            lecteur = 'g_asgard_REC!LEC'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    SET ROLE g_admin ;
+    -- #0
+    RAISE NOTICE '#0' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(5) ;
+    -- #1
+    RAISE NOTICE '#1' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename, owner) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT', 'g_admin'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for edi', 'g_asgard REC edi*'),
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT for lec', 'g_asgard_REC!LEC') ;
+    ASSERT FOUND ;
+    -- #2
+    RAISE NOTICE '#2' ;
+    UPDATE layer_styles
+        SET useasdefault = True,
+            stylename = replace(stylename, 'INSERT', 'UPDATE')
+        WHERE owner IN ('g_asgard REC edi*', 'g_asgard_REC!LEC') ;
+    ASSERT FOUND ;
+    -- #3
+    RAISE NOTICE '#3' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #8
+    RAISE NOTICE '#8' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+    ASSERT FOUND ;
+    -- #9
+    RAISE NOTICE '#9' ;
+    UPDATE layer_styles
+        SET stylename = 'prod UPDATE'
+        WHERE stylename IN ('prod INSERT', 'g_admin UPDATE for edi') ;
+    ASSERT FOUND ;
+    -- #10
+    RAISE NOTICE '#10' ;
+    DELETE FROM layer_styles WHERE stylename = 'prod UPDATE' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'edi INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE stylename = 'g_admin INSERT for lec' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'edi UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard REC edi*' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard REC edi*' ;
+    ASSERT FOUND ;
+    
+    SET ROLE "g_asgard_REC!LEC" ;
+    -- #11
+    RAISE NOTICE '#11' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'lec INSERT') ;
+    ASSERT FOUND ;
+    -- #12
+    RAISE NOTICE '#12' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, owner) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'g_admin') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #13
+    RAISE NOTICE '#13' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, useasdefault) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', True) ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #14
+    RAISE NOTICE '#14' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'lec INSERT' ;
+    ASSERT FOUND ;
+    -- #15
+    RAISE NOTICE '#15' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE stylename = 'g_admin INSERT for edi' ;
+    ASSERT NOT FOUND ;
+    -- #16
+    RAISE NOTICE '#16' ;
+    UPDATE layer_styles
+        SET stylename = 'lec UPDATE'
+        WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #17
+    RAISE NOTICE '#17' ;
+    DELETE FROM layer_styles WHERE NOT owner = 'g_asgard_REC!LEC' ;
+    ASSERT NOT FOUND ;
+    -- #18
+    RAISE NOTICE '#18' ;
+    DELETE FROM layer_styles WHERE useasdefault ;
+    ASSERT NOT FOUND ;
+    -- #19
+    RAISE NOTICE '#19' ;
+    DELETE FROM layer_styles
+        WHERE NOT useasdefault AND owner = 'g_asgard_REC!LEC' ;
+    ASSERT FOUND ;
+    
+    RESET ROLE ;
+    -- #20
+    RAISE NOTICE '#20' ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #21
+    RAISE NOTICE '#21' ;
+    BEGIN
+        PERFORM count(*) FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC prod" ;
+    -- #22
+    RAISE NOTICE '#22' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'prod INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #23
+    RAISE NOTICE '#23' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'prod UPDATE 2'
+            WHERE stylename = 'prod UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#24' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE "g_asgard REC edi*" ;
+    -- #25
+    RAISE NOTICE '#25' ;
+    BEGIN
+        INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+            ('c_Bibliothèque', 'Journal du Mur', 'edi INSERT') ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #26
+    RAISE NOTICE '#26' ;
+    BEGIN
+        UPDATE layer_styles
+            SET stylename = 'edi UPDATE 2'
+            WHERE stylename = 'edi UPDATE' ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    -- #24
+    RAISE NOTICE '#27' ;
+    BEGIN
+        DELETE FROM layer_styles ;
+        ASSERT False ;
+    EXCEPTION WHEN insufficient_privilege THEN END ;
+    
+    SET ROLE g_admin ;
+    -- NB : contrairement aux tests des autres variantes,
+    -- g_admin est ici le propriétaire de layer_styles et
+    -- n'est pas supposé perdre ses privilèges
+    -- #28
+    RAISE NOTICE '#28' ;
+    INSERT INTO layer_styles (f_table_schema, f_table_name, stylename) VALUES
+        ('c_Bibliothèque', 'Journal du Mur', 'g_admin INSERT') ;
+    ASSERT FOUND ;
+    -- #29
+    RAISE NOTICE '#29' ;
+    UPDATE layer_styles
+        SET stylename = 'g_admin UPDATE',
+            useasdefault = True
+        WHERE stylename = 'g_admin INSERT' ;
+    ASSERT FOUND ;
+    -- #30
+    RAISE NOTICE '#30' ;
+    DELETE FROM layer_styles WHERE stylename = 'g_admin UPDATE' ;
+    ASSERT FOUND ;
+    
+    -- #31
+    RAISE NOTICE '#31' ;
+    ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
+                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+    
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    REVOKE g_consult FROM "g_asgard REC prod", "g_asgard REC edi*", "g_asgard_REC!LEC" ;
+    DROP ROLE "g_asgard REC prod" ;
+    DROP ROLE "g_asgard REC edi*" ;
+    DROP ROLE "g_asgard_REC!LEC" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t084b() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (variante 5).' ;
+
+
+-- FUNCTION: z_asgard_recette.t085()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t085()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   e_sqlstate text ;
+BEGIN
+
+    BEGIN
+        PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+        ASSERT False, 'échec assertion #1' ;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_sqlstate = RETURNED_SQLSTATE ;
+        ASSERT e_sqlstate = '42P01', format('échec assertion #2 (SQLSTATE = %L)', e_sqlstate) ;
+    END ;
+    
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+        
+    SET ROLE g_admin ;
+    BEGIN
+        PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+        ASSERT False, 'échec assertion #3' ;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_sqlstate = RETURNED_SQLSTATE ;
+        ASSERT e_sqlstate = '42501', format('échec assertion #4 (SQLSTATE = %L)', e_sqlstate) ;
+    END ;
+
+    RESET ROLE ;
+    DROP TABLE layer_styles ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t085() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (contrôles préalables).' ;
+
