@@ -15471,3 +15471,61 @@ $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t085() IS 'ASGARD recette. TEST : Attribution de permissions sur layer_styles (contrôles préalables).' ;
 
+
+-- FUNCTION: z_asgard_recette.t086()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t086()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   nom1 text[] ;
+   nom2 text[] ;
+BEGIN
+
+    ------ installation directe ------ 
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard ;
+    
+    PERFORM z_asgard_admin.asgard_import_nomenclature() ;
+    
+    SELECT
+        array_agg(ARRAY[nom_schema, niv1, niv1_abr, niv2, niv2_abr] ORDER BY nom_schema)
+        INTO nom1
+        FROM z_asgard.gestion_schema_usr ; 
+    
+    ------ avec montée de version ------
+    -- à partir de la 1.2.4 uniquement
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.4' ;
+    CREATE SCHEMA c_air_clim_qual_polu ;
+    ALTER EXTENSION asgard UPDATE ;
+    PERFORM z_asgard_admin.asgard_import_nomenclature() ;
+
+    SELECT
+        array_agg(ARRAY[nom_schema, niv1, niv1_abr, niv2, niv2_abr] ORDER BY nom_schema)
+        INTO nom2
+        FROM z_asgard.gestion_schema_usr ; 
+        
+    ASSERT nom1 = nom2 ;
+
+    DROP SCHEMA c_air_clim_qual_pollu ;
+    UPDATE z_asgard.gestion_schema_usr SET nomenclature = False ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t086() IS 'ASGARD recette. TEST : Vérification de l''identicité des nomenclatures obtenues par montée de version ou installation directe.' ;
