@@ -13129,7 +13129,7 @@ BEGIN
     -- #19
     RAISE NOTICE '#19' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -13309,7 +13309,7 @@ BEGIN
     -- #19
     RAISE NOTICE '#19' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -13566,7 +13566,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -13821,7 +13821,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -14073,7 +14073,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -14325,7 +14325,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -14575,7 +14575,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -14825,7 +14825,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -15108,7 +15108,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = 'c_bibliotheque.journal_du_mur'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -15391,7 +15391,7 @@ BEGIN
     -- #31
     RAISE NOTICE '#31' ;
     ASSERT (SELECT count(*) = 0 FROM pg_catalog.pg_policy
-                WHERE polrelid = '"c_Bibliothèque"."Journal du Mur"'::regclass) ;
+                WHERE polrelid = 'public.layer_styles'::regclass) ;
     
     RESET ROLE ;
     DROP TABLE layer_styles ;
@@ -15529,3 +15529,59 @@ END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t086() IS 'ASGARD recette. TEST : Vérification de l''identicité des nomenclatures obtenues par montée de version ou installation directe.' ;
+
+
+-- FUNCTION: z_asgard_recette.t087()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t087()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+    
+    CREATE TABLE layer_styles (
+        id serial PRIMARY KEY, f_table_schema varchar, f_table_name varchar,
+        stylename text, owner varchar DEFAULT current_user,
+        useasdefault boolean DEFAULT False
+        ) ;
+        
+    PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(1) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(1) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(2) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(2) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(3) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(3) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(4) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(4) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(5) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(5) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(99) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(5) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(4) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(3) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(2) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(1) ;
+    PERFORM z_asgard_admin.asgard_layer_styles(0) ;
+        
+    DROP TABLE layer_styles ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t087() IS 'ASGARD recette. TEST : (asgard_layer_styles) Enchaînements d''exécutions.' ;
