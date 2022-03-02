@@ -1746,47 +1746,59 @@ BEGIN
         SET editeur = 'g_admin_ext'
         WHERE nom_schema = 'c_bibliotheque' ;
     
+    -- #1
     SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_bibliotheque' ;
         
     r := b ;
+    RAISE NOTICE '17-1 > %', r::text ; 
     
+    -- #2
     SELECT relacl::text ~ ('g_admin_ext=[rwad]{4}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'journal_du_mur' ;
         
     r := r AND b ;
+    RAISE NOTICE '17-2 > %', r::text ; 
     
+    -- #3
     SELECT relacl::text ~ ('g_admin_ext=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'journal_du_mur_id_seq' ;
         
     r := r AND b ;
+    RAISE NOTICE '17-3 > %', r::text ; 
     
+    -- #4
     SELECT NOT nspacl::text ~ 'g_consult'
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_bibliotheque' ;
         
     r := r AND b ;
+    RAISE NOTICE '17-4 > %', r::text ; 
     
+    -- #5
     SELECT NOT relacl::text ~ 'g_consult'
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'journal_du_mur' ;
         
     r := r AND b ;
+    RAISE NOTICE '17-5 > %', r::text ; 
     
+    -- #6
     SELECT NOT relacl::text ~ 'g_consult'
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'journal_du_mur_id_seq' ;
         
     r := r AND b ;
+    RAISE NOTICE '17-6 > %', r::text ; 
     
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
@@ -11446,7 +11458,7 @@ BEGIN
     SELECT
         count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'INSERT', 'g_asgard_rec2'])) = 1
             AND count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'UPDATE', 'g_asgard_rec1'])) = 1
-            AND count(*) = 3
+            AND count(*) = 2
         INTO r
         FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque']) ;
         
@@ -11501,7 +11513,7 @@ BEGIN
     SELECT
         count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'INSERT', 'g_asgard.REC2'])) = 1
             AND count(*) FILTER (WHERE anomalie ~ ALL (ARRAY['GRANT.OPTION', 'UPDATE', 'g_asgard_REC1'])) = 1
-            AND count(*) = 3
+            AND count(*) = 2
         INTO r
         FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque']) ;
         
