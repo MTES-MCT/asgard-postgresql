@@ -1,9 +1,9 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.3.0
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.3.2
 -- > Script de recette.
 --
--- Copyright République Française, 2020-2021.
+-- Copyright République Française, 2020-2022.
 -- Secrétariat général du Ministère de la transition écologique, du
 -- Ministère de la cohésion des territoires et des relations avec les
 -- collectivités territoriales et du Ministère de la Mer.
@@ -15597,3 +15597,51 @@ END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t087() IS 'ASGARD recette. TEST : (asgard_layer_styles) Enchaînements d''exécutions.' ;
+
+
+-- FUNCTION: z_asgard_recette.t088()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t088()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   s text ;
+BEGIN
+
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges('arwdDxtXUCcT') ;
+    ASSERT s = 'CONNECT, CREATE, DELETE, EXECUTE, INSERT, REFERENCES, SELECT, TEMPORARY, TRIGGER, TRUNCATE, UPDATE, USAGE', 'échec assertion #1' ;
+
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges('') ;
+    ASSERT s is NULL, 'échec assertion #2' ;
+
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges(NULL) ;
+    ASSERT s is NULL, 'échec assertion #3' ;
+
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges('bBnN') ;
+    ASSERT s is NULL, 'échec assertion #4' ;
+    
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges('bBDXnN') ;
+    ASSERT s = 'EXECUTE, TRUNCATE', 'échec assertion #5' ;
+
+    SELECT string_agg(privilege, ', ' ORDER BY privilege) INTO s FROM z_asgard.asgard_expend_privileges('DXXXD') ;
+    ASSERT s = 'EXECUTE, TRUNCATE', 'échec assertion #6' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t088() IS 'ASGARD recette. TEST : (asgard_expend_privileges) Identification correcte de tous les codes de privilèges.' ;
+
+
