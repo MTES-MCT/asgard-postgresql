@@ -5,11 +5,11 @@ ASGARD. Système de gestion des droits pour PostgreSQL.
 
 ASGARD est une extension du SGBDRO PostgreSQL qui propose un cadre méthodologique et des outils pour faciliter la gestion des droits.
 
-Elle a été conçue et développée dans le cadre du groupe de travail PostGIS interministériel MAA-MTE-MCTRCT-Mer.
+Elle a été conçue et développée dans le cadre du groupe de travail PostGIS réunissant des services du pôle ministériel de la transition écologique, de la cohésion des territoires et de la mer, ainsi que du ministère de l'agriculture et de l'alimentation.
 
 ## Compatibilité
 
-PostgreSQL 9.5 ou supérieur.
+PostgreSQL 9.5 ou supérieur. Toutes les versions d'ASGARD sont testées sur les versions de PostgreSQL officiellement supportées au moment de leur déploiement, ainsi que la version 9.5. La version 1.3.2 d'ASGARD est par exemple la première dont la compatibilité avec PostgreSQL 14 a été évaluée.
 
 ## Installation et utilisation
 
@@ -23,10 +23,17 @@ Cf. [LICENCE.txt](https://github.com/MTES-MCT/asgard-postgresql/blob/master/LICE
 
 ## Crédits
 
-République Française, 2020-2021.
-Secrétariat général du Ministère de la transition écologique, du Ministère de la cohésion des territoires et des relations avec les collectivités territoriales et du Ministère de la Mer.
-Service du numérique.
+© République Française, 2020-2022.
 
-Contributeurs : Leslie Lemaire (SNUM/UNI/DRC) et Alain Ferraton (SNUM/MSP/DS/GSG).
+### Éditeur
 
-Mél : drc.uni.snum.sg@developpement-durable.gouv.fr
+Service du numérique du ministère de la transition écologique, du ministère de la cohésion des territoires et des relations avec les collectivités territoriales et du ministère de la mer.
+
+### Contributeurs
+
+Leslie Lemaire (SNUM/UNI/DRC) et Alain Ferraton (SNUM/MSP/DS/GSG).
+
+## Contact
+
+Via les [issues du dépôt GitHub](https://github.com/MTES-MCT/asgard-postgresql/issues) ou par mél à drc.uni.snum.sg@developpement-durable.gouv.fr.
+
