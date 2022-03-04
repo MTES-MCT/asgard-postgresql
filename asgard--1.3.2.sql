@@ -697,10 +697,9 @@ CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_schema() RETURNS even
 /* OBJET : Fonction exécutée par l'event trigger asgard_on_create_schema qui
            répercute dans la table z_asgard_admin.gestion_schema (via la vue
            z_asgard.gestion_schema_etr) les créations de schémas
-           réalisées par des commandes CREATE SCHEMA directes ou exécutées
-           dans le cadre de l'installation d'une extension.
+           réalisées par des commandes CREATE SCHEMA directes.
 DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('CREATE SCHEMA', 'CREATE EXTENSION') */
+CONDITION : WHEN TAG IN ('CREATE SCHEMA') */
 DECLARE
     obj record ;
     e_mssg text ;
@@ -777,16 +776,17 @@ $BODY$ ;
 ALTER FUNCTION z_asgard_admin.asgard_on_create_schema()
     OWNER TO g_admin ;
     
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes ou exécutées dans le cadre de l''installation d''une extension.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
 
 
 -- Event Trigger: asgard_on_create_schema
 
 CREATE EVENT TRIGGER asgard_on_create_schema ON DDL_COMMAND_END
-    WHEN TAG IN ('CREATE SCHEMA', 'CREATE EXTENSION')
+    WHEN TAG IN ('CREATE SCHEMA')
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_schema() ;
     
-COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes ou exécutées dans le cadre de l''installation d''une extension.' ;
+COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
+    
     
     
 
@@ -1322,7 +1322,7 @@ BEGIN
     ------ SEQUENCES ------
     -- privilèges attribués (hors propriétaire) :
     RETURN QUERY
-        SELECT format('GRANT %s ON TABLE %s TO %%I', privilege, oid::regclass)
+        SELECT format('GRANT %s ON SEQUENCE %s TO %%I', privilege, oid::regclass)
             FROM pg_catalog.pg_class,
                 aclexplode(relacl) AS acl (grantor, grantee, privilege, grantable)
             WHERE relnamespace = n_schema
@@ -1332,7 +1332,7 @@ BEGIN
                 AND NOT n_role = relowner ;
     -- privilèges révoqués du propriétaire :
     RETURN QUERY
-        SELECT format('REVOKE %s ON TABLE %s FROM %%I', expected_privilege, oid::regclass)
+        SELECT format('REVOKE %s ON SEQUENCE %s FROM %%I', expected_privilege, oid::regclass)
             FROM pg_catalog.pg_class,
                 unnest(ARRAY['SELECT', 'USAGE', 'UPDATE']) AS expected_privilege
             WHERE relnamespace = n_schema
@@ -4613,8 +4613,8 @@ BEGIN
             FROM unnest(
                 ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE',
                         'TRUNCATE', 'REFERENCES', 'TRIGGER', 'USAGE',
-                        'CREATE', 'EXECUTE'],
-                ARRAY['r', 'a', 'w', 'd', 'D', 'x', 't', 'U', 'C', 'X']
+                        'CREATE', 'EXECUTE', 'CONNECT', 'TEMPORARY'],
+                ARRAY['r', 'a', 'w', 'd', 'D', 'x', 't', 'U', 'C', 'X', 'c', 'T']
                 ) AS p (privilege, prvlg)
             WHERE privileges_codes ~ prvlg ;
 END
