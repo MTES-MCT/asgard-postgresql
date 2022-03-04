@@ -874,13 +874,15 @@ CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_objet() RETURNS event
            veille à attribuer aux nouveaux objets créés les droits prévus
            pour le schéma dans la table de gestion.
 AVERTISSEMENT : Les commandes CREATE OPERATOR CLASS, CREATE OPERATOR FAMILY
-et CREATE STATISTICS ne sont pas pris en charge pour l'heure.
+et CREATE STATISTICS ne sont pas prises en charge pour l'heure.
 DECLENCHEMENT : ON DDL COMMAND END.
 CONDITION : WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
 'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
 'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
 'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
-'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE') */
+'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE').
+À partir de PostgreSQL 11, 'CREATE PROCEDURE' déclenche également l'exécution
+de la présente fonction. */
 DECLARE
     obj record ;
     roles record ;
@@ -905,9 +907,9 @@ BEGIN
     
 
     FOR obj IN SELECT DISTINCT classid, objid, object_type, schema_name, object_identity
-                    FROM pg_event_trigger_ddl_commands()
-                    WHERE schema_name IS NOT NULL
-                    ORDER BY object_type DESC
+        FROM pg_event_trigger_ddl_commands()
+        WHERE schema_name IS NOT NULL
+        ORDER BY object_type DESC
     LOOP
 
         -- récupération des rôles de la table de gestion pour le schéma de l'objet
@@ -941,8 +943,8 @@ BEGIN
                 
                 -- récupération du propriétaire courant de l'objet
                 -- génère une erreur si la requête ne renvoie rien
-                EXECUTE 'SELECT ' || xowner || '::regrole::text FROM ' ||
-                    obj.classid::regclass::text || ' WHERE oid = ' || obj.objid::text
+                EXECUTE format('SELECT %s::regrole::text FROM %s WHERE oid = %s',
+                        xowner, obj.classid::regclass, obj.objid)
                     INTO STRICT proprietaire ;
                        
                 -- si le propriétaire courant n'est pas le producteur
@@ -950,9 +952,9 @@ BEGIN
                 THEN
                 
                     ------ PROPRIETAIRE DE L'OBJET (DROITS DU PRODUCTEUR) ------
-                    RAISE NOTICE 'réattribution de la propriété de % au rôle producteur du schéma :', replace(obj.object_identity, '"', '') ;
-                    l := 'ALTER ' || obj.object_type || ' ' || obj.object_identity ||
-                            ' OWNER TO '  || quote_ident(roles.producteur) ;
+                    RAISE NOTICE 'réattribution de la propriété de % au rôle producteur du schéma :', obj.object_identity ;
+                    l := format('ALTER %s %s OWNER TO %I', obj.object_type,
+                        obj.object_identity, roles.producteur) ;
                     EXECUTE l ;
                     RAISE NOTICE '> %', l ;
                 END IF ;
@@ -964,8 +966,8 @@ BEGIN
                     IF obj.object_type IN ('table', 'view', 'materialized view', 'foreign table')
                     THEN
                         RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-                        l := 'GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE ' || obj.object_identity ||
-                                ' TO ' || quote_ident(roles.editeur) ;
+                        l := format('GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE %s TO %I',
+                            obj.object_identity, roles.editeur) ;
                         EXECUTE l ;
                         RAISE NOTICE '> %', l ;
                         
@@ -973,8 +975,8 @@ BEGIN
                     ELSIF obj.object_type IN ('sequence')
                     THEN
                         RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-                        l := 'GRANT SELECT, USAGE ON SEQUENCE ' || obj.object_identity ||
-                                ' TO ' || quote_ident(roles.editeur) ;
+                        l := format('GRANT SELECT, USAGE ON SEQUENCE %s TO %I',
+                            obj.object_identity, roles.editeur) ;
                         EXECUTE l ;
                         RAISE NOTICE '> %', l ;
                     END IF ;
@@ -987,8 +989,8 @@ BEGIN
                     IF obj.object_type IN ('table', 'view', 'materialized view', 'foreign table')
                     THEN
                         RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-                        l := 'GRANT SELECT ON TABLE ' || obj.object_identity ||
-                                ' TO ' || quote_ident(roles.lecteur) ;
+                        l := format('GRANT SELECT ON TABLE %s TO %I',
+                            obj.object_identity, roles.lecteur) ;
                         EXECUTE l ;
                         RAISE NOTICE '> %', l ;
                         
@@ -996,8 +998,8 @@ BEGIN
                     ELSIF obj.object_type IN ('sequence')
                     THEN
                         RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-                        l := 'GRANT SELECT ON SEQUENCE ' || obj.object_identity ||
-                                ' TO ' || quote_ident(roles.lecteur) ;
+                        l := format('GRANT SELECT ON SEQUENCE %s TO %I',
+                            obj.object_identity, roles.lecteur) ;
                         EXECUTE l ;
                         RAISE NOTICE '> %', l ;    
                     END IF ;
@@ -1046,22 +1048,27 @@ BEGIN
                         -- dans sa table de gestion
                         THEN
                             RAISE WARNING 'Le producteur du schéma de la vue % ne dispose pas des droits nécessaires pour accéder à ses données sources.',
-                                    CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END || obj.object_identity
-                                USING DETAIL = src.liblg || ' source ' || src.nom_schema || '.' || src.relname::text || ', producteur ' || src.oid_producteur::regrole::text ||
-                                    ', éditeur ' || coalesce(src.oid_editeur::regrole::text, 'non défini') || ', lecteur ' || coalesce(src.oid_lecteur::regrole::text, 'non défini') || '.',
-                                HINT =
-                                    CASE WHEN src.oid_lecteur IS NULL
-                                        THEN 'Pour faire du producteur de la vue ' || CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END
-                                            || 'le lecteur du schéma source, vous pouvez lancer la commande suivante : UPDATE z_asgard.gestion_schema_usr SET lecteur = '
-                                            || quote_literal(roles.producteur) || ' WHERE nom_schema = ' || quote_literal(src.nom_schema) || '.'
-                                        ELSE 'Pour rendre le producteur de la vue ' || CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END
-                                            || 'membre du rôle lecteur du schéma source, vous pouvez lancer la commande suivante : GRANT ' || src.oid_lecteur::regrole::text
-                                            || ' TO ' || quote_ident(roles.producteur) || '.' END ;
+                                format('%s %s', CASE WHEN obj.object_type = 'materialized view'
+                                    THEN 'matérialisée ' ELSE '' END, obj.object_identity)
+                                USING DETAIL = format('%s source %I.%I, producteur %s, éditeur %s, lecteur %s.',
+                                    src.liblg, src.nom_schema, src.relname, src.oid_producteur::regrole,
+                                    coalesce(src.oid_editeur::regrole::text, 'non défini'),
+                                    coalesce(src.oid_lecteur::regrole::text, 'non défini')
+                                    ),
+                                    HINT = CASE WHEN src.oid_lecteur IS NULL
+                                        THEN format('Pour faire du producteur de la vue %s le lecteur du schéma source, vous pouvez lancer la commande suivante : UPDATE z_asgard.gestion_schema_usr SET lecteur = %L WHERE nom_schema = %L.',
+                                            CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END,
+                                            roles.producteur, src.nom_schema)
+                                        ELSE format('Pour faire du producteur de la vue %s le lecteur du schéma source, vous pouvez lancer la commande suivante : GRANT %s TO %I.',
+                                            CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END,
+                                            src.oid_lecteur::regrole, roles.producteur)
+                                        END ;
                         ELSE
                             RAISE WARNING'Le producteur du schéma de la vue % ne dispose pas des droits nécessaires pour accéder à ses données sources.',
-                                    CASE WHEN obj.object_type = 'materialized view' THEN 'matérialisée ' ELSE '' END || obj.object_identity
-                                USING DETAIL = src.liblg || ' source ' || src.relnamespace::regnamespace::text || '.' || src.relname::text
-                                        || ', propriétaire ' || src.relowner::regrole::text  || '.' ;
+                                format('%s %s', CASE WHEN obj.object_type = 'materialized view'
+                                    THEN 'matérialisée ' ELSE '' END, obj.object_identity)
+                                USING DETAIL =  format('%s source %s.%I, propriétaire %s.', src.liblg,
+                                    src.relnamespace::regnamespace, src.relname, src.relowner::regrole) ;
                         END IF ;
                     END LOOP ;            
                 END IF ;
@@ -1089,14 +1096,29 @@ COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_objet() IS 'ASGARD. Fonction
 
 
 -- Event Trigger: asgard_on_create_objet
-
-CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
-    WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
-'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
-'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
-'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
-'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE')
-    EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet();
+DO
+$$
+BEGIN
+    IF current_setting('server_version_num')::int < 110000
+    THEN 
+        CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
+                'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
+                'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
+                'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
+                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet();
+    ELSE
+        CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
+                'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
+                'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
+                'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
+                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE', 'CREATE PROCEDURE')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet();
+    END IF ;
+END
+$$ ;
 
 COMMENT ON EVENT TRIGGER asgard_on_create_objet IS 'ASGARD. Event trigger qui applique les droits pré-définis sur les nouveaux objets.' ;
 
@@ -1125,7 +1147,9 @@ CONDITION : WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
 'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE') */
+'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE').
+À partir de PostgreSQL 11, 'ALTER PROCEDURE' et 'ALTER ROUTINE' déclenchent
+également l'exécution de la présente fonction. */
 DECLARE
     obj record ;
     n_producteur regrole ;
@@ -1175,8 +1199,8 @@ BEGIN
             THEN             
                 -- récupération du propriétaire courant de l'objet
                 -- génère une erreur si la requête ne renvoie rien
-                EXECUTE 'SELECT ' || xowner || '::regrole FROM ' ||
-                    obj.classid::regclass::text || ' WHERE oid = ' || obj.objid::text
+                EXECUTE format('SELECT %s::regrole::text FROM %s WHERE oid = %s', xowner,
+                    obj.classid::regclass, obj.objid)
                     INTO STRICT a_producteur ;
                        
                 -- si les deux rôles sont différents
@@ -1185,9 +1209,9 @@ BEGIN
                     ------ MODIFICATION DU PROPRIETAIRE ------
                     -- l'objet est attribué au propriétaire désigné pour le schéma
                     -- (n_producteur)
-                    RAISE NOTICE 'attribution de la propriété de % au rôle producteur du schéma :', replace(obj.object_identity, '"', '') ;
-                    l := 'ALTER ' || obj.object_type || ' ' || obj.object_identity ||
-                        ' OWNER TO '  || n_producteur::text ;  
+                    RAISE NOTICE 'attribution de la propriété de % au rôle producteur du schéma :', obj.object_identity ;
+                    l := format('ALTER %s %s OWNER TO %s', obj.object_type,
+                        obj.object_identity, n_producteur) ; 
                     EXECUTE l ;
                     RAISE NOTICE '> %', l ;    
                 END IF ;
@@ -1215,16 +1239,32 @@ COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_objet() IS 'ASGARD. Fonction 
 
 -- Event Trigger: asgard_on_alter_objet
 
-CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
-    WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
-'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
-'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
-'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE')
-    EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet();
+DO
+$$
+BEGIN
+    IF current_setting('server_version_num')::int < 110000
+    THEN
+        CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
+                'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
+                'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
+                'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet();
+    ELSE
+        CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
+                'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
+                'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
+                'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER PROCEDURE',
+                'ALTER ROUTINE')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet();
+    END IF ;
+END
+$$ ;
 
 COMMENT ON EVENT TRIGGER asgard_on_alter_objet IS 'ASGARD. Event trigger qui assure que le producteur d''un schéma reste propriétaire de tous les objets qu''il contient.' ;
-
 
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1354,11 +1394,16 @@ BEGIN
             WHERE relnamespace = n_schema
                 AND attacl IS NOT NULL
                 AND n_role = grantee ;
-    ------ FONCTIONS ------
-    -- inclut les fonctions d'agrégation
+    ------ ROUTINES ------
+    -- ... sous la dénomination FUNCTION jusqu'à PG 10, puis en
+    -- tant que ROUTINE à partir de PG 11, afin que les commandes
+    -- fonctionnent également avec les procédures.
     -- privilèges attribués (hors propriétaire) :
     RETURN QUERY
-        SELECT format('GRANT %s ON FUNCTION %s TO %%I', privilege, oid::regprocedure)
+        SELECT format('GRANT %s ON %s %s TO %%I', privilege, 
+                CASE WHEN current_setting('server_version_num')::int < 110000
+                    THEN 'FUNCTION' ELSE 'ROUTINE' END,
+                oid::regprocedure)
             FROM pg_catalog.pg_proc,
                 aclexplode(proacl) AS acl (grantor, grantee, privilege, grantable)
             WHERE pronamespace = n_schema
@@ -1367,7 +1412,10 @@ BEGIN
                 AND NOT n_role = proowner ;
     -- privilèges révoqués du propriétaire :
     RETURN QUERY
-        SELECT format('REVOKE %s ON FUNCTION %s FROM %%I', expected_privilege, oid::regprocedure)
+        SELECT format('REVOKE %s ON %s %s FROM %%I', expected_privilege, 
+                CASE WHEN current_setting('server_version_num')::int < 110000
+                    THEN 'FUNCTION' ELSE 'ROUTINE' END,
+                oid::regprocedure)
             FROM pg_catalog.pg_proc,
                 unnest(ARRAY['EXECUTE']) AS expected_privilege
             WHERE pronamespace = n_schema
@@ -1497,7 +1545,8 @@ ARGUMENTS :
 - "obj_oid" est l'identifiant interne de l'objet ;
 - "obj_type" est le type de l'objet au format text ('table',
 'view', 'materialized view', 'sequence', 'function', 'type',
-'domain', 'foreign table', 'partitioned table', 'aggregate') ;
+'domain', 'foreign table', 'partitioned table', 'aggregate',
+'procedure', 'routine') ;
 - "n_role" est un nom de rôle valide, casté en regrole.
 SORTIE : Une table avec un unique champ nommé "commande". */
 BEGIN       
@@ -1562,12 +1611,17 @@ BEGIN
                         )
                     AND n_role = relowner ;
     ------ FONCTIONS ------
-    -- inclut les fonctions d'agrégation
-    ELSIF obj_type IN ('function', 'aggregate')
+    -- ... sous la dénomination FUNCTION jusqu'à PG 10, puis en
+    -- tant que ROUTINE à partir de PG 11, afin que les commandes
+    -- fonctionnent également avec les procédures.
+    ELSIF obj_type IN ('function', 'aggregate', 'procedure', 'routine')
     THEN
         -- privilèges attribués (si n_role n'est pas le propriétaire de l'objet) :
         RETURN QUERY
-            SELECT format('GRANT %s ON FUNCTION %s TO %%I', privilege, oid::regprocedure)
+            SELECT format('GRANT %s ON %s %s TO %%I', privilege, 
+                    CASE WHEN current_setting('server_version_num')::int < 110000
+                        THEN 'FUNCTION' ELSE 'ROUTINE' END,
+                    oid::regprocedure)
                 FROM pg_catalog.pg_proc,
                     aclexplode(proacl) AS acl (grantor, grantee, privilege, grantable)
                 WHERE oid = obj_oid
@@ -1576,7 +1630,10 @@ BEGIN
                     AND NOT n_role = proowner ;
         -- privilèges révoqués du propriétaire (si n_role est le propriétaire de l'objet) :
         RETURN QUERY
-            SELECT format('REVOKE %s ON FUNCTION %s FROM %%I', expected_privilege, oid::regprocedure)
+            SELECT format('REVOKE %s ON %s %s FROM %%I', expected_privilege,
+                    CASE WHEN current_setting('server_version_num')::int < 110000
+                        THEN 'FUNCTION' ELSE 'ROUTINE' END,
+                    oid::regprocedure)
                 FROM pg_catalog.pg_proc,
                     unnest(ARRAY['EXECUTE']) AS expected_privilege
                 WHERE oid = obj_oid
@@ -1742,7 +1799,7 @@ BEGIN
     IF NOT pg_has_role(s_owner::regrole::oid, 'USAGE')
     THEN
         RAISE EXCEPTION 'FAP5. Vous n''êtes pas habilité à modifier le propriétaire du schéma %.', n_schema
-                USING DETAIL = 'Propriétaire courant : ' || s_owner || '.' ;  
+                USING DETAIL = format('Propriétaire courant : %s.', s_owner) ;  
     END IF ;
     
     -- le propriétaire désigné n'existe pas
@@ -1763,15 +1820,15 @@ BEGIN
             AND NOT quote_ident(n_owner) = s_owner
     THEN
         RAISE EXCEPTION 'FAP3. Le rôle % n''est pas propriétaire du schéma.', n_owner
-            USING HINT = 'Lancez asgard_admin_proprietaire(' || quote_literal(n_schema)
-                         || ', ' || quote_literal(n_owner) || ') pour changer également le propriétaire du schéma.' ;
+            USING HINT = format('Lancez asgard_admin_proprietaire(%L, %L) pour changer également le propriétaire du schéma.',
+                n_schema, n_owner) ;
     END IF ;
     
     ------ PROPRIÉTAIRE DU SCHEMA ------
     IF b_setschema
     THEN
-        EXECUTE 'ALTER SCHEMA ' || quote_ident(n_schema) || ' OWNER TO ' || quote_ident(n_owner) ;
-        RAISE NOTICE '> %', 'ALTER SCHEMA ' || quote_ident(n_schema) || ' OWNER TO ' || quote_ident(n_owner) ;
+        EXECUTE format('ALTER SCHEMA %I OWNER TO %I', n_schema, n_owner) ;
+        RAISE NOTICE '> %', format('ALTER SCHEMA %I OWNER TO %I', n_schema, n_owner) ;
         k := k + 1 ;
     END IF ;
     
@@ -1784,11 +1841,10 @@ BEGIN
         SELECT
             relname::text AS n_objet,
             relowner AS obj_owner,
-            relkind IN ('r', 'f', 'p', 'm') AS b, -- servira à assurer que les tables
-                                                  -- soient listées avant les objets qui
-                                                  -- en dépendent
-            'ALTER ' || kind_lg || ' ' || pg_class.oid::regclass || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            relkind IN ('r', 'f', 'p', 'm') AS b,
+            -- b servira à assurer que les tables soient listées avant les
+            -- objets qui en dépendent
+            format('ALTER %s %s OWNER TO %I', kind_lg, pg_class.oid::regclass, n_owner) AS commande
             FROM pg_catalog.pg_class,
                 unnest(ARRAY['r', 'p', 'v', 'm', 'f', 'S'],
                        ARRAY['TABLE', 'TABLE', 'VIEW', 'MATERIALIZED VIEW', 'FOREIGN TABLE', 'SEQUENCE']) AS l (kind_crt, kind_lg)
@@ -1797,29 +1853,35 @@ BEGIN
                 AND kind_crt = relkind
                 AND NOT relowner = o_owner
         UNION
-        -- fonctions et agrégats :
+        -- fonctions et procédures :
+        -- ... sous la dénomination FUNCTION jusqu'à PG 10, puis en
+        -- tant que ROUTINE à partir de PG 11, afin que les commandes
+        -- fonctionnent également avec les procédures.
         SELECT
             proname::text AS n_objet,
             proowner AS obj_owner,
             False AS b,
-            'ALTER FUNCTION ' || pg_proc.oid::regprocedure || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER %s %s OWNER TO %I',
+                CASE WHEN current_setting('server_version_num')::int < 110000
+                    THEN 'FUNCTION' ELSE 'ROUTINE' END,
+                pg_proc.oid::regprocedure, n_owner) AS commande
             FROM pg_catalog.pg_proc
             WHERE pronamespace = quote_ident(n_schema)::regnamespace
                 AND NOT proowner = o_owner
             -- à noter que les agrégats (proisagg vaut True) ont
             -- leur propre commande ALTER AGGREGATE OWNER TO, mais
-            -- ALTER FUNCTION OWNER TO fonctionne également, on ne
-            -- fait donc pas de distinction pour l'heure
+            -- ALTER FUNCTION OWNER TO fonctionne pour tous les types
+            -- de fonctions dont les agrégats, et - pour PG 11+ - 
+            -- ALTER ROUTINE OWNER TO fonctionne pour tous les types
+            -- de fonctions et les procédures.
         UNION
         -- types et domaines :
         SELECT
             typname::text AS n_objet,
             typowner AS obj_owner,
             False AS b,
-            'ALTER ' || kind_lg || ' ' || typnamespace::regnamespace::text || '.'
-                || quote_ident(typname) || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER %s %s.%I OWNER TO %I', kind_lg, typnamespace::regnamespace,
+                typname, n_owner) AS commande
             FROM unnest(ARRAY['true', 'false'],
                        ARRAY['DOMAIN', 'TYPE']) AS l (kind_crt, kind_lg),
                 pg_catalog.pg_type
@@ -1838,9 +1900,8 @@ BEGIN
             conname::text AS n_objet,
             conowner AS obj_owner,
             False AS b,
-            'ALTER CONVERSION ' || connamespace::regnamespace::text || '.'
-                || quote_ident(conname) || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER CONVERSION %s.%I OWNER TO %I', connamespace::regnamespace,
+                conname, n_owner) AS commande
             FROM pg_catalog.pg_conversion
             WHERE connamespace = quote_ident(n_schema)::regnamespace
                 AND NOT conowner = o_owner
@@ -1850,8 +1911,8 @@ BEGIN
             oprname::text AS n_objet,
             oprowner AS obj_owner,
             False AS b,
-            'ALTER OPERATOR ' || pg_operator.oid::regoperator || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER OPERATOR %s OWNER TO %I', pg_operator.oid::regoperator,
+                n_owner) AS commande
             FROM pg_catalog.pg_operator
             WHERE oprnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT oprowner = o_owner
@@ -1861,9 +1922,8 @@ BEGIN
             collname::text AS n_objet,
             collowner AS obj_owner,
             False AS b,
-            'ALTER COLLATION ' || collnamespace::regnamespace::text || '.'
-                || quote_ident(collname) || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER COLLATION %s.%I OWNER TO %I', collnamespace::regnamespace,
+                collname, n_owner) AS commande
             FROM pg_catalog.pg_collation
             WHERE collnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT collowner = o_owner
@@ -1873,8 +1933,8 @@ BEGIN
             dictname::text AS n_objet,
             dictowner AS obj_owner,
             False AS b,
-            'ALTER TEXT SEARCH DICTIONARY ' || pg_ts_dict.oid::regdictionary || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER TEXT SEARCH DICTIONARY %s OWNER TO %I', pg_ts_dict.oid::regdictionary,
+                n_owner) AS commande
             FROM pg_catalog.pg_ts_dict
             WHERE dictnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT dictowner = o_owner
@@ -1884,8 +1944,8 @@ BEGIN
             cfgname::text AS n_objet,
             cfgowner AS obj_owner,
             False AS b,
-            'ALTER TEXT SEARCH CONFIGURATION ' || pg_ts_config.oid::regconfig || ' OWNER TO '
-                || quote_ident(n_owner) AS commande
+            format('ALTER TEXT SEARCH CONFIGURATION %s OWNER TO %I', pg_ts_config.oid::regconfig,
+                n_owner) AS commande
             FROM pg_catalog.pg_ts_config
             WHERE cfgnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT cfgowner = o_owner
@@ -1909,9 +1969,7 @@ $_$ ;
 ALTER FUNCTION z_asgard.asgard_admin_proprietaire(text, text, boolean)
     OWNER TO g_admin_ext ;
 
-
 COMMENT ON FUNCTION z_asgard.asgard_admin_proprietaire(text, text, boolean) IS 'ASGARD. Fonction qui modifie le propriétaire d''un schéma et de tous les objets qu''il contient.' ;
-
 
 
 ------ 4.4 - TRANSFORMATION GRANT EN REVOKE ------
@@ -2417,7 +2475,12 @@ BEGIN
             defaclrole
             FROM pg_default_acl,
                 aclexplode(defaclacl) AS acl (grantor, grantee, privilege, grantable),
-                unnest(ARRAY['TABLES', 'SEQUENCES', 'FUNCTIONS', 'TYPES', 'SCHEMAS'],
+                unnest(ARRAY['TABLES', 'SEQUENCES',
+                        CASE WHEN current_setting('server_version_num')::int < 110000
+                            THEN 'FUNCTIONS' ELSE 'ROUTINES' END,
+                        -- à ce stade FUNCTIONS et ROUTINES sont équivalents, mais
+                        -- ROUTINES est préconisé
+                        'TYPES', 'SCHEMAS'],
                     ARRAY['r', 'S', 'f', 'T', 'n']) AS t (typ_lg, typ_crt)
             WHERE defaclnamespace = quote_ident(n_schema)::regnamespace
                 AND defaclobjtype = typ_crt
@@ -2481,7 +2544,8 @@ texte et sans guillemets ;
 les fonctions !) sans guillemets ;
 - "obj_typ" est le type de l'objet au format text ('table',
 'partitioned table' (assimilé à 'table'), 'view', 'materialized view',
-'foreign table', 'sequence', 'function', 'aggregate', 'type', 'domain').
+'foreign table', 'sequence', 'function', 'aggregate', 'procedure',
+'routine', 'type', 'domain').
 SORTIE : '__ REINITIALISATION REUSSIE.' si la requête s'est exécutée
 normalement. */
 DECLARE
@@ -2498,6 +2562,18 @@ BEGIN
     IF obj_typ = 'partitioned table'
     THEN
         obj_typ := 'table' ;
+    ELSIF obj_typ = ANY (ARRAY['routine', 'procedure', 'function', 'aggregate'])
+    THEN
+        -- à partir de PG 11, les fonctions et procédures sont des routines
+        IF current_setting('server_version_num')::int >= 110000
+        THEN
+            obj_typ := 'routine' ;
+        -- pour les versions antérieures, les routines et procédures n'existent
+        -- théoriquement pas, mais on considère que ces mots-clés désignent
+        -- des fonctions
+        ELSE
+            obj_typ := 'function' ;
+        END IF ;
     END IF ;
 
     ------ TESTS PREALABLES ------
@@ -2516,12 +2592,14 @@ BEGIN
     
     -- type invalide + récupération des informations sur le catalogue contenant l'objet
     SELECT
-        xtyp, xclass, xreg, xprefix || 'name' AS xname, xprefix || 'owner' AS xowner,
-        xprefix || 'namespace' AS xschema
+        xtyp, xclass, xreg,
+        format('%sname', xprefix) AS xname,
+        format('%sowner', xprefix) AS xowner,
+        format('%snamespace', xprefix) AS xschema
         INTO class_info
         FROM unnest(
                 ARRAY['table', 'foreign table', 'view', 'materialized view',
-                    'sequence', 'type', 'domain', 'function', 'aggregate'],
+                    'sequence', 'type', 'domain', 'function', 'routine'],
                 ARRAY['pg_class', 'pg_class', 'pg_class', 'pg_class',
                     'pg_class', 'pg_type', 'pg_type', 'pg_proc', 'pg_proc'],
                 ARRAY['rel', 'rel', 'rel', 'rel', 'rel', 'typ', 'typ',
@@ -2534,7 +2612,7 @@ BEGIN
     IF NOT FOUND
     THEN
         RAISE EXCEPTION 'FIO3. Echec. Le type % n''existe pas ou n''est pas pris en charge.', obj_typ
-            USING HINT = 'Types acceptés : ''table'', ''partitioned table'' (assimilé à ''table''), ''view'', ''materialized view'', ''foreign table'', ''sequence'', ''function'', ''aggregate'', ''type'', ''domain''.' ;
+            USING HINT = 'Types acceptés : ''table'', ''partitioned table'', ''view'', ''materialized view'', ''foreign table'', ''sequence'', ''function'', ''aggregate'', ''routine'', ''procedure'', ''type'', ''domain''.' ;
     END IF ;
         
     -- objet inexistant + récupération du propriétaire
@@ -2574,7 +2652,7 @@ BEGIN
     IF NOT pg_has_role(roles.producteur, 'USAGE')
     THEN
         RAISE EXCEPTION 'FIO5. Echec. Vous ne disposez pas des permissions nécessaires sur le schéma % pour réaliser cette opération.', obj_schema
-            USING HINT = 'Il vous faut être membre du rôle producteur ' || roles.producteur || '.' ;
+            USING HINT = format('Il vous faut être membre du rôle producteur %s.', roles.producteur) ;
     END IF ;
     
     ------ REMISE A PLAT DU PROPRIETAIRE ------
@@ -2584,12 +2662,11 @@ BEGIN
         IF NOT pg_has_role(obj.prop::regrole::oid, 'USAGE')
         THEN
             RAISE EXCEPTION 'FIO6. Echec. Vous ne disposez pas des permissions nécessaires sur l''objet % pour réaliser cette opération.', obj_nom
-                USING HINT = 'Il vous faut être membre du rôle propriétaire de l''objet (' || obj.prop || ').' ;
+                USING HINT = format('Il vous faut être membre du rôle propriétaire de l''objet (%s).', obj.prop) ;
         END IF ;
         
         RAISE NOTICE 'réattribution de la propriété de % au rôle producteur du schéma :', obj_nom ;
-        l := 'ALTER ' || obj_typ || ' ' || obj.appel ||
-                ' OWNER TO '  || quote_ident(roles.producteur) ;
+        l := format('ALTER %s %s OWNER TO %I', obj_typ, obj.appel, roles.producteur) ;
         EXECUTE l ;
         RAISE NOTICE '> %', l ;
     END IF ;    
@@ -2641,18 +2718,16 @@ BEGIN
         IF obj_typ IN ('table', 'view', 'materialized view', 'foreign table')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-            l := 'GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE '
-                    || quote_ident(obj_schema) || '.' || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles.editeur) ;
+            l := format('GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE %I.%I TO %I',
+                obj_schema, obj_nom, roles.editeur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         -- sur les séquences :
         ELSIF obj_typ IN ('sequence')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-            l := 'GRANT SELECT, USAGE ON SEQUENCE '
-                    || quote_ident(obj_schema) || '.' || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles.editeur) ;
+            l := format('GRANT SELECT, USAGE ON SEQUENCE %I.%I TO %I',
+                obj_schema, obj_nom, roles.editeur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         END IF ;        
@@ -2665,18 +2740,16 @@ BEGIN
         IF obj_typ IN ('table', 'view', 'materialized view', 'foreign table')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-            l := 'GRANT SELECT ON TABLE ' || quote_ident(obj_schema) || '.'
-                    || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles.lecteur) ;
+            l := format('GRANT SELECT ON TABLE %I.%I TO %I',
+                obj_schema, obj_nom, roles.lecteur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         -- sur les séquences :
         ELSIF obj_typ IN ('sequence')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-            l := 'GRANT SELECT ON SEQUENCE ' || quote_ident(obj_schema) || '.'
-                    || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles.lecteur) ;
+            l := format('GRANT SELECT ON SEQUENCE %I.%I TO %I',
+                obj_schema, obj_nom, roles.lecteur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         END IF ;
@@ -2717,9 +2790,10 @@ ARGUMENTS :
 texte et sans guillemets ;
 - "obj_nom" est le nom de l'objet, au format texte et sans
 guillemets ;
-- "obj_typ" est le type de l'objet au format text ('table',
+- "obj_typ" est le type de l'objet au format text, parmi 'table',
 'partitioned table' (assimilé à 'table'), 'view', 'materialized view',
-'foreign table', 'sequence', 'function', 'aggregate', 'type', 'domain') ;
+'foreign table', 'sequence', 'function', 'aggregate', 'procedure',
+'routine', 'type' et 'domain' ;
 - "schema_cible" est le nom du schéma où doit être déplacé l'objet,
 au format texte et sans guillemets ;
 - "variante" [optionnel] est un entier qui définit le comportement
@@ -2771,12 +2845,27 @@ DECLARE
     a text[] ;
     s record ;
     o oid ;
+    supported boolean ;
 BEGIN
+
+    obj_typ := lower(obj_typ) ;
 
     -- pour la suite, on assimile les partitions à des tables
     IF obj_typ = 'partitioned table'
     THEN
         obj_typ := 'table' ;
+    ELSIF obj_typ = ANY (ARRAY['routine', 'procedure', 'function', 'aggregate'])
+    THEN
+        -- à partir de PG 11, les fonctions et procédures sont des routines
+        IF current_setting('server_version_num')::int >= 110000
+        THEN
+            obj_typ := 'routine' ;
+        -- pour les versions antérieures, les routines et procédures n'existent
+        -- théoriquement pas, mais on considère que ces mots-clés désignent
+        -- des fonctions
+        ELSE
+            obj_typ := 'function' ;
+        END IF ;
     END IF ;
 
     ------ TESTS PREALABLES ------
@@ -2801,12 +2890,14 @@ BEGIN
     
     -- type invalide + récupération des informations sur le catalogue contenant l'objet
     SELECT
-        xtyp, xclass, xreg, xprefix || 'name' AS xname, xprefix || 'owner' AS xowner,
-        xprefix || 'namespace' AS xschema
+        xtyp, xclass, xreg,
+        format('%sname', xprefix) AS xname,
+        format('%sowner', xprefix) AS xowner,
+        format('%snamespace', xprefix) AS xschema
         INTO class_info
         FROM unnest(
                 ARRAY['table', 'foreign table', 'view', 'materialized view',
-                    'sequence', 'type', 'domain', 'function', 'aggregate'],
+                    'sequence', 'type', 'domain', 'function', 'routine'],
                 ARRAY['pg_class', 'pg_class', 'pg_class', 'pg_class',
                     'pg_class', 'pg_type', 'pg_type', 'pg_proc', 'pg_proc'],
                 ARRAY['rel', 'rel', 'rel', 'rel', 'rel', 'typ', 'typ',
@@ -2819,7 +2910,7 @@ BEGIN
     IF NOT FOUND
     THEN
         RAISE EXCEPTION 'FDO4. Echec. Le type % n''existe pas ou n''est pas pris en charge.', obj_typ
-            USING HINT = 'Types acceptés : ''table'', ''partitioned table'' (assimilé à ''table''), ''view'', ''materialized view'', ''foreign table'', ''sequence'', ''function'', ''aggregate'', ''type'', ''domain''.' ;
+            USING HINT = 'Types acceptés : ''table'', ''partitioned table'', ''view'', ''materialized view'', ''foreign table'', ''sequence'', ''function'', ''aggregate'', ''procedure'', ''routine'', ''type'', ''domain''.' ;
     END IF ;
         
     -- objet inexistant + récupération du propriétaire
@@ -2872,14 +2963,14 @@ BEGIN
     IF NOT pg_has_role(roles_cible.producteur, 'USAGE')
     THEN
         RAISE EXCEPTION 'FDO6. Echec. Vous ne disposez pas des permissions nécessaires sur le schéma cible % pour réaliser cette opération.', schema_cible
-            USING HINT = 'Il vous faut être membre du rôle producteur ' || roles_cible.producteur || '.' ;
+            USING HINT = format('Il vous faut être membre du rôle producteur %s.', roles_cible.producteur) ;
     END IF ;
     
     -- permission sur le propriétaire de l'objet
     IF NOT pg_has_role(obj.prop::regrole::oid, 'USAGE')
     THEN
         RAISE EXCEPTION 'FDO7. Echec. Vous ne disposez pas des permissions nécessaires sur l''objet % pour réaliser cette opération.', obj_nom
-            USING HINT = 'Il vous faut être membre du rôle propriétaire de l''objet (' || obj.prop || ').' ;
+            USING HINT = format('Il vous faut être membre du rôle propriétaire de l''objet (%s).', obj.prop) ;
     END IF ;
     
     ------ MEMORISATION DES PRIVILEGES ACTUELS ------
@@ -3117,7 +3208,7 @@ BEGIN
     END IF ;
     
     ------ DEPLACEMENT DE L'OBJET ------
-    EXECUTE 'ALTER ' || obj_typ || ' ' || obj.appel || ' SET SCHEMA '  || quote_ident(schema_cible) ;
+    EXECUTE format('ALTER %s %s SET SCHEMA %I', obj_typ, obj.appel, schema_cible) ;
                 
     RAISE NOTICE '... Objet déplacé dans le schéma %.', schema_cible ;
   
@@ -3133,7 +3224,7 @@ BEGIN
         RAISE NOTICE 'réinitialisation des privilèges du nouveau producteur, % :', roles_cible.producteur ;
         FOREACH l IN ARRAY c_producteur
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE format(l, roles_cible.producteur) ;
             RAISE NOTICE '> %', format(l, roles_cible.producteur) ;
         END LOOP ;
@@ -3150,7 +3241,7 @@ BEGIN
         RAISE NOTICE 'suppression des privilèges pré-existants du nouvel éditeur, % :', roles_cible.editeur ;
         FOREACH l IN ARRAY c_n_editeur
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE format(l, roles_cible.editeur) ;
             RAISE NOTICE '> %', format(l, roles_cible.editeur) ;  
         END LOOP ;
@@ -3165,7 +3256,7 @@ BEGIN
         RAISE NOTICE 'suppression des privilèges de l''ancien éditeur, % :', roles.editeur ;
         FOREACH l IN ARRAY c_editeur
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE format(l, roles.editeur) ;
             RAISE NOTICE '> %', format(l, roles.editeur) ;  
         END LOOP ;
@@ -3181,7 +3272,7 @@ BEGIN
         RAISE NOTICE 'transfert des privilèges de l''ancien éditeur vers le nouvel éditeur, % :', roles_cible.editeur ;
         FOREACH l IN ARRAY c_editeur
         LOOP
-            l := replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.') ;
+            l := replace(l, format('%I.', obj_schema), format('%I.', schema_cible)) ;
             EXECUTE format(l, roles_cible.editeur) ;
             RAISE NOTICE '> %', format(l, roles_cible.editeur) ;  
         END LOOP ;
@@ -3198,18 +3289,16 @@ BEGIN
         IF obj_typ IN ('table', 'view', 'materialized view', 'foreign table')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-            l := 'GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE '
-                    || quote_ident(schema_cible) || '.' || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles_cible.editeur) ;
+            l := format('GRANT SELECT, UPDATE, DELETE, INSERT ON TABLE %I.%I TO %I',
+                schema_cible, obj_nom, roles_cible.editeur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         -- sur les séquences libres :
         ELSIF obj_typ IN ('sequence')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma :' ;
-            l := 'GRANT SELECT, USAGE ON SEQUENCE '
-                    || quote_ident(schema_cible) || '.' || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles_cible.editeur) ;
+            l := format('GRANT SELECT, USAGE ON SEQUENCE %I.%I TO %I',
+                schema_cible, obj_nom, roles_cible.editeur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         END IF ;
@@ -3218,8 +3307,8 @@ BEGIN
         THEN
             FOREACH o IN ARRAY seq_liste
             LOOP
-                l := 'GRANT SELECT, USAGE ON SEQUENCE '
-                    || o::regclass::text || ' TO ' || quote_ident(roles_cible.editeur) ;
+                l := format('GRANT SELECT, USAGE ON SEQUENCE %s TO %I',
+                    o::regclass, roles_cible.editeur) ;
                 EXECUTE l ;
                 RAISE NOTICE '> %', l ;
             END LOOP ;
@@ -3238,7 +3327,7 @@ BEGIN
         RAISE NOTICE 'suppression des privilèges pré-existants du nouveau lecteur, % :', roles_cible.lecteur ;
         FOREACH l IN ARRAY c_n_lecteur
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE format(l, roles_cible.lecteur) ;
             RAISE NOTICE '> %', format(l, roles_cible.lecteur) ;  
         END LOOP ;
@@ -3254,7 +3343,7 @@ BEGIN
         RAISE NOTICE 'suppression des privilèges de l''ancien lecteur, % :', roles.lecteur ;
         FOREACH l IN ARRAY c_lecteur
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE format(l, roles.lecteur) ;
             RAISE NOTICE '> %', format(l, roles.lecteur) ;  
         END LOOP ;
@@ -3270,7 +3359,7 @@ BEGIN
         RAISE NOTICE 'transfert des privilèges de l''ancien lecteur vers le nouveau lecteur, % :', roles_cible.lecteur ;
         FOREACH l IN ARRAY c_lecteur
         LOOP
-            l := replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.') ;
+            l := replace(l, format('%I.', obj_schema), format('%I.', schema_cible)) ;
             EXECUTE format(l, roles_cible.lecteur) ;
             RAISE NOTICE '> %', format(l, roles_cible.lecteur) ;  
         END LOOP ;
@@ -3287,18 +3376,16 @@ BEGIN
         IF obj_typ IN ('table', 'view', 'materialized view', 'foreign table')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-            l := 'GRANT SELECT ON TABLE ' || quote_ident(schema_cible) || '.'
-                    || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles_cible.lecteur) ;
+            l := format('GRANT SELECT ON TABLE %I.%I TO %I',
+                schema_cible, obj_nom, roles_cible.lecteur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         -- sur les séquences libres :
         ELSIF obj_typ IN ('sequence')
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma :' ;
-            l := 'GRANT SELECT ON SEQUENCE ' || quote_ident(schema_cible) || '.'
-                    || quote_ident(obj_nom) ||
-                    ' TO ' || quote_ident(roles_cible.lecteur) ;
+            l := format('GRANT SELECT ON SEQUENCE %I.%I TO %I',
+                schema_cible, obj_nom, roles_cible.lecteur) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;
         END IF ; 
@@ -3307,8 +3394,7 @@ BEGIN
         THEN
             FOREACH o IN ARRAY seq_liste
             LOOP
-                l := 'GRANT SELECT ON SEQUENCE '
-                    || o::regclass::text || ' TO ' || quote_ident(roles_cible.lecteur) ;
+                l := format('GRANT SELECT ON SEQUENCE %s TO %I', o::regclass, roles_cible.lecteur) ;
                 EXECUTE l ;
                 RAISE NOTICE '> %', l ;
             END LOOP ;
@@ -3323,7 +3409,7 @@ BEGIN
         RAISE NOTICE 'remise à zéro des privilèges des autres rôles :' ;
         FOREACH l IN ARRAY c_autres
         LOOP
-            l := z_asgard.asgard_grant_to_revoke(replace(l, quote_ident(obj_schema) || '.', quote_ident(schema_cible) || '.')) ;
+            l := z_asgard.asgard_grant_to_revoke(replace(l, format('%I.', obj_schema), format('%I.', schema_cible))) ;
             EXECUTE l ;
             RAISE NOTICE '> %', l ;  
         END LOOP ;    
@@ -3337,7 +3423,6 @@ ALTER FUNCTION z_asgard.asgard_deplace_obj(text, text, text, text, int)
     OWNER TO g_admin_ext ;
 
 COMMENT ON FUNCTION z_asgard.asgard_deplace_obj(text, text, text, text, int) IS 'ASGARD. Fonction qui prend en charge le déplacement d''un objet dans un nouveau schéma, avec une gestion propre des privilèges.' ;
-
 
 
 ------ 4.11 - OCTROI D'UN RÔLE À TOUS LES RÔLES DE CONNEXION ------
