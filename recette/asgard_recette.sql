@@ -8331,6 +8331,16 @@ BEGIN
         AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
         LANGUAGE SQL ;
 
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        CREATE PROCEDURE c_bibliotheque.insert_entree_journal(qqch text)
+            LANGUAGE SQL
+            AS $$
+            INSERT INTO c_bibliotheque.journal_du_mur (jour, entree, auteur)
+                VALUES (now()::date, qqch, current_user);
+            $$;
+    END IF ;
+
     CREATE AGGREGATE c_bibliotheque.cherche_intervalle(int) (
         SFUNC = c_bibliotheque.cherche_intervalle_sfunc,
         STYPE = c_bibliotheque.intervalle
@@ -8358,10 +8368,21 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'table_distante', 'foreign table', c, v) ;
         RAISE NOTICE '-- v% - 2 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'chiffre_pair', 'domain', c, v) ;
+        
         RAISE NOTICE '-- v% - 3 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'cherche_intervalle(integer)', 'aggregate', c, v) ;
+        RAISE NOTICE '-- v% - 3b ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(c, 'cherche_intervalle(integer)', 'routine', o, v) ;
+        RAISE NOTICE '-- v% - 3t ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(o, 'cherche_intervalle(integer)', 'function', c, v) ;
+
         RAISE NOTICE '-- v% - 4 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, 'cherche_intervalle_sfunc(' || quote_ident(o) || '.intervalle,integer)', 'function', c, v) ;
+        PERFORM z_asgard.asgard_deplace_obj(o, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'function', c, v) ;
+        RAISE NOTICE '-- v% - 4b ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(c, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'routine', o, v) ;
+        RAISE NOTICE '-- v% - 4t ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(o, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'procedure', c, v) ;
+        
         RAISE NOTICE '-- v% - 5 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'intervalle', 'type', c, v) ;
         RAISE NOTICE '-- v% - 6 ------------', v::text ;
@@ -8383,6 +8404,16 @@ BEGIN
         
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'compteur', 'sequence', c, v) ;
+    
+        IF current_setting('server_version_num')::int >= 110000
+        THEN
+            RAISE NOTICE '-- v% - 11 ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(o, 'insert_entree_journal(text)', 'procedure', c, v) ;
+            RAISE NOTICE '-- v% - 11b ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(c, 'insert_entree_journal(text)', 'routine', o, v) ;
+            RAISE NOTICE '-- v% - 11t ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(o, 'insert_entree_journal(text)', 'aggregate', c, v) ;
+        END IF ;
     
         t := o ;
         o := c ;
@@ -8472,7 +8503,17 @@ BEGIN
         SFUNC = "c_Bibliothèque"."cherche intervalle*sfunc",
         STYPE = "c_Bibliothèque"."inter-valle"
         ) ;
-        
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        CREATE PROCEDURE "c_Bibliothèque"."insert_entree->journal"(qqch text)
+            LANGUAGE SQL
+            AS $$
+            INSERT INTO "c_Bibliothèque"."Journal&du&mur" (jour, entree, auteur)
+                VALUES (now()::date, qqch, current_user);
+            $$;
+    END IF ;
+    
     CREATE DOMAIN "c_Bibliothèque"."Chiffre$pair" int
         CONSTRAINT "Chiffre$pair_check" CHECK (VALUE > 0 AND VALUE % 2 = 0) ;
         
@@ -8495,10 +8536,21 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'table distante', 'foreign table', c, v) ;
         RAISE NOTICE '-- v% - 2 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'Chiffre$pair', 'domain', c, v) ;
+        
         RAISE NOTICE '-- v% - 3 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, '"CHERCHE_INTERVALLE"(integer)', 'aggregate', c, v) ;
+        RAISE NOTICE '-- v% - 3b ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(c, '"CHERCHE_INTERVALLE"(integer)', 'routine', o, v) ;
+        RAISE NOTICE '-- v% - 3t ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(o, '"CHERCHE_INTERVALLE"(integer)', 'function', c, v) ;
+        
         RAISE NOTICE '-- v% - 4 ------------', v::text ;
-        PERFORM z_asgard.asgard_deplace_obj(o, '"cherche intervalle*sfunc"(' || quote_ident(o) || '."inter-valle",integer)', 'function', c, v) ;
+        PERFORM z_asgard.asgard_deplace_obj(o, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'function', c, v) ;
+        RAISE NOTICE '-- v% - 4b ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(c, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'routine', o, v) ;
+        RAISE NOTICE '-- v% - 4t ------------', v::text ;
+        PERFORM z_asgard.asgard_deplace_obj(o, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'procedure', c, v) ;
+        
         RAISE NOTICE '-- v% - 5 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'inter-valle', 'type', c, v) ;
         RAISE NOTICE '-- v% - 6 ------------', v::text ;
@@ -8520,6 +8572,16 @@ BEGIN
         
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'COMP~^teur', 'sequence', c, v) ;
+    
+        IF current_setting('server_version_num')::int >= 110000
+        THEN
+            RAISE NOTICE '-- v% - 11 ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(o, '"insert_entree->journal"(text)', 'procedure', c, v) ;
+            RAISE NOTICE '-- v% - 11b ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(c, '"insert_entree->journal"(text)', 'routine', o, v) ;
+            RAISE NOTICE '-- v% - 11t ------------', v::text ;
+            PERFORM z_asgard.asgard_deplace_obj(o, '"insert_entree->journal"(text)', 'aggregate', c, v) ;
+        END IF ;
     
         t := o ;
         o := c ;
