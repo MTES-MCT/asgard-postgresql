@@ -70,9 +70,10 @@
 --
 -- schémas contenant les objets : z_asgard et z_asgard_admin.
 --
+-- objets créés par le script :
+-- - Function: z_asgard.asgard_expend_privileges(text)
+--
 -- objets modifiés par le script :
--- - Function: z_asgard_admin.asgard_on_create_schema()
--- - Event Trigger: asgard_on_create_schema
 -- - Function: z_asgard_admin.asgard_on_drop_schema()
 -- - Event Trigger: asgard_on_drop_schema
 -- - Function: z_asgard.asgard_synthese_role(regnamespace, regrole)
@@ -81,122 +82,18 @@
 -- - Function: z_asgard.asgard_synthese_public_obj(oid, text)
 -- - Function: z_asgard.asgard_initialise_schema(text, boolean, boolean)
 -- - Function: z_asgard_admin.asgard_reaffecte_role(text, text, boolean, boolean, boolean)
--- - Function: z_asgard.asgard_expend_privileges(text)
 -- - Function: z_asgard_admin.asgard_diagnostic(text[])
 --
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
+-- MOT DE PASSE DE CONTRÔLE : 'x7-A;#rzo'
+
 --------------------------------------------
 ------ 3 - CREATION DES EVENT TRIGGERS ------
 --------------------------------------------
-/* 3.2 - EVENT TRIGGER SUR CREATE SCHEMA
-   3.3 - EVENT TRIGGER SUR DROP SCHEMA */
+/* 3.3 - EVENT TRIGGER SUR DROP SCHEMA */
    
-
------- 3.2 - EVENT TRIGGER SUR CREATE SCHEMA ------
-
--- Function: z_asgard_admin.asgard_on_create_schema()
-
-CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_schema() RETURNS event_trigger
-    LANGUAGE plpgsql
-    AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_create_schema qui
-           répercute dans la table z_asgard_admin.gestion_schema (via la vue
-           z_asgard.gestion_schema_etr) les créations de schémas
-           réalisées par des commandes CREATE SCHEMA directes ou exécutées
-           dans le cadre de l'installation d'une extension.
-DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('CREATE SCHEMA', 'CREATE EXTENSION') */
-DECLARE
-    obj record ;
-    e_mssg text ;
-    e_hint text ;
-    e_detl text ;
-BEGIN
-    ------ CONTROLES DES PRIVILEGES ------
-    IF NOT has_schema_privilege('z_asgard', 'USAGE')
-    THEN
-        RAISE EXCEPTION 'ECS1. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
-    END IF ;
-    
-    IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'UPDATE')
-            OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'INSERT')
-            OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
-    THEN
-        RAISE EXCEPTION 'ECS2. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
-    END IF ;
-
-
-	FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
-                    WHERE object_type = 'schema'
-    LOOP
-    
-        ------ SCHEMA PRE-ENREGISTRE DANS GESTION_SCHEMA ------
-        UPDATE z_asgard.gestion_schema_etr
-            SET (oid_schema, producteur, oid_producteur, creation, ctrl) = (
-                SELECT
-                    obj.objid,
-                    replace(nspowner::regrole::text, '"', ''),
-                    nspowner,
-                    true,
-                    ARRAY['CREATE', 'x7-A;#rzo']
-                    FROM pg_catalog.pg_namespace
-                    WHERE obj.objid = pg_namespace.oid
-                )
-            WHERE quote_ident(nom_schema) = obj.object_identity
-                AND NOT creation  ; -- creation vaut true si et seulement si la création a été initiée via la table
-                                    -- de gestion dans ce cas, il n'est pas nécessaire de réintervenir dessus
-        IF FOUND
-        THEN
-            RAISE NOTICE '... Le schéma % apparaît désormais comme "créé" dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
-
-        ------ SCHEMA NON REPERTORIE DANS GESTION_SCHEMA ------
-        ELSIF NOT obj.object_identity IN (SELECT quote_ident(nom_schema) FROM z_asgard.gestion_schema_etr)
-        THEN
-            INSERT INTO z_asgard.gestion_schema_etr (oid_schema, nom_schema, producteur, oid_producteur, creation, ctrl)(
-                SELECT
-                    obj.objid,
-                    replace(obj.object_identity, '"', ''),
-                    replace(nspowner::regrole::text, '"', ''),
-                    nspowner,
-                    true,
-                    ARRAY['CREATE', 'x7-A;#rzo']
-                    FROM pg_catalog.pg_namespace
-                    WHERE obj.objid = pg_namespace.oid
-                ) ;
-            RAISE NOTICE '... Le schéma % a été enregistré dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
-        END IF ;
-        
-	END LOOP ;
-    
-EXCEPTION WHEN OTHERS THEN
-    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
-                            e_hint = PG_EXCEPTION_HINT,
-                            e_detl = PG_EXCEPTION_DETAIL ;
-    RAISE EXCEPTION 'ECS0 > %', e_mssg
-        USING DETAIL = e_detl,
-            HINT = e_hint ;
-               
-END
-$BODY$ ;
-
-ALTER FUNCTION z_asgard_admin.asgard_on_create_schema()
-    OWNER TO g_admin ;
-
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes ou exécutées dans le cadre de l''installation d''une extension.' ;
-
--- Event Trigger: asgard_on_create_schema
-
-DROP EVENT TRIGGER asgard_on_create_schema ;
-
-CREATE EVENT TRIGGER asgard_on_create_schema ON DDL_COMMAND_END
-    WHEN TAG IN ('CREATE SCHEMA', 'CREATE EXTENSION')
-    EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_schema() ;
-    
-COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes ou exécutées dans le cadre de l''installation d''une extension.' ;
-
-
 ------ 3.3 - EVENT TRIGGER SUR DROP SCHEMA ------
 
 -- Function: z_asgard_admin.asgard_on_drop_schema()
@@ -353,7 +250,7 @@ BEGIN
     ------ SEQUENCES ------
     -- privilèges attribués (hors propriétaire) :
     RETURN QUERY
-        SELECT format('GRANT %s ON TABLE %s TO %%I', privilege, oid::regclass)
+        SELECT format('GRANT %s ON SEQUENCE %s TO %%I', privilege, oid::regclass)
             FROM pg_catalog.pg_class,
                 aclexplode(relacl) AS acl (grantor, grantee, privilege, grantable)
             WHERE relnamespace = n_schema
@@ -363,7 +260,7 @@ BEGIN
                 AND NOT n_role = relowner ;
     -- privilèges révoqués du propriétaire :
     RETURN QUERY
-        SELECT format('REVOKE %s ON TABLE %s FROM %%I', expected_privilege, oid::regclass)
+        SELECT format('REVOKE %s ON SEQUENCE %s FROM %%I', expected_privilege, oid::regclass)
             FROM pg_catalog.pg_class,
                 unnest(ARRAY['SELECT', 'USAGE', 'UPDATE']) AS expected_privilege
             WHERE relnamespace = n_schema
@@ -485,7 +382,7 @@ BEGIN
                 AND grantee = 0 ;
     ------ SEQUENCES ------
     RETURN QUERY
-        SELECT format('GRANT %s ON TABLE %s TO %%I', privilege, oid::regclass)
+        SELECT format('GRANT %s ON SEQUENCE %s TO %%I', privilege, oid::regclass)
             FROM pg_catalog.pg_class,
                 aclexplode(relacl) AS acl (grantor, grantee, privilege, grantable)
             WHERE relnamespace = n_schema
@@ -1770,8 +1667,8 @@ BEGIN
             FROM unnest(
                 ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE',
                         'TRUNCATE', 'REFERENCES', 'TRIGGER', 'USAGE',
-                        'CREATE', 'EXECUTE'],
-                ARRAY['r', 'a', 'w', 'd', 'D', 'x', 't', 'U', 'C', 'X']
+                        'CREATE', 'EXECUTE', 'CONNECT', 'TEMPORARY'],
+                ARRAY['r', 'a', 'w', 'd', 'D', 'x', 't', 'U', 'C', 'X', 'c', 'T']
                 ) AS p (privilege, prvlg)
             WHERE privileges_codes ~ prvlg ;
 END
