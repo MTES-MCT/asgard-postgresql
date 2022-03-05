@@ -4414,7 +4414,7 @@ BEGIN
                             '^r$', '^S$', '^f$', '^T$', NULL],
                     -- nom lisible de l'objet
                     ARRAY['table', 'table partitionnée', 'vue', 'vue matérialisée', 'table étrangère', 'séquence',
-                            'fonction', 'domaine', 'type', 'conversion', 'opérateur', 'collationnement',
+                            'routine', 'domaine', 'type', 'conversion', 'opérateur', 'collationnement',
                             'dictionnaire de recherche plein texte', 'configuration de recherche plein texte',
                                 'famille d''opérateurs', 'classe d''opérateurs', 'objet statistique étendu', 'schéma',
                             'privilège par défaut sur les tables', 'privilège par défaut sur les séquences',
