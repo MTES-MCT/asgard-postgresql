@@ -7590,7 +7590,16 @@ BEGIN
             
     CREATE VIEW c_bibliotheque.vue_du_mur AS (SELECT 'C''est haut !'::text AS observation) ;
     CREATE SEQUENCE c_bibliotheque.compteur ;
-            
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE c_bibliotheque.drop_vue_du_mur()
+            LANGUAGE SQL
+            AS $$
+            DROP VIEW c_bibliotheque.vue_du_mur ;
+            $$' ;
+    END IF ;
+    
     PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
     PERFORM z_asgard.asgard_initialise_schema('z_asgard_admin') ;
     
@@ -7625,8 +7634,14 @@ BEGIN
     REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_asgard_rec_pro ;
     REVOKE DELETE ON TABLE c_bibliotheque.vue_du_mur FROM g_asgard_rec_pro ;
     
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'REVOKE EXECUTE ON ROUTINE c_bibliotheque.drop_vue_du_mur() FROM g_asgard_rec_pro' ;
+    END IF ;
+    
     -- #3
-    SELECT count(*) = 2
+    SELECT count(*) = CASE WHEN current_setting('server_version_num')::int >= 110000
+            THEN 3 ELSE 2 END
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
         
@@ -7659,6 +7674,23 @@ BEGIN
             
     r := r AND b ;
     RAISE NOTICE '51-5 > %', r::text ;
+    
+    -- #5.1
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        SELECT count(*) = 1
+            INTO b
+            FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
+            WHERE typ_objet = 'routine' AND nom_schema = 'c_bibliotheque'
+                AND nom_objet = 'drop_vue_du_mur' AND NOT critique
+                AND anomalie ~ 'manquant'
+                AND anomalie ~ 'propriétaire'
+                AND anomalie ~ 'EXECUTE'
+                AND strpos(anomalie, 'g_asgard_rec_pro') > 0 ;
+                
+        r := r AND b ;
+        RAISE NOTICE '51-5.1 > %', r::text ;
+    END IF ;
     
     ------ droits manquants de l'éditeur ------
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
@@ -7768,9 +7800,14 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     GRANT ALL ON SEQUENCE c_bibliotheque.compteur TO g_asgard_rec_orp ;
     GRANT UPDATE (observation) ON TABLE c_bibliotheque.vue_du_mur TO g_asgard_rec_orp ;
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'GRANT EXECUTE ON PROCEDURE c_bibliotheque.drop_vue_du_mur() TO g_asgard_rec_lec' ;
+    END IF ;
     
     -- #14
-    SELECT count(*) = 4
+    SELECT count(*) = CASE WHEN current_setting('server_version_num')::int >= 110000
+            THEN 5 ELSE 4 END
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -7802,6 +7839,22 @@ BEGIN
             
     r := r AND b ;
     RAISE NOTICE '51-15.2 > %', r::text ;
+    
+    -- #15.3
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        SELECT count(*) = 1
+            INTO b
+            FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_bibliotheque'])
+            WHERE typ_objet = 'routine' AND nom_schema = 'c_bibliotheque'
+                AND nom_objet = 'drop_vue_du_mur' AND NOT critique
+                AND anomalie ~ 'supplémentaire'
+                AND anomalie ~ 'EXECUTE'
+                AND strpos(anomalie, 'g_asgard_rec_lec') > 0 ;
+                
+        r := r AND b ;
+        RAISE NOTICE '51-15.3 > %', r::text ;
+    END IF ;
     
     ------ droits excédentaires (public + lecteur) ------
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
@@ -7976,6 +8029,15 @@ BEGIN
     CREATE VIEW "c_Bibliothèque"."Vue du mur !" AS (SELECT 'C''est haut !'::text AS "OBServation :)") ;
     CREATE SEQUENCE "c_Bibliothèque"."$compteur$" ;
     
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE "c_Bibliothèque"."DROP Vue du mur !"()
+            LANGUAGE SQL
+            AS $$
+            DROP VIEW "c_Bibliothèque"."Vue du mur !" ;
+            $$' ;
+    END IF ;
+    
     ------ désynchronisation des propriétaires ------
     ALTER EVENT TRIGGER asgard_on_alter_objet DISABLE ;
     ALTER VIEW "c_Bibliothèque"."Vue du mur !" OWNER TO "g_ASGARD REC&ORP" ;
@@ -8006,9 +8068,14 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
     REVOKE CREATE ON SCHEMA "c_Bibliothèque" FROM "g_ASGARD_rec\PRO" ;
     REVOKE DELETE ON TABLE "c_Bibliothèque"."Vue du mur !" FROM "g_ASGARD_rec\PRO" ;
-    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'REVOKE EXECUTE ON ROUTINE "c_Bibliothèque"."DROP Vue du mur !"() FROM "g_ASGARD_rec\PRO"' ;
+    END IF ;
+
     -- #3
-    SELECT count(*) = 2
+    SELECT count(*) = CASE WHEN current_setting('server_version_num')::int >= 110000
+            THEN 3 ELSE 2 END
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
         
@@ -8041,6 +8108,23 @@ BEGIN
             
     r := r AND b ;
     RAISE NOTICE '51b-5 > %', r::text ;
+    
+    -- #5.1
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        SELECT count(*) = 1
+            INTO b
+            FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
+            WHERE typ_objet = 'routine' AND nom_schema = 'c_Bibliothèque'
+                AND nom_objet = 'DROP Vue du mur !' AND NOT critique
+                AND anomalie ~ 'manquant'
+                AND anomalie ~ 'propriétaire'
+                AND anomalie ~ 'EXECUTE'
+                AND strpos(anomalie, 'g_ASGARD_rec\PRO') > 0 ;
+                
+        r := r AND b ;
+        RAISE NOTICE '51-5.1 > %', r::text ;
+    END IF ;
     
     ------ droits manquants de l'éditeur ------
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
@@ -8151,8 +8235,14 @@ BEGIN
     GRANT ALL ON SEQUENCE "c_Bibliothèque"."$compteur$" TO "g_ASGARD REC&ORP" ;
     GRANT UPDATE ("OBServation :)") ON TABLE "c_Bibliothèque"."Vue du mur !" TO "g_ASGARD REC&ORP" ;
     
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'GRANT EXECUTE ON PROCEDURE "c_Bibliothèque"."DROP Vue du mur !"() TO "g_ASGARD rec*LEC"' ;
+    END IF ;
+    
     -- #14
-    SELECT count(*) = 4
+    SELECT count(*) = CASE WHEN current_setting('server_version_num')::int >= 110000
+            THEN 5 ELSE 4 END
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -8184,6 +8274,22 @@ BEGIN
             
     r := r AND b ;
     RAISE NOTICE '51b-15.2 > %', r::text ;
+    
+    -- #15.3
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        SELECT count(*) = 1
+            INTO b
+            FROM z_asgard_admin.asgard_diagnostic(ARRAY['c_Bibliothèque'])
+            WHERE typ_objet = 'routine' AND nom_schema = 'c_Bibliothèque'
+                AND nom_objet = 'DROP Vue du mur !' AND NOT critique
+                AND anomalie ~ 'supplémentaire'
+                AND anomalie ~ 'EXECUTE'
+                AND strpos(anomalie, 'g_ASGARD rec*LEC') > 0 ;
+                
+        r := r AND b ;
+        RAISE NOTICE '51-15.3 > %', r::text ;
+    END IF ;
     
     ------ droits excédentaires (public + lecteur) ------
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
@@ -8290,6 +8396,8 @@ DECLARE
    v int := 1 ;
    o text := 'c_bibliotheque' ;
    c text := 'c_librairie' ;
+   p text := 'g_asgard_rec2' ;
+   e text := 'g_asgard_rec1' ;
    t text ;
    e_mssg text ;
    e_detl text ;
@@ -8333,12 +8441,12 @@ BEGIN
 
     IF current_setting('server_version_num')::int >= 110000
     THEN
-        CREATE PROCEDURE c_bibliotheque.insert_entree_journal(qqch text)
+        EXECUTE 'CREATE PROCEDURE c_bibliotheque.insert_entree_journal(qqch text)
             LANGUAGE SQL
             AS $$
             INSERT INTO c_bibliotheque.journal_du_mur (jour, entree, auteur)
                 VALUES (now()::date, qqch, current_user);
-            $$;
+            $$' ;
     END IF ;
 
     CREATE AGGREGATE c_bibliotheque.cherche_intervalle(int) (
@@ -8366,58 +8474,157 @@ BEGIN
         
         RAISE NOTICE '-- v% - 1 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'table_distante', 'foreign table', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'table_distante'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 1', v) ;
+        
         RAISE NOTICE '-- v% - 2 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'chiffre_pair', 'domain', c, v) ;
+        ASSERT (
+            SELECT typowner::regrole::text
+                FROM pg_type
+                WHERE typname = 'chiffre_pair'
+                    AND typnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 2', v) ;
         
         RAISE NOTICE '-- v% - 3 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'cherche_intervalle(integer)', 'aggregate', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle(integer)', c)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 3', v) ;
         RAISE NOTICE '-- v% - 3b ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(c, 'cherche_intervalle(integer)', 'routine', o, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle(integer)', o)::regprocedure
+            ) = quote_ident(e), format('échec assertion %s - 3b', v) ;
         RAISE NOTICE '-- v% - 3t ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'cherche_intervalle(integer)', 'function', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle(integer)', c)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 3t', v) ;
 
         RAISE NOTICE '-- v% - 4 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'function', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle_sfunc(%I.intervalle,integer)', c, o)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 4', v) ;
         RAISE NOTICE '-- v% - 4b ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(c, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'routine', o, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle_sfunc(%I.intervalle,integer)', o, o)::regprocedure
+            ) = quote_ident(e), format('échec assertion %s - 4b', v) ;
         RAISE NOTICE '-- v% - 4t ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, format('cherche_intervalle_sfunc(%I.intervalle,integer)', o), 'procedure', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I.cherche_intervalle_sfunc(%I.intervalle,integer)', c, O)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 4t', v) ;
         
         RAISE NOTICE '-- v% - 5 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'intervalle', 'type', c, v) ;
+        ASSERT (
+            SELECT typowner::regrole::text
+                FROM pg_type
+                WHERE typname = 'intervalle'
+                    AND typnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 5', v) ;
+        
         RAISE NOTICE '-- v% - 6 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'histoire', 'materialized view', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'histoire'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 6', v) ;
+        
         RAISE NOTICE '-- v% - 7 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'entree_du_jour', 'view', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'entree_du_jour'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 7', v) ;
         
         RAISE NOTICE '-- v% - 8 ------------', v::text ;
         IF current_setting('server_version_num')::int >= 100000
         THEN
             PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur_jon', 'table', c, v) ;
+            ASSERT (
+                SELECT relowner::regrole::text
+                    FROM pg_class
+                    WHERE relname = 'journal_du_mur_jon'
+                        AND relnamespace = quote_ident(c)::regnamespace
+                ) = quote_ident(p), format('échec assertion %s - 8', v) ;
         END IF ;
         
         RAISE NOTICE '-- v% - 9 ------------', v::text ;
         IF current_setting('server_version_num')::int >= 100000
         THEN
             PERFORM z_asgard.asgard_deplace_obj(o, 'journal_du_mur', 'partitioned table', c, v) ;
+            ASSERT (
+                SELECT relowner::regrole::text
+                    FROM pg_class
+                    WHERE relname = 'journal_du_mur'
+                        AND relnamespace = quote_ident(c)::regnamespace
+                ) = quote_ident(p), format('échec assertion %s - 9', v) ;
         END IF ;
         
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'compteur', 'sequence', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'compteur'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 10', v) ;
     
         IF current_setting('server_version_num')::int >= 110000
         THEN
             RAISE NOTICE '-- v% - 11 ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(o, 'insert_entree_journal(text)', 'procedure', c, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I.insert_entree_journal(text)', c)::regprocedure
+                ) = quote_ident(p), format('échec assertion %s - 11', v) ;
             RAISE NOTICE '-- v% - 11b ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(c, 'insert_entree_journal(text)', 'routine', o, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I.insert_entree_journal(text)', o)::regprocedure
+                ) = quote_ident(e), format('échec assertion %s - 11b', v) ;
             RAISE NOTICE '-- v% - 11t ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(o, 'insert_entree_journal(text)', 'aggregate', c, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I.insert_entree_journal(text)', c)::regprocedure
+                ) = quote_ident(p), format('échec assertion %s - 11t', v) ;
         END IF ;
     
         t := o ;
         o := c ;
         c := t ;
+        t := p ;
+        p := e ;
+        e := t ;
         v := v + 1 ;
     
     END LOOP ;
@@ -8433,7 +8640,7 @@ BEGIN
 
     RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -8453,14 +8660,16 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t052b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
-   v int := 1 ;
-   o text := 'c_Bibliothèque' ;
-   c text := 'c_Libr''airie' ;
-   t text ;
-   e_mssg text ;
-   e_detl text ;
+    b boolean ;
+    r boolean ;
+    v int := 1 ;
+    o text := 'c_Bibliothèque' ;
+    c text := 'c_Libr''airie' ;
+    p text := 'g_asgardREC2' ;
+    e text := 'g_asgard rec*1' ;
+    t text ;
+    e_mssg text ;
+    e_detl text ;
 BEGIN
 
     CREATE ROLE "g_asgard rec*1" ;
@@ -8506,12 +8715,12 @@ BEGIN
     
     IF current_setting('server_version_num')::int >= 110000
     THEN
-        CREATE PROCEDURE "c_Bibliothèque"."insert_entree->journal"(qqch text)
+        EXECUTE 'CREATE PROCEDURE "c_Bibliothèque"."insert_entree->journal"(qqch text)
             LANGUAGE SQL
             AS $$
             INSERT INTO "c_Bibliothèque"."Journal&du&mur" (jour, entree, auteur)
                 VALUES (now()::date, qqch, current_user);
-            $$;
+            $$' ;
     END IF ;
     
     CREATE DOMAIN "c_Bibliothèque"."Chiffre$pair" int
@@ -8534,58 +8743,157 @@ BEGIN
     
         RAISE NOTICE '-- v% - 1 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'table distante', 'foreign table', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'table distante'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 1', v) ;
+        
         RAISE NOTICE '-- v% - 2 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'Chiffre$pair', 'domain', c, v) ;
+        ASSERT (
+            SELECT typowner::regrole::text
+                FROM pg_type
+                WHERE typname = 'Chiffre$pair'
+                    AND typnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 2', v) ;
         
         RAISE NOTICE '-- v% - 3 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, '"CHERCHE_INTERVALLE"(integer)', 'aggregate', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."CHERCHE_INTERVALLE"(integer)', c)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 3', v) ;
         RAISE NOTICE '-- v% - 3b ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(c, '"CHERCHE_INTERVALLE"(integer)', 'routine', o, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."CHERCHE_INTERVALLE"(integer)', o)::regprocedure
+            ) = quote_ident(e), format('échec assertion %s - 3b', v) ;
         RAISE NOTICE '-- v% - 3t ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, '"CHERCHE_INTERVALLE"(integer)', 'function', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."CHERCHE_INTERVALLE"(integer)', c)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 3t', v) ;
         
         RAISE NOTICE '-- v% - 4 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'function', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."cherche intervalle*sfunc"(%I."inter-valle",integer)', c, o)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 4', v) ;
         RAISE NOTICE '-- v% - 4b ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(c, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'routine', o, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."cherche intervalle*sfunc"(%I."inter-valle",integer)', o, o)::regprocedure
+            ) = quote_ident(e), format('échec assertion %s - 4b', v) ;
         RAISE NOTICE '-- v% - 4t ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, format('"cherche intervalle*sfunc"(%I."inter-valle",integer)', o), 'procedure', c, v) ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = format('%I."cherche intervalle*sfunc"(%I."inter-valle",integer)', c, O)::regprocedure
+            ) = quote_ident(p), format('échec assertion %s - 4t', v) ;
         
         RAISE NOTICE '-- v% - 5 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'inter-valle', 'type', c, v) ;
+        ASSERT (
+            SELECT typowner::regrole::text
+                FROM pg_type
+                WHERE typname = 'inter-valle'
+                    AND typnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 5', v) ;
+        
         RAISE NOTICE '-- v% - 6 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'Histoire', 'materialized view', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'Histoire'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 6', v) ;
+        
         RAISE NOTICE '-- v% - 7 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'entrée du jour', 'view', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'entrée du jour'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 7', v) ;
         
         RAISE NOTICE '-- v% - 8 ------------', v::text ;
         IF current_setting('server_version_num')::int >= 100000
         THEN
             PERFORM z_asgard.asgard_deplace_obj(o, 'journal du mur{jon}', 'table', c, v) ;
+            ASSERT (
+                SELECT relowner::regrole::text
+                    FROM pg_class
+                    WHERE relname = 'journal du mur{jon}'
+                        AND relnamespace = quote_ident(c)::regnamespace
+                ) = quote_ident(p), format('échec assertion %s - 8', v) ;
         END IF ;
         
         RAISE NOTICE '-- v% - 9 ------------', v::text ;
         IF current_setting('server_version_num')::int >= 100000
         THEN
             PERFORM z_asgard.asgard_deplace_obj(o, 'Journal&du&mur', 'partitioned table', c, v) ;
+            ASSERT (
+                SELECT relowner::regrole::text
+                    FROM pg_class
+                    WHERE relname = 'Journal&du&mur'
+                        AND relnamespace = quote_ident(c)::regnamespace
+                ) = quote_ident(p), format('échec assertion %s - 9', v) ;
         END IF ;
         
         RAISE NOTICE '-- v% - 10 ------------', v::text ;
         PERFORM z_asgard.asgard_deplace_obj(o, 'COMP~^teur', 'sequence', c, v) ;
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_class
+                WHERE relname = 'COMP~^teur'
+                    AND relnamespace = quote_ident(c)::regnamespace
+            ) = quote_ident(p), format('échec assertion %s - 10', v) ;
     
         IF current_setting('server_version_num')::int >= 110000
         THEN
             RAISE NOTICE '-- v% - 11 ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(o, '"insert_entree->journal"(text)', 'procedure', c, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I."insert_entree->journal"(text)', c)::regprocedure
+                ) = quote_ident(p), format('échec assertion %s - 11', v) ;
             RAISE NOTICE '-- v% - 11b ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(c, '"insert_entree->journal"(text)', 'routine', o, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I."insert_entree->journal"(text)', o)::regprocedure
+                ) = quote_ident(e), format('échec assertion %s - 11b', v) ;
             RAISE NOTICE '-- v% - 11t ------------', v::text ;
             PERFORM z_asgard.asgard_deplace_obj(o, '"insert_entree->journal"(text)', 'aggregate', c, v) ;
+            ASSERT (
+                SELECT proowner::regrole::text
+                    FROM pg_proc
+                    WHERE oid = format('%I."insert_entree->journal"(text)', c)::regprocedure
+                ) = quote_ident(p), format('échec assertion %s - 11t', v) ;
         END IF ;
     
         t := o ;
         o := c ;
         c := t ;
+        t := p ;
+        p := e ;
+        e := t ;
         v := v + 1 ;
     
     END LOOP ;
@@ -8644,9 +8952,7 @@ BEGIN
     THEN
         EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur
             (id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass), jour date, entree text, auteur text)
-            PARTITION BY LIST (auteur)' ;
-        GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
-            
+            PARTITION BY LIST (auteur)' ;   
         EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur_jon
             PARTITION OF c_bibliotheque.journal_du_mur
             FOR VALUES IN (''Jon Snow'')' ;
@@ -8658,6 +8964,7 @@ BEGIN
         CREATE TABLE c_bibliotheque.journal_du_mur
             (id int DEFAULT nextval('c_bibliotheque.compteur'::regclass), jour date, entree text, auteur text) ;
     END IF ;
+    GRANT ALL ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec2 ;
     
     CREATE VIEW c_bibliotheque.entree_du_jour AS (SELECT * FROM c_bibliotheque.journal_du_mur WHERE jour = now()::date) ;
     REVOKE UPDATE ON TABLE c_bibliotheque.entree_du_jour FROM g_asgard_rec2 ;
@@ -8679,6 +8986,17 @@ BEGIN
         STYPE = c_bibliotheque.intervalle
         ) ;
     REVOKE EXECUTE ON FUNCTION c_bibliotheque.cherche_intervalle(int) FROM public ;
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE c_bibliotheque.insert_entree_journal(qqch text)
+            LANGUAGE SQL
+            AS $$
+            INSERT INTO c_bibliotheque.journal_du_mur (jour, entree, auteur)
+                VALUES (now()::date, qqch, current_user);
+            $$' ;
+        EXECUTE 'GRANT EXECUTE ON PROCEDURE c_bibliotheque.insert_entree_journal(text) TO g_asgard_rec2' ;
+    END IF ;
         
     CREATE DOMAIN c_bibliotheque.chiffre_pair int
         CONSTRAINT chiffre_pair_check CHECK (VALUE > 0 AND VALUE % 2 = 0) ;
@@ -8706,6 +9024,8 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'chiffre_pair', 'domain') ;
     RAISE NOTICE '-- 3 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'cherche_intervalle(integer)', 'aggregate') ;
+    REVOKE EXECUTE ON FUNCTION c_bibliotheque.cherche_intervalle(integer) FROM g_asgard_rec1 ;
+    PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'cherche_intervalle(integer)', 'routine') ;
     RAISE NOTICE '-- 4 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'cherche_intervalle_sfunc(c_bibliotheque.intervalle,integer)', 'function') ;
     RAISE NOTICE '-- 5 ------------' ;
@@ -8732,6 +9052,14 @@ BEGIN
 
     RAISE NOTICE '-- 10 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'compteur', 'sequence') ;  
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        RAISE NOTICE '-- 11 ------------' ;
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'insert_entree_journal(text)', 'procedure') ;
+        EXECUTE 'REVOKE EXECUTE ON PROCEDURE c_bibliotheque.insert_entree_journal(text) FROM g_asgard_rec1' ;
+        PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'insert_entree_journal(text)', 'routine') ;
+    END IF ;
     
     -- il devrait rester deux privilèges révoqués du pseudo-rôle public
     SELECT count(*) = 2
@@ -8791,46 +9119,65 @@ BEGIN
         EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
             (id int DEFAULT nextval(''"c_Bibliothèque"."COMP~^teur"''::regclass), jour date, entree text, auteur text)
             PARTITION BY LIST (auteur)' ;
-        
         EXECUTE 'CREATE TABLE "c_Bibliothèque"."journal du mur{jon}"
             PARTITION OF "c_Bibliothèque"."Journal&du&mur"
             FOR VALUES IN (''Jon Snow'')' ;
         EXECUTE 'CREATE TABLE "c_Bibliothèque"."Journal&du&mur{ingrid}"
             PARTITION OF "c_Bibliothèque"."Journal&du&mur"
             FOR VALUES IN (''Ingrid'')' ;
+        REVOKE SELECT ON TABLE "c_Bibliothèque"."journal du mur{jon}" FROM public ;
     ELSE
         CREATE TABLE "c_Bibliothèque"."Journal&du&mur"
             (id int DEFAULT nextval('"c_Bibliothèque"."COMP~^teur"'::regclass), jour date, entree text, auteur text) ;
     END IF ;
+    GRANT ALL ON TABLE "c_Bibliothèque"."Journal&du&mur" TO "g_ASGARD rec:2" ;
     
     CREATE VIEW "c_Bibliothèque"."entrée du jour" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour = now()::date) ;
+    REVOKE UPDATE ON TABLE "c_Bibliothèque"."entrée du jour" FROM "g_ASGARD rec:2" ;
+    
     CREATE MATERIALIZED VIEW "c_Bibliothèque"."Histoire" AS (SELECT * FROM "c_Bibliothèque"."Journal&du&mur" WHERE jour < now()::date) ;
+    GRANT TRIGGER ON TABLE "c_Bibliothèque"."Histoire" TO "g_ASGARD rec:2" ;
     
     CREATE TYPE "c_Bibliothèque"."inter-valle" AS (d int, f int) ;
+    GRANT USAGE ON TYPE "c_Bibliothèque"."inter-valle" TO "g_ASGARD rec:2" ;
     
     CREATE FUNCTION "c_Bibliothèque"."cherche intervalle*sfunc"("c_Bibliothèque"."inter-valle", int)
         RETURNS "c_Bibliothèque"."inter-valle"
         AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
         LANGUAGE SQL ;
+    GRANT EXECUTE ON FUNCTION "c_Bibliothèque"."cherche intervalle*sfunc"("c_Bibliothèque"."inter-valle", int) TO "g_ASGARD rec:2" ;
 
     CREATE AGGREGATE "c_Bibliothèque"."CHERCHE_INTERVALLE"(int) (
         SFUNC = "c_Bibliothèque"."cherche intervalle*sfunc",
         STYPE = "c_Bibliothèque"."inter-valle"
         ) ;
-        
+    REVOKE EXECUTE ON FUNCTION "c_Bibliothèque"."CHERCHE_INTERVALLE"(int) FROM public ;
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE "c_Bibliothèque"."insert_entree->journal"(qqch text)
+            LANGUAGE SQL
+            AS $$
+            INSERT INTO "c_Bibliothèque"."Journal&du&mur" (jour, entree, auteur)
+                VALUES (now()::date, qqch, current_user);
+            $$' ;
+        EXECUTE 'GRANT EXECUTE ON PROCEDURE "c_Bibliothèque"."insert_entree->journal"(text) TO "g_ASGARD rec:2"' ;
+    END IF ;
+    
     CREATE DOMAIN "c_Bibliothèque"."Chiffre$pair" int
         CONSTRAINT "Chiffre$pair_check" CHECK (VALUE > 0 AND VALUE % 2 = 0) ;
+    REVOKE USAGE ON DOMAIN "c_Bibliothèque"."Chiffre$pair" FROM public ;
         
     CREATE SERVER serveur_bidon
         FOREIGN DATA WRAPPER postgres_fdw
         OPTIONS (host 'localhost', port '5432', dbname 'base_bidon') ;
-    
     CREATE FOREIGN TABLE "c_Bibliothèque"."table distante" (
         id integer NOT NULL,
         data text
         )
         SERVER serveur_bidon
         OPTIONS (schema_name 'schema_bidon', table_name 'table_bidon') ;
+    GRANT ALL ON TABLE "c_Bibliothèque"."table distante" TO public ;
         
     ALTER EVENT TRIGGER asgard_on_create_objet ENABLE ;
 
@@ -8842,6 +9189,8 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Chiffre$pair', 'domain') ;
     RAISE NOTICE '-- 3 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', '"CHERCHE_INTERVALLE"(integer)', 'aggregate') ;
+    REVOKE EXECUTE ON FUNCTION "c_Bibliothèque"."CHERCHE_INTERVALLE"(integer) FROM "g_ASGARD rec:1" ;
+    PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', '"CHERCHE_INTERVALLE"(integer)', 'routine') ;
     RAISE NOTICE '-- 4 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', '"cherche intervalle*sfunc"("c_Bibliothèque"."inter-valle",integer)', 'function') ;
     RAISE NOTICE '-- 5 ------------' ;
@@ -8869,7 +9218,16 @@ BEGIN
     RAISE NOTICE '-- 10 ------------' ;
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'COMP~^teur', 'sequence') ;
     
-    SELECT count(*) = 0
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        RAISE NOTICE '-- 11 ------------' ;
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', '"insert_entree->journal"(text)', 'procedure') ;
+        EXECUTE 'REVOKE EXECUTE ON PROCEDURE "c_Bibliothèque"."insert_entree->journal"(text) FROM "g_ASGARD rec:1"' ;
+        PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', '"insert_entree->journal"(text)', 'routine') ;
+    END IF ;
+    
+    -- il devrait rester deux privilèges révoqués du pseudo-rôle public
+    SELECT count(*) = 2
         INTO STRICT r
         FROM z_asgard_admin.asgard_diagnostic() ;
     
@@ -15705,5 +16063,515 @@ END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t088() IS 'ASGARD recette. TEST : (asgard_expend_privileges) Identification correcte de tous les codes de privilèges.' ;
+
+
+-- FUNCTION: z_asgard_recette.t089()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t089()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_rec_prod_1 ;
+    CREATE ROLE g_asgard_rec_prod_2 ;
+    CREATE ROLE g_asgard_rec_edit_1 ;
+    CREATE ROLE g_asgard_rec_edit_2 ;
+    CREATE ROLE g_asgard_rec_lect_1 ;
+    CREATE ROLE g_asgard_rec_lect_2 ;
+    
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod_1 ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_lect_1',
+            editeur = 'g_asgard_edit_1'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    CREATE FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text)
+        RETURNS int
+        AS $$ SELECT coalesce($1, 0) + coalesce(length($2), 0) $$
+        LANGUAGE SQL ;
+
+    CREATE AGGREGATE c_bibliotheque.longueur_texte(text) (
+        SFUNC = c_bibliotheque.longueur_texte_sfunc(int, text),
+        STYPE = int
+        ) ;
+
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE c_bibliotheque.drop_vue_du_mur()
+            LANGUAGE SQL
+            AS $$
+            DROP VIEW c_bibliotheque.vue_du_mur ;
+            $$' ;
+    END IF ;
+    
+    ------ Contrôle initial des propriétaires ------
+    
+    -- fonction classique
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = 'c_bibliotheque.longueur_texte_sfunc(int, text)'::regprocedure
+        ) = 'g_asgard_rec_prod_1', 'échec assertion #1' ;
+        
+    -- fonction d'agrégation
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = 'c_bibliotheque.longueur_texte(text)'::regprocedure
+        ) = 'g_asgard_rec_prod_1', 'échec assertion #2' ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = 'c_bibliotheque.drop_vue_du_mur()'::regprocedure
+            ) = 'g_asgard_rec_prod_1', 'échec assertion #3' ;
+    END IF ;
+
+    ------ Modification forcée du propriétaire ------
+    
+    -- fonction classique
+    ALTER FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text)
+        OWNER TO g_asgard_rec_prod_2 ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = 'c_bibliotheque.longueur_texte_sfunc(int, text)'::regprocedure
+        ) = 'g_asgard_rec_prod_1', 'échec assertion #4' ;
+    IF current_setting('server_version_num')::int >= 110000
+    -- avec la commande générique ALTER ROUTINE
+    THEN
+        EXECUTE 'ALTER ROUTINE c_bibliotheque.longueur_texte_sfunc(int, text)
+            OWNER TO g_asgard_rec_prod_2 ';
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = 'c_bibliotheque.longueur_texte_sfunc(int, text)'::regprocedure
+            ) = 'g_asgard_rec_prod_1', 'échec assertion #5' ;
+    END IF ;
+    
+    -- fonction d'agrégation
+    ALTER FUNCTION c_bibliotheque.longueur_texte(text)
+        OWNER TO g_asgard_rec_prod_2 ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = 'c_bibliotheque.longueur_texte(text)'::regprocedure
+        ) = 'g_asgard_rec_prod_1', 'échec assertion #6' ;
+    -- avec la commande spécifique ALTER AGGREGATE
+    ALTER AGGREGATE c_bibliotheque.longueur_texte(text)
+        OWNER TO g_asgard_rec_prod_2 ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = 'c_bibliotheque.longueur_texte(text)'::regprocedure
+        ) = 'g_asgard_rec_prod_1', 'échec assertion #7' ;
+    -- avec la commande générique ALTER ROUTINE
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'ALTER ROUTINE c_bibliotheque.longueur_texte(text)
+            OWNER TO g_asgard_rec_prod_2' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = 'c_bibliotheque.longueur_texte(text)'::regprocedure
+            ) = 'g_asgard_rec_prod_1', 'échec assertion #8' ;
+    END IF ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'ALTER PROCEDURE c_bibliotheque.drop_vue_du_mur()
+            OWNER TO g_asgard_rec_prod_2' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = 'c_bibliotheque.drop_vue_du_mur()'::regprocedure
+            ) = 'g_asgard_rec_prod_1', 'échec assertion #9' ;
+        -- avec la commande générique ALTER ROUTINE
+        EXECUTE 'ALTER ROUTINE c_bibliotheque.drop_vue_du_mur()
+            OWNER TO g_asgard_rec_prod_2' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = 'c_bibliotheque.drop_vue_du_mur()'::regprocedure
+            ) = 'g_asgard_rec_prod_1', 'échec assertion #10' ;
+    END IF ;
+    
+    ------ Reproduction des droits des rôles d'Asgard ------
+    
+    REVOKE EXECUTE ON FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text) FROM public ;
+    REVOKE EXECUTE ON FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text) FROM g_asgard_rec_prod_1 ;  
+    GRANT EXECUTE ON FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text) TO g_asgard_edit_1 ;
+    GRANT EXECUTE ON FUNCTION c_bibliotheque.longueur_texte_sfunc(int, text) TO g_asgard_lect_1 ;
+    
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #11' ;
+    ASSERT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #12' ;
+    ASSERT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #13' ;
+    
+    REVOKE EXECUTE ON FUNCTION c_bibliotheque.longueur_texte(text) FROM public ;
+    REVOKE EXECUTE ON FUNCTION c_bibliotheque.longueur_texte(text) FROM g_asgard_rec_prod_1 ;  
+    GRANT EXECUTE ON FUNCTION c_bibliotheque.longueur_texte(text) TO g_asgard_edit_1 ;
+    GRANT EXECUTE ON FUNCTION c_bibliotheque.longueur_texte(text) TO g_asgard_lect_1 ;
+    
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #14' ;
+    ASSERT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #15' ;
+    ASSERT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #16' ;
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'REVOKE EXECUTE ON ROUTINE c_bibliotheque.drop_vue_du_mur() FROM public ;
+        REVOKE EXECUTE ON PROCEDURE c_bibliotheque.drop_vue_du_mur() FROM g_asgard_rec_prod_1 ;  
+        GRANT EXECUTE ON ROUTINE c_bibliotheque.drop_vue_du_mur() TO g_asgard_edit_1 ;
+        GRANT EXECUTE ON PROCEDURE c_bibliotheque.drop_vue_du_mur() TO g_asgard_lect_1' ;
+        
+        ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #17' ;
+        ASSERT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #18' ;
+        ASSERT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #19' ;
+    END IF ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_rec_prod_2',
+            lecteur = 'g_asgard_lect_2',
+            editeur = 'g_asgard_edit_2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    
+    -- fonction classique
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #20' ;
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_2', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #21' ;
+    ASSERT NOT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #22' ;
+    ASSERT has_function_privilege('g_asgard_edit_2', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #23' ;
+    ASSERT NOT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #24' ;
+    ASSERT has_function_privilege('g_asgard_lect_2', 'c_bibliotheque.longueur_texte_sfunc(int, text)', 'EXECUTE'),
+        'échec assertion #25' ;
+    
+    -- fonction d'agrégation
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #26' ;
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod_2', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #27' ;
+    ASSERT NOT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #28' ;
+    ASSERT has_function_privilege('g_asgard_edit_2', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #29' ;
+    ASSERT NOT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #30' ;
+    ASSERT has_function_privilege('g_asgard_lect_2', 'c_bibliotheque.longueur_texte(text)', 'EXECUTE'),
+        'échec assertion #31' ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        ASSERT NOT has_function_privilege('g_asgard_rec_prod_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #32' ;
+        ASSERT NOT has_function_privilege('g_asgard_rec_prod_2', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #33' ;
+        ASSERT NOT has_function_privilege('g_asgard_edit_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #34' ;
+        ASSERT has_function_privilege('g_asgard_edit_2', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #35' ;
+        ASSERT NOT has_function_privilege('g_asgard_lect_1', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #36' ;
+        ASSERT has_function_privilege('g_asgard_lect_2', 'c_bibliotheque.drop_vue_du_mur()', 'EXECUTE'),
+            'échec assertion #37' ;
+    END IF ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP ROLE g_asgard_rec_prod_1 ;
+    DROP ROLE g_asgard_rec_prod_2 ;
+    DROP ROLE g_asgard_rec_edit_1 ;
+    DROP ROLE g_asgard_rec_edit_2 ;
+    DROP ROLE g_asgard_rec_lect_1 ;
+    DROP ROLE g_asgard_rec_lect_2 ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t089() IS 'ASGARD recette. TEST : Prise en charge des commandes sur tous les types de routines.' ;
+
+
+-- FUNCTION: z_asgard_recette.t089b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t089b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_rec_PROD_1" ;
+    CREATE ROLE "g_asgard_rec_prod*2" ;
+    CREATE ROLE g_asgard_rec_edit_1 ;
+    CREATE ROLE g_asgard_rec_edit_2 ;
+    CREATE ROLE g_asgard_rec_lect_1 ;
+    CREATE ROLE g_asgard_rec_lect_2 ;
+    
+    CREATE SCHEMA "c_ Bibliothèque" AUTHORIZATION "g_asgard_rec_PROD_1" ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_LECT_1',
+            editeur = 'g_asgard_edit 1'
+        WHERE nom_schema = 'c_ Bibliothèque' ;
+    
+    CREATE FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)
+        RETURNS int
+        AS $$ SELECT coalesce($1, 0) + coalesce(length($2), 0) $$
+        LANGUAGE SQL ;
+
+    CREATE AGGREGATE "c_ Bibliothèque"."lOOngueur texte"(text) (
+        SFUNC = "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text),
+        STYPE = int
+        ) ;
+
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'CREATE PROCEDURE "c_ Bibliothèque"."drop <> vue_du_mur"()
+            LANGUAGE SQL
+            AS $$
+            DROP VIEW "c_ Bibliothèque".vue_du_mur ;
+            $$' ;
+    END IF ;
+    
+    ------ Contrôle initial des propriétaires ------
+    
+    -- fonction classique
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)'::regprocedure
+        ) = '"g_asgard_rec_PROD_1"', 'échec assertion #1' ;
+        
+    -- fonction d'agrégation
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = '"c_ Bibliothèque"."lOOngueur texte"(text)'::regprocedure
+        ) = '"g_asgard_rec_PROD_1"', 'échec assertion #2' ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = '"c_ Bibliothèque"."drop <> vue_du_mur"()'::regprocedure
+            ) = '"g_asgard_rec_PROD_1"', 'échec assertion #3' ;
+    END IF ;
+
+    ------ Modification forcée du propriétaire ------
+    
+    -- fonction classique
+    ALTER FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)
+        OWNER TO "g_asgard_rec_prod*2" ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)'::regprocedure
+        ) = '"g_asgard_rec_PROD_1"', 'échec assertion #4' ;
+    IF current_setting('server_version_num')::int >= 110000
+    -- avec la commande générique ALTER ROUTINE
+    THEN
+        EXECUTE 'ALTER ROUTINE "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)
+            OWNER TO "g_asgard_rec_prod*2" ';
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)'::regprocedure
+            ) = '"g_asgard_rec_PROD_1"', 'échec assertion #5' ;
+    END IF ;
+    
+    -- fonction d'agrégation
+    ALTER FUNCTION "c_ Bibliothèque"."lOOngueur texte"(text)
+        OWNER TO "g_asgard_rec_prod*2" ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = '"c_ Bibliothèque"."lOOngueur texte"(text)'::regprocedure
+        ) = '"g_asgard_rec_PROD_1"', 'échec assertion #6' ;
+    -- avec la commande spécifique ALTER AGGREGATE
+    ALTER AGGREGATE "c_ Bibliothèque"."lOOngueur texte"(text)
+        OWNER TO "g_asgard_rec_prod*2" ;
+    ASSERT (
+        SELECT proowner::regrole::text
+            FROM pg_proc
+            WHERE oid = '"c_ Bibliothèque"."lOOngueur texte"(text)'::regprocedure
+        ) = '"g_asgard_rec_PROD_1"', 'échec assertion #7' ;
+    -- avec la commande générique ALTER ROUTINE
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'ALTER ROUTINE "c_ Bibliothèque"."lOOngueur texte"(text)
+            OWNER TO "g_asgard_rec_prod*2"' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = '"c_ Bibliothèque"."lOOngueur texte"(text)'::regprocedure
+            ) = '"g_asgard_rec_PROD_1"', 'échec assertion #8' ;
+    END IF ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'ALTER PROCEDURE "c_ Bibliothèque"."drop <> vue_du_mur"()
+            OWNER TO "g_asgard_rec_prod*2"' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = '"c_ Bibliothèque"."drop <> vue_du_mur"()'::regprocedure
+            ) = '"g_asgard_rec_PROD_1"', 'échec assertion #9' ;
+        -- avec la commande générique ALTER ROUTINE
+        EXECUTE 'ALTER ROUTINE "c_ Bibliothèque"."drop <> vue_du_mur"()
+            OWNER TO "g_asgard_rec_prod*2"' ;
+        ASSERT (
+            SELECT proowner::regrole::text
+                FROM pg_proc
+                WHERE oid = '"c_ Bibliothèque"."drop <> vue_du_mur"()'::regprocedure
+            ) = '"g_asgard_rec_PROD_1"', 'échec assertion #10' ;
+    END IF ;
+    
+    ------ Reproduction des droits des rôles d'Asgard ------
+    
+    REVOKE EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text) FROM public ;
+    REVOKE EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text) FROM "g_asgard_rec_PROD_1" ;  
+    GRANT EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text) TO "g_asgard_edit 1" ;
+    GRANT EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text) TO "g_asgard_LECT_1" ;
+    
+    ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #11' ;
+    ASSERT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #12' ;
+    ASSERT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #13' ;
+    
+    REVOKE EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOngueur texte"(text) FROM public ;
+    REVOKE EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOngueur texte"(text) FROM "g_asgard_rec_PROD_1" ;  
+    GRANT EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOngueur texte"(text) TO "g_asgard_edit 1" ;
+    GRANT EXECUTE ON FUNCTION "c_ Bibliothèque"."lOOngueur texte"(text) TO "g_asgard_LECT_1" ;
+    
+    ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #14' ;
+    ASSERT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #15' ;
+    ASSERT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #16' ;
+    
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        EXECUTE 'REVOKE EXECUTE ON ROUTINE "c_ Bibliothèque"."drop <> vue_du_mur"() FROM public ;
+        REVOKE EXECUTE ON PROCEDURE "c_ Bibliothèque"."drop <> vue_du_mur"() FROM "g_asgard_rec_PROD_1" ;  
+        GRANT EXECUTE ON ROUTINE "c_ Bibliothèque"."drop <> vue_du_mur"() TO "g_asgard_edit 1" ;
+        GRANT EXECUTE ON PROCEDURE "c_ Bibliothèque"."drop <> vue_du_mur"() TO "g_asgard_LECT_1"' ;
+        
+        ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #17' ;
+        ASSERT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #18' ;
+        ASSERT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #19' ;
+    END IF ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_rec_prod*2',
+            lecteur = 'g_asgard_LECT2 !!!',
+            editeur = 'g_asgard_EIDT2 ???'
+        WHERE nom_schema = 'c_ Bibliothèque' ;
+    
+    -- fonction classique
+    ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #20' ;
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod*2', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #21' ;
+    ASSERT NOT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #22' ;
+    ASSERT has_function_privilege('g_asgard_EIDT2 ???', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #23' ;
+    ASSERT NOT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #24' ;
+    ASSERT has_function_privilege('g_asgard_LECT2 !!!', '"c_ Bibliothèque"."lOOOOngueur_texte_sfunc"(int, text)', 'EXECUTE'),
+        'échec assertion #25' ;
+    
+    -- fonction d'agrégation
+    ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #26' ;
+    ASSERT NOT has_function_privilege('g_asgard_rec_prod*2', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #27' ;
+    ASSERT NOT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #28' ;
+    ASSERT has_function_privilege('g_asgard_EIDT2 ???', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #29' ;
+    ASSERT NOT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #30' ;
+    ASSERT has_function_privilege('g_asgard_LECT2 !!!', '"c_ Bibliothèque"."lOOngueur texte"(text)', 'EXECUTE'),
+        'échec assertion #31' ;
+    
+    -- procédure
+    IF current_setting('server_version_num')::int >= 110000
+    THEN
+        ASSERT NOT has_function_privilege('g_asgard_rec_PROD_1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #32' ;
+        ASSERT NOT has_function_privilege('g_asgard_rec_prod*2', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #33' ;
+        ASSERT NOT has_function_privilege('g_asgard_edit 1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #34' ;
+        ASSERT has_function_privilege('g_asgard_EIDT2 ???', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #35' ;
+        ASSERT NOT has_function_privilege('g_asgard_LECT_1', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #36' ;
+        ASSERT has_function_privilege('g_asgard_LECT2 !!!', '"c_ Bibliothèque"."drop <> vue_du_mur"()', 'EXECUTE'),
+            'échec assertion #37' ;
+    END IF ;
+
+    DROP SCHEMA "c_ Bibliothèque" CASCADE ;
+    DROP ROLE "g_asgard_rec_PROD_1" ;
+    DROP ROLE "g_asgard_rec_prod*2" ;
+    DROP ROLE g_asgard_rec_edit_1 ;
+    DROP ROLE g_asgard_rec_edit_2 ;
+    DROP ROLE g_asgard_rec_lect_1 ;
+    DROP ROLE g_asgard_rec_lect_2 ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t089b() IS 'ASGARD recette. TEST : Prise en charge des commandes sur tous les types de routines.' ;
 
 
