@@ -16078,10 +16078,6 @@ BEGIN
 
     CREATE ROLE g_asgard_rec_prod_1 ;
     CREATE ROLE g_asgard_rec_prod_2 ;
-    CREATE ROLE g_asgard_rec_edit_1 ;
-    CREATE ROLE g_asgard_rec_edit_2 ;
-    CREATE ROLE g_asgard_rec_lect_1 ;
-    CREATE ROLE g_asgard_rec_lect_2 ;
     
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec_prod_1 ;
     UPDATE z_asgard.gestion_schema_usr
@@ -16299,10 +16295,11 @@ BEGIN
     DROP SCHEMA c_bibliotheque CASCADE ;
     DROP ROLE g_asgard_rec_prod_1 ;
     DROP ROLE g_asgard_rec_prod_2 ;
-    DROP ROLE g_asgard_rec_edit_1 ;
-    DROP ROLE g_asgard_rec_edit_2 ;
-    DROP ROLE g_asgard_rec_lect_1 ;
-    DROP ROLE g_asgard_rec_lect_2 ;
+    DROP ROLE g_asgard_edit_1 ;
+    DROP ROLE g_asgard_edit_2 ;
+    DROP ROLE g_asgard_lect_1 ;
+    DROP ROLE g_asgard_lect_2 ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
 
     RETURN True ;
     
@@ -16333,10 +16330,6 @@ BEGIN
 
     CREATE ROLE "g_asgard_rec_PROD_1" ;
     CREATE ROLE "g_asgard_rec_prod*2" ;
-    CREATE ROLE g_asgard_rec_edit_1 ;
-    CREATE ROLE g_asgard_rec_edit_2 ;
-    CREATE ROLE g_asgard_rec_lect_1 ;
-    CREATE ROLE g_asgard_rec_lect_2 ;
     
     CREATE SCHEMA "c_ Bibliothèque" AUTHORIZATION "g_asgard_rec_PROD_1" ;
     UPDATE z_asgard.gestion_schema_usr
@@ -16554,10 +16547,11 @@ BEGIN
     DROP SCHEMA "c_ Bibliothèque" CASCADE ;
     DROP ROLE "g_asgard_rec_PROD_1" ;
     DROP ROLE "g_asgard_rec_prod*2" ;
-    DROP ROLE g_asgard_rec_edit_1 ;
-    DROP ROLE g_asgard_rec_edit_2 ;
-    DROP ROLE g_asgard_rec_lect_1 ;
-    DROP ROLE g_asgard_rec_lect_2 ;
+    DROP ROLE "g_asgard_edit 1" ;
+    DROP ROLE "g_asgard_EIDT2 ???" ;
+    DROP ROLE "g_asgard_LECT_1" ;
+    DROP ROLE "g_asgard_LECT2 !!!" ;
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_ Bibliothèque' ;
 
     RETURN True ;
     
