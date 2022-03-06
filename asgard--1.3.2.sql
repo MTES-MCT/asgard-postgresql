@@ -1470,12 +1470,12 @@ CREATE OR REPLACE FUNCTION z_asgard.asgard_synthese_public(n_schema regnamespace
            recréer les droits de public sur les objets du
            schéma "schema" (et le schéma lui-même).
 REMARQUE : La fonction ne s'intéresse pas aux objets de type
-fonction (dont agrégats) et type (dont domaines), sur lesquels
-public reçoit des droits par défaut qu'il n'est pas judicieux
-de reproduire sur un autre rôle, ni de révoquer lors d'un
-changement de lecteur/éditeur. Si des privilèges par défaut ont
-été révoqués pour public, la révocation restera valable pour les
-futurs lecteur/éditeurs puisqu'il n'y a pas d'attribution
+type routine (fonctions, dont agrégats, et procédures) et type
+(dont domaines), sur lesquels public reçoit des droits par défaut
+qu'il n'est pas judicieux de reproduire sur un autre rôle, ni de
+révoquer lors d'un changement de lecteur/éditeur. Si des privilèges
+par défaut ont été révoqués pour public, la révocation restera valable
+pour les futurs lecteur/éditeurs puisqu'il n'y a pas d'attribution
 de privilèges supplémentaires pour les lecteurs/éditeurs sur
 ces objets.
 ARGUMENT : "schema" est un nom de schéma valide, casté en
@@ -1539,8 +1539,8 @@ CREATE OR REPLACE FUNCTION z_asgard.asgard_synthese_role_obj(obj_oid oid, obj_ty
            liste de commandes GRANT et REVOKE permettant de
            recréer les droits de "n_role" sur un objet de type
 		   table, table étrangère, partition de table, vue,
-           vue matérialisée, séquence, fonction (dont fonctions
-           d'agrégations), type (dont domaines).
+           vue matérialisée, séquence, routine (fonctions,
+           dont agrégats, et procédures), type (dont domaines).
 ARGUMENTS :
 - "obj_oid" est l'identifiant interne de l'objet ;
 - "obj_type" est le type de l'objet au format text ('table',
@@ -4686,7 +4686,7 @@ CREATE OR REPLACE FUNCTION z_asgard.asgard_expend_privileges(privileges_codes te
     AS $_$
 /* OBJET : Fonction qui explicite les privilèges correspondant
            aux codes données en argument. Par exemple
-           ARRAY['SELECT', 'UPDATE'] pour 'rw'. Si un code n'est pas
+           'SELECT' et 'UPDATE' pour 'rw'. Si un code n'est pas
            reconnu, il est ignoré.
 ARGUMENT : Les codes des privilèges, concaténés sous la forme d'une
 unique chaîne de caractères.
