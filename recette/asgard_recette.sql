@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.3.2
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.4.0
 -- > Script de recette.
 --
 -- Copyright République Française, 2020-2022.
@@ -16569,3 +16569,93 @@ $_$;
 COMMENT ON FUNCTION z_asgard_recette.t089b() IS 'ASGARD recette. TEST : Prise en charge des commandes sur tous les types de routines.' ;
 
 
+-- FUNCTION: z_asgard_recette.t090()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t090()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.4' ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #1' ;
+    
+    ALTER EXTENSION asgard UPDATE ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #2' ;
+        
+    SET ROLE g_admin ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #3' ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t090() IS 'ASGARD recette. TEST : Préservation du référencement des schémas lors des montées de version.' ;
+
+
+-- FUNCTION: z_asgard_recette.t090b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t090b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.4' ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION g_admin ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #1' ;
+    
+    ALTER EXTENSION asgard UPDATE ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #2' ;
+
+    SET ROLE g_admin ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #3' ;
+
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t090b() IS 'ASGARD recette. TEST : Préservation du référencement des schémas lors des montées de version.' ;
