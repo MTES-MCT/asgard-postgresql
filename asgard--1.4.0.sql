@@ -261,7 +261,7 @@ CREATE SCHEMA z_asgard
     
 COMMENT ON SCHEMA z_asgard IS 'ASGARD. Utilitaires pour la gestion des droits.' ;
 
-GRANT USAGE ON SCHEMA z_asgard TO g_consult ;
+GRANT USAGE ON SCHEMA z_asgard TO public ;
 
 
 ------ 2.2 - TABLE GESTION_SCHEMA ------
@@ -371,7 +371,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_usr AS (
 ALTER VIEW z_asgard.gestion_schema_usr
     OWNER TO g_admin_ext;
     
-GRANT SELECT ON TABLE z_asgard.gestion_schema_usr TO g_consult ;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_usr TO public ;
 
 COMMENT ON VIEW z_asgard.gestion_schema_usr IS 'ASGARD. Vue pour la gestion courante des schémas - création et administration des droits.' ;
 
@@ -425,7 +425,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_etr AS (
 ALTER VIEW z_asgard.gestion_schema_etr
     OWNER TO g_admin_ext;
     
-GRANT SELECT ON TABLE z_asgard.gestion_schema_etr TO g_consult ;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_etr TO public ;
 
 COMMENT ON VIEW z_asgard.gestion_schema_etr IS 'ASGARD. Vue technique pour l''alimentation de la table z_asgard_admin.gestion_schema par les déclencheurs.' ;
 
@@ -478,7 +478,7 @@ CREATE OR REPLACE VIEW z_asgard.asgardmenu_metadata AS (
 ALTER VIEW z_asgard.asgardmenu_metadata
     OWNER TO g_admin_ext ;
     
-GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO g_consult ;
+GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO public ;
 
 COMMENT ON VIEW z_asgard.asgardmenu_metadata IS 'ASGARD. Données utiles à l''extension QGIS AsgardMenu.' ;
 COMMENT ON COLUMN z_asgard.asgardmenu_metadata.id IS 'Identifiant entier unique.' ;
@@ -516,7 +516,7 @@ CREATE OR REPLACE VIEW z_asgard.asgardmanager_metadata AS (
 ALTER VIEW z_asgard.asgardmanager_metadata
     OWNER TO g_admin_ext ;
     
-GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO g_consult ;
+GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO public ;
 
 COMMENT ON VIEW z_asgard.asgardmanager_metadata IS 'ASGARD. Données utiles à l''extension QGIS AsgardManager.' ;
 COMMENT ON COLUMN z_asgard.asgardmanager_metadata.id IS 'Identifiant entier unique.' ;
@@ -550,7 +550,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_read_only AS (
 ALTER VIEW z_asgard.gestion_schema_read_only
     OWNER TO g_admin_ext;
     
-GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO g_consult ;
+GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO public ;
 
 COMMENT ON VIEW z_asgard.gestion_schema_read_only IS 'ASGARD. Vue de consultation des droits définis sur les schémas. Accessible à tous en lecture seule.' ;
 
@@ -593,18 +593,21 @@ COMMENT ON COLUMN z_asgard.gestion_schema_read_only.lecteur IS 'Rôle désigné 
 
 -- Function: z_asgard_admin.asgard_on_alter_schema()
 
-CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_alter_schema() RETURNS event_trigger
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_alter_schema()
+    RETURNS event_trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_alter_schema qui
-           répercute dans la table z_asgard_admin.gestion_schema (via la vue
-           z_asgard.gestion_schema_etr) les modifications de noms
-           et propriétaires des schémas réalisées par des commandes
-           ALTER SCHEMA directes.
-DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('ALTER SCHEMA') */
+/* Fonction exécutée par le déclencheur sur évènement asgard_on_alter_schema,
+qui répercute sur la table de gestion d'Asgard les changements de noms et
+propriétaires réalisés par des commandes ALTER SCHEMA directes.
+
+    Elle n'écrit pas directement dans la table z_asgard_admin.gestion_schema,
+    mais dans la vue modifiable z_asgard.gestion_schema_etr.
+
+*/
 DECLARE
     obj record ;
+    objname text ;
     e_mssg text ;
     e_hint text ;
     e_detl text ;
@@ -612,50 +615,48 @@ BEGIN
     ------ CONTROLES DES PRIVILEGES ------
     IF NOT has_schema_privilege('z_asgard', 'USAGE')
     THEN
-        RAISE EXCEPTION 'EAS1. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EAS1. Schéma z_asgard inaccessible.' ;
     END IF ;
     
     IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'UPDATE')
-             OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
+        OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
     THEN
-        RAISE EXCEPTION 'EAS2. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EAS2. Permissions insuffisantes pour la vue z_asgard.gestion_schema_etr.' ;
     END IF ;
 
 
 	FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
-                    WHERE object_type = 'schema'
+        WHERE object_type = 'schema'
     LOOP
     
         ------ RENAME ------
         UPDATE z_asgard.gestion_schema_etr
-            SET nom_schema = replace(obj.object_identity, '"', ''),
+            SET nom_schema = nspname,
                 ctrl = ARRAY['RENAME', 'x7-A;#rzo']
+            FROM pg_catalog.pg_namespace
             WHERE oid_schema = obj.objid
-                AND NOT quote_ident(nom_schema) = obj.object_identity ;
+                AND obj.objid = pg_namespace.oid
+                AND NOT nom_schema = nspname
+            RETURNING nspname INTO objname ;
         IF FOUND
         THEN
-            RAISE NOTICE '... Le nom du schéma % a été mis à jour dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
+            RAISE NOTICE '... Le nom du schéma % a été mis à jour dans la table de gestion.',  objname ;
         END IF ;
 
         ------ OWNER TO ------
         UPDATE z_asgard.gestion_schema_etr
-            SET (producteur, oid_producteur, ctrl) = (
-                SELECT
-                    replace(nspowner::regrole::text, '"', ''),
-                    nspowner,
-                    ARRAY['OWNER', 'x7-A;#rzo']
-                    FROM pg_catalog.pg_namespace
-                    WHERE obj.objid = pg_namespace.oid
-                )
-			WHERE oid_schema = obj.objid
-    			AND NOT oid_producteur = (
-             		SELECT nspowner
-                  	FROM pg_catalog.pg_namespace
-                 	 WHERE obj.objid = pg_namespace.oid
-             		) ;
+            SET producteur = rolname,
+                oid_producteur = nspowner,
+                ctrl = ARRAY['OWNER', 'x7-A;#rzo']
+            FROM pg_catalog.pg_namespace
+                LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
+            WHERE oid_schema = obj.objid
+                AND obj.objid = pg_namespace.oid
+                AND NOT oid_producteur = nspowner
+            RETURNING nspname INTO objname ;
         IF FOUND
         THEN
-            RAISE NOTICE '... Le producteur du schéma % a été mis à jour dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
+            RAISE NOTICE '... Le producteur du schéma % a été mis à jour dans la table de gestion.',  objname ;
         END IF ;
 
     END LOOP ;
@@ -667,14 +668,14 @@ EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'EAS0 > %', e_mssg
         USING DETAIL = e_detl,
             HINT = e_hint ;
-               
+
 END
 $BODY$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_on_alter_schema()
     OWNER TO g_admin ;
     
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les changements de noms et propriétaires réalisés par des commandes ALTER SCHEMA directes.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_schema() IS 'ASGARD. Fonction exécutée par le déclencheur sur évènement asgard_on_alter_schema, qui répercute sur la table de gestion d''Asgard les changements de noms et propriétaires réalisés par des commandes ALTER SCHEMA directes.' ;
 
 
 -- Event Trigger: asgard_on_alter_schema
@@ -683,7 +684,7 @@ CREATE EVENT TRIGGER asgard_on_alter_schema ON DDL_COMMAND_END
     WHEN TAG IN ('ALTER SCHEMA')
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_schema() ;
 
-COMMENT ON EVENT TRIGGER asgard_on_alter_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les changements de noms et propriétaires réalisés par des commandes ALTER SCHEMA directes.' ;
+COMMENT ON EVENT TRIGGER asgard_on_alter_schema IS 'ASGARD. Déclencheur sur évènement qui répercute sur la table de gestion d''Asgard les changements de noms et propriétaires réalisés par des commandes ALTER SCHEMA directes.' ;
 
 
 
@@ -694,14 +695,17 @@ COMMENT ON EVENT TRIGGER asgard_on_alter_schema IS 'ASGARD. Event trigger qui r�
 CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_schema() RETURNS event_trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_create_schema qui
-           répercute dans la table z_asgard_admin.gestion_schema (via la vue
-           z_asgard.gestion_schema_etr) les créations de schémas
-           réalisées par des commandes CREATE SCHEMA directes.
-DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('CREATE SCHEMA') */
+/* Fonction exécutée par le déclencheur sur évènement asgard_on_create_schema,
+qui répercute sur la table de gestion d'Asgard les créations de schémas réalisées
+par des commandes CREATE SCHEMA directes.
+
+    Elle n'écrit pas directement dans la table z_asgard_admin.gestion_schema,
+    mais dans la vue modifiable z_asgard.gestion_schema_etr.
+
+*/
 DECLARE
     obj record ;
+    objname text ;
     e_mssg text ;
     e_hint text ;
     e_detl text ;
@@ -709,39 +713,39 @@ BEGIN
     ------ CONTROLES DES PRIVILEGES ------
     IF NOT has_schema_privilege('z_asgard', 'USAGE')
     THEN
-        RAISE EXCEPTION 'ECS1. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'ECS1. Schéma z_asgard inaccessible.' ;
     END IF ;
     
     IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'UPDATE')
-            OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'INSERT')
-            OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
+        OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'INSERT')
+        OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
     THEN
-        RAISE EXCEPTION 'ECS2. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'ECS2. Permissions insuffisantes pour la vue z_asgard.gestion_schema_etr.' ;
     END IF ;
 
 
 	FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
-                    WHERE object_type = 'schema'
+        WHERE object_type = 'schema'
     LOOP
     
         ------ SCHEMA PRE-ENREGISTRE DANS GESTION_SCHEMA ------
         UPDATE z_asgard.gestion_schema_etr
-            SET (oid_schema, producteur, oid_producteur, creation, ctrl) = (
-                SELECT
-                    obj.objid,
-                    replace(nspowner::regrole::text, '"', ''),
-                    nspowner,
-                    true,
-                    ARRAY['CREATE', 'x7-A;#rzo']
-                    FROM pg_catalog.pg_namespace
-                    WHERE obj.objid = pg_namespace.oid
-                )
+            SET oid_schema = obj.objid,
+                producteur = rolname,
+                oid_producteur = nspowner,
+                creation = True,
+                ctrl = ARRAY['CREATE', 'x7-A;#rzo']
+            FROM pg_catalog.pg_namespace
+                LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
             WHERE quote_ident(nom_schema) = obj.object_identity
-                AND NOT creation  ; -- creation vaut true si et seulement si la création a été initiée via la table
-                                    -- de gestion dans ce cas, il n'est pas nécessaire de réintervenir dessus
+                AND obj.objid = pg_namespace.oid
+                AND NOT creation
+            RETURNING nspname INTO objname ;
+            -- creation vaut true si et seulement si la création a été initiée via la table
+            -- de gestion dans ce cas, il n'est pas nécessaire de réintervenir dessus
         IF FOUND
         THEN
-            RAISE NOTICE '... Le schéma % apparaît désormais comme "créé" dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
+            RAISE NOTICE '... Le schéma % apparaît désormais comme "créé" dans la table de gestion.', objname ;
 
         ------ SCHEMA NON REPERTORIE DANS GESTION_SCHEMA ------
         ELSIF NOT obj.object_identity IN (SELECT quote_ident(nom_schema) FROM z_asgard.gestion_schema_etr)
@@ -749,15 +753,17 @@ BEGIN
             INSERT INTO z_asgard.gestion_schema_etr (oid_schema, nom_schema, producteur, oid_producteur, creation, ctrl)(
                 SELECT
                     obj.objid,
-                    replace(obj.object_identity, '"', ''),
-                    replace(nspowner::regrole::text, '"', ''),
+                    nspname,
+                    rolname,
                     nspowner,
-                    true,
+                    True,
                     ARRAY['CREATE', 'x7-A;#rzo']
                     FROM pg_catalog.pg_namespace
+                        LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
                     WHERE obj.objid = pg_namespace.oid
-                ) ;
-            RAISE NOTICE '... Le schéma % a été enregistré dans la table de gestion.',  replace(obj.object_identity, '"', '') ;
+                )
+                RETURNING nom_schema INTO objname ;
+            RAISE NOTICE '... Le schéma % a été enregistré dans la table de gestion.', objname ;
         END IF ;
         
 	END LOOP ;
@@ -776,7 +782,7 @@ $BODY$ ;
 ALTER FUNCTION z_asgard_admin.asgard_on_create_schema()
     OWNER TO g_admin ;
     
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_schema() IS 'ASGARD. Fonction exécutée par le déclencheur sur évènement asgard_on_create_schema, qui répercute sur la table de gestion d''Asgard les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
 
 
 -- Event Trigger: asgard_on_create_schema
@@ -785,9 +791,7 @@ CREATE EVENT TRIGGER asgard_on_create_schema ON DDL_COMMAND_END
     WHEN TAG IN ('CREATE SCHEMA')
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_schema() ;
     
-COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
-    
-    
+COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Déclencheur sur évènement qui répercute sur la table de gestion d''Asgard les créations de schémas réalisées par des commandes CREATE SCHEMA directes.' ;
     
 
 ------ 3.3 - EVENT TRIGGER SUR DROP SCHEMA ------
@@ -797,15 +801,18 @@ COMMENT ON EVENT TRIGGER asgard_on_create_schema IS 'ASGARD. Event trigger qui r
 CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_drop_schema() RETURNS event_trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_drop_schema qui
-           répercute dans la table z_asgard_admin.gestion_schema (via la vue
-           z_asgard.gestion_schema_etr) les suppressions de schémas
-           réalisées par des commandes DROP SCHEMA directes ou exécutées
-           dans le cadre de la désinstallation d'une extension.
-DECLENCHEMENT : ON SQL DROP.
-CONDITION : WHEN TAG IN ('DROP SCHEMA', 'DROP EXTENSION') */
+/* Fonction exécutée par le déclencheur sur évènement asgard_on_drop_schema,
+qui répercute sur la table de gestion d'Asgard les suppressions de schémas
+réalisées par des commandes DROP SCHEMA directes ou dans le cadre de la
+suppression d'une extension.
+
+    Elle n'écrit pas directement dans la table z_asgard_admin.gestion_schema,
+    mais dans la vue modifiable z_asgard.gestion_schema_etr.
+
+*/
 DECLARE
 	obj record ;
+    objname text ;
     e_mssg text ;
     e_hint text ;
     e_detl text ;
@@ -813,25 +820,25 @@ BEGIN
     ------ CONTROLES DES PRIVILEGES ------
     IF NOT has_schema_privilege('z_asgard', 'USAGE')
     THEN
-        RAISE EXCEPTION 'EDS1. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EDS1. Schéma z_asgard inaccessible.' ;
     END IF ;
     
     IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'UPDATE')
-            OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
+        OR NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
     THEN
-        RAISE EXCEPTION 'EDS2. Vous devez être membre du groupe éditeur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EDS2. Permissions insuffisantes pour la vue z_asgard.gestion_schema_etr.' ;
     END IF ;
     
-
 	FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()
                     WHERE object_type = 'schema'
     LOOP
         ------ ENREGISTREMENT DE LA SUPPRESSION ------
 		UPDATE z_asgard.gestion_schema_etr
 			SET (creation, oid_schema, ctrl) = (False, NULL, ARRAY['DROP', 'x7-A;#rzo'])
-			WHERE quote_ident(nom_schema) = obj.object_identity ;    
+			WHERE quote_ident(nom_schema) = obj.object_identity
+            RETURNING nom_schema INTO objname ;    
 		IF FOUND THEN
-			RAISE NOTICE '... La suppression du schéma % a été enregistrée dans la table de gestion (creation = False).', replace(obj.object_identity, '"', '');
+			RAISE NOTICE '... La suppression du schéma % a été enregistrée dans la table de gestion (creation = False).', objname ;
 		END IF ;
         
 	END LOOP ;
@@ -845,21 +852,21 @@ EXCEPTION WHEN OTHERS THEN
             HINT = e_hint ;
                
 END
-$BODY$;
+$BODY$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_on_drop_schema()
     OWNER TO g_admin;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_drop_schema() IS 'ASGARD. Fonction appelée par l''event trigger qui répercute sur la table de gestion les suppressions de schémas réalisées par des commandes DROP SCHEMA directes ou exécutées dans le cadre de la désinstallation d''une extension.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_drop_schema() IS 'ASGARD. Fonction exécutée par le déclencheur sur évènement asgard_on_drop_schema, qui répercute sur la table de gestion d''Asgard les suppressions de schémas réalisées par des commandes DROP SCHEMA directes ou dans le cadre de la suppression d''une extension.' ;
 
 
 -- Event Trigger: asgard_on_drop_schema
 
 CREATE EVENT TRIGGER asgard_on_drop_schema ON SQL_DROP
-    WHEN TAG IN ('DROP SCHEMA', 'DROP EXTENSION')
+    WHEN TAG IN ('DROP SCHEMA', 'DROP EXTENSION', 'DROP OWNED')
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_drop_schema() ;
     
-COMMENT ON EVENT TRIGGER asgard_on_drop_schema IS 'ASGARD. Event trigger qui répercute sur la table de gestion les suppressions de schémas réalisées par des commandes DROP SCHEMA directes ou exécutées dans le cadre de la désinstallation d''une extension.' ;
+COMMENT ON EVENT TRIGGER asgard_on_drop_schema IS 'ASGARD. Déclencheur sur évènement qui répercute sur la table de gestion d''Asgard les suppressions de schémas réalisées par des commandes DROP SCHEMA directes ou dans le cadre de la suppression d''une extension.' ;
 
 
 
@@ -867,22 +874,20 @@ COMMENT ON EVENT TRIGGER asgard_on_drop_schema IS 'ASGARD. Event trigger qui ré
 
 -- Function: z_asgard_admin.asgard_on_create_objet()
 
-CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_objet() RETURNS event_trigger
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_create_objet()
+    RETURNS event_trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_create_objet qui
-           veille à attribuer aux nouveaux objets créés les droits prévus
-           pour le schéma dans la table de gestion.
-AVERTISSEMENT : Les commandes CREATE OPERATOR CLASS, CREATE OPERATOR FAMILY
-et CREATE STATISTICS ne sont pas prises en charge pour l'heure.
-DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
-'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
-'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
-'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
-'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE').
-À partir de PostgreSQL 11, 'CREATE PROCEDURE' déclenche également l'exécution
-de la présente fonction. */
+/* Fonction exécutée par le déclencheur sur évènement asgard_on_create_objet,
+qui applique aux nouveaux objets créés les droits pré-définis pour le schéma
+dans la table de gestion d'Asgard.
+
+    Elle est activée par toutes les commandes CREATE portant sur des objets qui
+    dépendent d'un schéma et ont un propriétaire.
+
+    Elle ignore les objets dont le schéma n'est pas référencé par Asgard.
+
+*/
 DECLARE
     obj record ;
     roles record ;
@@ -897,16 +902,17 @@ BEGIN
     ------ CONTROLES DES PRIVILEGES ------
     IF NOT has_schema_privilege('z_asgard', 'USAGE')
     THEN
-        RAISE EXCEPTION 'ECO1. Vous devez être membre du groupe lecteur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'ECO1. Schéma z_asgard inaccessible.' ;
     END IF ;
     
     IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
     THEN
-        RAISE EXCEPTION 'ECO2. Vous devez être membre du groupe lecteur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'ECO2. Permissions insuffisantes pour la vue z_asgard.gestion_schema_etr.' ;
     END IF ;
     
 
-    FOR obj IN SELECT DISTINCT classid, objid, object_type, schema_name, object_identity
+    FOR obj IN SELECT DISTINCT
+        classid, objid, object_type, schema_name, object_identity
         FROM pg_event_trigger_ddl_commands()
         WHERE schema_name IS NOT NULL
         ORDER BY object_type DESC
@@ -939,24 +945,52 @@ BEGIN
                 -- comme les "table constraint"
                 
             IF FOUND
-            THEN
-                
+            THEN               
                 -- récupération du propriétaire courant de l'objet
                 -- génère une erreur si la requête ne renvoie rien
-                EXECUTE format('SELECT %s::regrole::text FROM %s WHERE oid = %s',
-                        xowner, obj.classid::regclass, obj.objid)
+                EXECUTE format('SELECT rolname
+                    FROM %2$s LEFT JOIN pg_catalog.pg_roles
+                        ON %1$s = pg_roles.oid
+                    WHERE %2$s.oid = %3$s',
+                    xowner, obj.classid::regclass, obj.objid)
                     INTO STRICT proprietaire ;
                        
                 -- si le propriétaire courant n'est pas le producteur
-                IF NOT roles.producteur::text = proprietaire
+                IF NOT roles.producteur = proprietaire
                 THEN
                 
                     ------ PROPRIETAIRE DE L'OBJET (DROITS DU PRODUCTEUR) ------
-                    RAISE NOTICE 'réattribution de la propriété de % au rôle producteur du schéma :', obj.object_identity ;
-                    l := format('ALTER %s %s OWNER TO %I', obj.object_type,
-                        obj.object_identity, roles.producteur) ;
+                    RAISE NOTICE 'réattribution de la propriété de % au rôle producteur du schéma :',
+                        obj.object_identity ;
+                    l := format('ALTER %s %s OWNER TO %I',
+                        CASE WHEN obj.object_type = 'statistics object'
+                            THEN 'statistics' ELSE obj.object_type END,
+                            obj.object_identity, roles.producteur) ;
                     EXECUTE l ;
                     RAISE NOTICE '> %', l ;
+                    
+                    ------ PROPRIETAIRE DE LA FAMILLE D'OPERATEURS IMPLICITE ------
+                    -- Lorsque le paramètre FAMILY n'est pas spécifié à la
+                    -- création d'une classe d'opérateurs, une famille de
+                    -- même nom que la classe d'opérateurs est créée... en
+                    -- passant entre les mailles du filets du déclencheur.
+                    IF obj.object_type = 'operator class' AND EXISTS (
+                        SELECT * FROM pg_catalog.pg_opclass
+                            LEFT JOIN pg_catalog.pg_opfamily
+                                ON pg_opfamily.oid = opcfamily
+                            WHERE obj.objid = pg_opclass.oid
+                                AND opfname = opcname
+                                AND opfmethod = opcmethod
+                                AND opfnamespace = opcnamespace
+                                AND NOT opfowner = quote_ident(roles.producteur)::regrole
+                        )
+                    THEN
+                        l := format('ALTER operator family %s OWNER TO %I',
+                            obj.object_identity, roles.producteur) ;
+                        EXECUTE l ;
+                        RAISE NOTICE '> %', l ;
+                    END IF ;
+                    
                 END IF ;
                 
                 ------ DROITS DE L'EDITEUR ------
@@ -1064,19 +1098,17 @@ BEGIN
                                             src.oid_lecteur::regrole, roles.producteur)
                                         END ;
                         ELSE
-                            RAISE WARNING'Le producteur du schéma de la vue % ne dispose pas des droits nécessaires pour accéder à ses données sources.',
+                            RAISE WARNING 'Le producteur du schéma de la vue % ne dispose pas des droits nécessaires pour accéder à ses données sources.',
                                 format('%s %s', CASE WHEN obj.object_type = 'materialized view'
                                     THEN 'matérialisée ' ELSE '' END, obj.object_identity)
                                 USING DETAIL =  format('%s source %s.%I, propriétaire %s.', src.liblg,
                                     src.relnamespace::regnamespace, src.relname, src.relowner::regrole) ;
                         END IF ;
                     END LOOP ;            
-                END IF ;
-                
+                END IF ;  
             END IF ;
-        END IF;
-
-    END LOOP;
+        END IF ;
+    END LOOP ;
 
 EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
@@ -1087,40 +1119,55 @@ EXCEPTION WHEN OTHERS THEN
             HINT = e_hint ;
                
 END
-$BODY$;
+$BODY$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_on_create_objet()
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_objet() IS 'ASGARD. Fonction appelée par l''event trigger qui applique les droits pré-définis sur les nouveaux objets.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_create_objet() IS 'ASGARD. Fonction exécutée par le déclencheur sur évènement asgard_on_create_objet, qui applique aux nouveaux objets créés les droits pré-définis pour le schéma dans la table de gestion d''Asgard.' ;
 
 
 -- Event Trigger: asgard_on_create_objet
+
 DO
 $$
 BEGIN
-    IF current_setting('server_version_num')::int < 110000
+    IF current_setting('server_version_num')::int < 100000
     THEN 
         CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
             WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
                 'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
                 'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
                 'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
-                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE')
-            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet();
-    ELSE
+                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE', 'CREATE OPERATOR CLASS',
+                'CREATE OPERATOR FAMILY')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet() ;
+    ELSIF current_setting('server_version_num')::int < 110000
+    THEN 
+        -- + CREATE STATISTICS pour PG 10
         CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
             WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
                 'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
                 'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
                 'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
-                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE', 'CREATE PROCEDURE')
-            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet();
+                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE', 'CREATE OPERATOR CLASS',
+                'CREATE OPERATOR FAMILY', 'CREATE STATISTICS')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet() ;
+    ELSE
+        -- + CREATE PROCEDURE pour PG 11+
+        CREATE EVENT TRIGGER asgard_on_create_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'CREATE VIEW',
+                'CREATE MATERIALIZED VIEW', 'SELECT INTO', 'CREATE SEQUENCE', 'CREATE FOREIGN TABLE',
+                'CREATE FUNCTION', 'CREATE OPERATOR', 'CREATE AGGREGATE', 'CREATE COLLATION',
+                'CREATE CONVERSION', 'CREATE DOMAIN', 'CREATE TEXT SEARCH CONFIGURATION',
+                'CREATE TEXT SEARCH DICTIONARY', 'CREATE TYPE', 'CREATE OPERATOR CLASS',
+                'CREATE OPERATOR FAMILY', 'CREATE STATISTICS', 'CREATE PROCEDURE')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_create_objet() ;
     END IF ;
 END
 $$ ;
 
-COMMENT ON EVENT TRIGGER asgard_on_create_objet IS 'ASGARD. Event trigger qui applique les droits pré-définis sur les nouveaux objets.' ;
+COMMENT ON EVENT TRIGGER asgard_on_create_objet IS 'ASGARD. Déclencheur sur évènement qui applique aux nouveaux objets créés les droits pré-définis pour le schéma dans la table de gestion d''Asgard.' ;
 
 
 
@@ -1131,25 +1178,24 @@ COMMENT ON EVENT TRIGGER asgard_on_create_objet IS 'ASGARD. Event trigger qui ap
 CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_alter_objet() RETURNS event_trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par l'event trigger asgard_on_alter_objet, qui
-           assure que le propriétaire de l'objet reste le propriétaire du
-           schéma qui le contient après l'exécution d'une commande ALTER.
-           Elle vise en particulier les SET SCHEMA (lorsque le schéma
-           cible a un producteur différent de celui du schéma d'origine, elle
-           modifie le propriétaire de l'objet en conséquence) et les 
-           OWNER TO (elle inhibe leur effet en rendant la propriété de
-           l'objet au producteur du schéma).
-           Elle n'agit pas sur les privilèges.
-AVERTISSEMENT : Les commandes ALTER OPERATOR CLASS, ALTER OPERATOR FAMILY
-et ALTER STATISTICS ne sont pas pris en charge pour l'heure.
-DECLENCHEMENT : ON DDL COMMAND END.
-CONDITION : WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
-'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
-'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
-'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE').
-À partir de PostgreSQL 11, 'ALTER PROCEDURE' et 'ALTER ROUTINE' déclenchent
-également l'exécution de la présente fonction. */
+/* Fonction exécutée par le déclencheur sur évènement asgard_on_alter_objet,
+qui assure que le producteur d'un schéma reste propriétaire de tous les
+objets qui en dépendent.
+
+    Elle est activée par toutes les commandes ALTER portant sur des objets qui
+    dépendent d'un schéma et ont un propriétaire, mais n'aura réellement d'effet
+    que pour celles qui affectent la cohérence des propriétaires :
+
+    * Les ALTER ... SET SCHEMA lorsque le schéma cible a un producteur différent
+      de celui du schéma d'origine. Elle modifie alors le propriétaire de l'objet
+      selon le producteur du nouveau schéma.
+    * Les ALTER ... OWNER TO, dont elle inhibe l'effet en rendant la propriété de
+      l'objet au producteur du schéma.
+
+    Elle n'agit pas sur les privilèges. Elle ignore les objets dont le schéma
+    (après exécution de la commande) n'est pas référencé par Asgard.
+
+*/
 DECLARE
     obj record ;
     n_producteur regrole ;
@@ -1163,18 +1209,19 @@ BEGIN
     ------ CONTROLES DES PRIVILEGES ------
     IF NOT has_schema_privilege('z_asgard', 'USAGE')
     THEN
-        RAISE EXCEPTION 'EAO1. Vous devez être membre du groupe lecteur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EAO1. Schéma z_asgard inaccessible.' ;
     END IF ;
     
     IF NOT has_table_privilege('z_asgard.gestion_schema_etr', 'SELECT')
     THEN
-        RAISE EXCEPTION 'EAO2. Vous devez être membre du groupe lecteur du schéma z_asgard pour réaliser cette opération.' ;
+        RAISE EXCEPTION 'EAO2. Permissions insuffisantes pour la vue z_asgard.gestion_schema_etr.' ;
     END IF ;
 
-    FOR obj IN SELECT DISTINCT classid, objid, object_type, schema_name, object_identity
-                    FROM pg_event_trigger_ddl_commands()
-                    WHERE schema_name IS NOT NULL
-                    ORDER BY object_type DESC
+    FOR obj IN SELECT DISTINCT
+        classid, objid, object_type, schema_name, object_identity
+        FROM pg_event_trigger_ddl_commands()
+        WHERE schema_name IS NOT NULL
+        ORDER BY object_type DESC
     LOOP
 
         -- récupération du rôle identifié comme producteur pour le schéma de l'objet
@@ -1199,8 +1246,8 @@ BEGIN
             THEN             
                 -- récupération du propriétaire courant de l'objet
                 -- génère une erreur si la requête ne renvoie rien
-                EXECUTE format('SELECT %s::regrole::text FROM %s WHERE oid = %s', xowner,
-                    obj.classid::regclass, obj.objid)
+                EXECUTE format('SELECT %s::regrole FROM %s WHERE oid = %s',
+                    xowner, obj.classid::regclass, obj.objid)
                     INTO STRICT a_producteur ;
                        
                 -- si les deux rôles sont différents
@@ -1209,9 +1256,12 @@ BEGIN
                     ------ MODIFICATION DU PROPRIETAIRE ------
                     -- l'objet est attribué au propriétaire désigné pour le schéma
                     -- (n_producteur)
-                    RAISE NOTICE 'attribution de la propriété de % au rôle producteur du schéma :', obj.object_identity ;
-                    l := format('ALTER %s %s OWNER TO %s', obj.object_type,
-                        obj.object_identity, n_producteur) ; 
+                    RAISE NOTICE 'attribution de la propriété de % au rôle producteur du schéma :',
+                        obj.object_identity ;
+                    l := format('ALTER %s %s OWNER TO %s',
+                        CASE WHEN obj.object_type = 'statistics object'
+                            THEN 'statistics' ELSE obj.object_type END,
+                            obj.object_identity, n_producteur) ;
                     EXECUTE l ;
                     RAISE NOTICE '> %', l ;    
                 END IF ;
@@ -1229,12 +1279,12 @@ EXCEPTION WHEN OTHERS THEN
             HINT = e_hint ;
                
 END
-$BODY$;
+$BODY$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_on_alter_objet()
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_objet() IS 'ASGARD. Fonction appelée par l''event trigger qui assure que le producteur d''un schéma reste propriétaire de tous les objets qu''il contient.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_objet() IS 'ASGARD. Fonction exécutée par le déclencheur sur évènement asgard_on_alter_objet, qui assure que le producteur d''un schéma reste propriétaire de tous les objets qui en dépendent.' ;
 
 
 -- Event Trigger: asgard_on_alter_objet
@@ -1242,7 +1292,7 @@ COMMENT ON FUNCTION z_asgard_admin.asgard_on_alter_objet() IS 'ASGARD. Fonction 
 DO
 $$
 BEGIN
-    IF current_setting('server_version_num')::int < 110000
+    IF current_setting('server_version_num')::int < 100000
     THEN
         CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
             WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
@@ -1250,21 +1300,34 @@ BEGIN
                 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
                 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
                 'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE')
-            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet();
-    ELSE
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
+    ELSIF current_setting('server_version_num')::int < 110000
+    THEN
+        -- + ALTER STATISTICS, ALTER OPERATOR CLASS, ALTER OPERATOR FAMILY
         CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
             WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
                 'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
                 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
                 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER PROCEDURE',
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER STATISTICS',
+                'ALTER OPERATOR CLASS', 'ALTER OPERATOR FAMILY')
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
+    ELSE
+        -- + ALTER PROCEDURE, ALTER ROUTINE
+        CREATE EVENT TRIGGER asgard_on_alter_objet ON DDL_COMMAND_END
+            WHEN TAG IN ('ALTER TABLE', 'ALTER VIEW',
+                'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
+                'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
+                'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER STATISTICS',
+                'ALTER OPERATOR CLASS', 'ALTER OPERATOR FAMILY', 'ALTER PROCEDURE',
                 'ALTER ROUTINE')
-            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet();
+            EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
     END IF ;
 END
 $$ ;
 
-COMMENT ON EVENT TRIGGER asgard_on_alter_objet IS 'ASGARD. Event trigger qui assure que le producteur d''un schéma reste propriétaire de tous les objets qu''il contient.' ;
+COMMENT ON EVENT TRIGGER asgard_on_alter_objet IS 'ASGARD. Déclencheur sur évènement qui assure que le producteur d''un schéma reste propriétaire de tous les objets qui en dépendent.' ;
 
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1755,28 +1818,34 @@ COMMENT ON FUNCTION z_asgard.asgard_synthese_public_obj(oid, text) IS 'ASGARD. F
 -- Function: z_asgard.asgard_admin_proprietaire(text, text, boolean)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_admin_proprietaire(
-                           n_schema text, n_owner text, b_setschema boolean DEFAULT True
-                           )
+    n_schema text, n_owner text, b_setschema boolean DEFAULT True
+    )
     RETURNS int
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Gestion des droits. Cette fonction permet d''attribuer
-           un schéma et tous les objets qu'il contient à un [nouveau]
-           propriétaire.
-AVERTISSEMENT : Les objets de type operator class, operator family
-et extended planner statistic ne sont pas pris en charge pour l'heure.
-ARGUMENTS :
-- "n_schema" est une chaîne de caractères correspondant au nom du
-  schéma à considérer ;
-- "n_owner" est une chaîne de caractères correspondant au nom du
-  rôle (rôle de groupe ou rôle de connexion) qui doit être
-  propriétaire des objets ;
-- "b_setschema" est un paramètre booléen optionnel (vrai par défaut)
-  qui indique si la fonction doit changer le propriétaire du schéma
-  ou seulement des objets qu'il contient.
-RESULTAT : la fonction renvoie un entier correspondant au nombre
-d''objets effectivement traités. Les commandes lancées sont notifiées
-au fur et à mesure. */
+/* Attribue un schéma et tous les objets qu'il contient au propriétaire désigné.
+
+    Elle n'intervient que sur les objets qui n'appartiennent pas déjà au
+    rôle considéré.
+
+    Parameters
+    ----------
+    n_schema : text
+        Chaîne de caractères correspondant au nom du schéma à considérer.
+    n_owner : text
+        Chaîne de caractères correspondant au nom du rôle qui doit être
+        propriétaire des objets.
+    b_setschema : boolean, default True
+        Booléen qui indique si la fonction doit changer le propriétaire
+        du schéma ou seulement des objets qu'il contient.
+
+    Returns
+    -------
+    int
+        Nombre d'objets effectivement traités. Les commandes lancées sont
+        notifiées au fur et à mesure.
+
+*/
 DECLARE
     item record ;
     k int := 0 ;
@@ -1799,11 +1868,11 @@ BEGIN
     IF NOT pg_has_role(s_owner::regrole::oid, 'USAGE')
     THEN
         RAISE EXCEPTION 'FAP5. Vous n''êtes pas habilité à modifier le propriétaire du schéma %.', n_schema
-                USING DETAIL = format('Propriétaire courant : %s.', s_owner) ;  
+            USING DETAIL = format('Propriétaire courant : %s.', s_owner) ;  
     END IF ;
     
     -- le propriétaire désigné n'existe pas
-    IF NOT n_owner IN (SELECT rolname::text FROM pg_catalog.pg_roles)
+    IF NOT n_owner IN (SELECT rolname FROM pg_catalog.pg_roles)
     THEN
         RAISE EXCEPTION 'FAP2. Le rôle % n''existe pas.', n_owner ;
     -- absence de permission sur le propriétaire désigné
@@ -1844,7 +1913,8 @@ BEGIN
             relkind IN ('r', 'f', 'p', 'm') AS b,
             -- b servira à assurer que les tables soient listées avant les
             -- objets qui en dépendent
-            format('ALTER %s %s OWNER TO %I', kind_lg, pg_class.oid::regclass, n_owner) AS commande
+            format('ALTER %s %s OWNER TO %I',
+                kind_lg, pg_class.oid::regclass, n_owner) AS commande
             FROM pg_catalog.pg_class,
                 unnest(ARRAY['r', 'p', 'v', 'm', 'f', 'S'],
                        ARRAY['TABLE', 'TABLE', 'VIEW', 'MATERIALIZED VIEW', 'FOREIGN TABLE', 'SEQUENCE']) AS l (kind_crt, kind_lg)
@@ -1880,8 +1950,8 @@ BEGIN
             typname::text AS n_objet,
             typowner AS obj_owner,
             False AS b,
-            format('ALTER %s %s.%I OWNER TO %I', kind_lg, typnamespace::regnamespace,
-                typname, n_owner) AS commande
+            format('ALTER %s %I.%I OWNER TO %I',
+                kind_lg, n_schema, typname, n_owner) AS commande
             FROM unnest(ARRAY['true', 'false'],
                        ARRAY['DOMAIN', 'TYPE']) AS l (kind_crt, kind_lg),
                 pg_catalog.pg_type
@@ -1900,8 +1970,8 @@ BEGIN
             conname::text AS n_objet,
             conowner AS obj_owner,
             False AS b,
-            format('ALTER CONVERSION %s.%I OWNER TO %I', connamespace::regnamespace,
-                conname, n_owner) AS commande
+            format('ALTER CONVERSION %I.%I OWNER TO %I',
+                n_schema, conname, n_owner) AS commande
             FROM pg_catalog.pg_conversion
             WHERE connamespace = quote_ident(n_schema)::regnamespace
                 AND NOT conowner = o_owner
@@ -1911,8 +1981,8 @@ BEGIN
             oprname::text AS n_objet,
             oprowner AS obj_owner,
             False AS b,
-            format('ALTER OPERATOR %s OWNER TO %I', pg_operator.oid::regoperator,
-                n_owner) AS commande
+            format('ALTER OPERATOR %s OWNER TO %I',
+                pg_operator.oid::regoperator, n_owner) AS commande
             FROM pg_catalog.pg_operator
             WHERE oprnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT oprowner = o_owner
@@ -1922,8 +1992,8 @@ BEGIN
             collname::text AS n_objet,
             collowner AS obj_owner,
             False AS b,
-            format('ALTER COLLATION %s.%I OWNER TO %I', collnamespace::regnamespace,
-                collname, n_owner) AS commande
+            format('ALTER COLLATION %I.%I OWNER TO %I',
+                n_schema, collname, n_owner) AS commande
             FROM pg_catalog.pg_collation
             WHERE collnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT collowner = o_owner
@@ -1933,8 +2003,8 @@ BEGIN
             dictname::text AS n_objet,
             dictowner AS obj_owner,
             False AS b,
-            format('ALTER TEXT SEARCH DICTIONARY %s OWNER TO %I', pg_ts_dict.oid::regdictionary,
-                n_owner) AS commande
+            format('ALTER TEXT SEARCH DICTIONARY %s OWNER TO %I',
+                pg_ts_dict.oid::regdictionary, n_owner) AS commande
             FROM pg_catalog.pg_ts_dict
             WHERE dictnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT dictowner = o_owner
@@ -1944,11 +2014,35 @@ BEGIN
             cfgname::text AS n_objet,
             cfgowner AS obj_owner,
             False AS b,
-            format('ALTER TEXT SEARCH CONFIGURATION %s OWNER TO %I', pg_ts_config.oid::regconfig,
-                n_owner) AS commande
+            format('ALTER TEXT SEARCH CONFIGURATION %s OWNER TO %I',
+                pg_ts_config.oid::regconfig, n_owner) AS commande
             FROM pg_catalog.pg_ts_config
             WHERE cfgnamespace = quote_ident(n_schema)::regnamespace
                 AND NOT cfgowner = o_owner
+        -- operator family :
+        UNION
+        SELECT
+            opfname::text AS n_objet,
+            opfowner AS obj_owner,
+            False AS b,
+            format('ALTER OPERATOR FAMILY %I.%I USING %I OWNER TO %I',
+                n_schema, opfname, amname, n_owner) AS commande
+            FROM pg_catalog.pg_opfamily
+                LEFT JOIN pg_catalog.pg_am ON pg_am.oid = opfmethod
+            WHERE opfnamespace = quote_ident(n_schema)::regnamespace
+                AND NOT opfowner = o_owner
+        -- operator class :
+        UNION
+        SELECT
+            opcname::text AS n_objet,
+            opcowner AS obj_owner,
+            False AS b,
+            format('ALTER OPERATOR CLASS %I.%I USING %I OWNER TO %I',
+                n_schema, opcname, amname, n_owner) AS commande
+            FROM pg_catalog.pg_opclass
+                LEFT JOIN pg_catalog.pg_am ON pg_am.oid = opcmethod
+            WHERE opcnamespace = quote_ident(n_schema)::regnamespace
+                AND NOT opcowner = o_owner
             ORDER BY b DESC
     LOOP
         IF pg_has_role(item.obj_owner, 'USAGE')
@@ -1958,9 +2052,37 @@ BEGIN
             k := k + 1 ;
         ELSE
             RAISE EXCEPTION 'FAP4. Vous n''êtes pas habilité à modifier le propriétaire de l''objet %.', item.n_objet
-                USING DETAIL = 'Propriétaire courant : ' || item.obj_owner::regrole::text || '.' ;    
+                USING DETAIL = format('Propriétaire courant : %s.', item.obj_owner::regrole) ;    
         END IF ;
     END LOOP ;
+    
+    ------ CATALOGUES CONDITIONNELS ------
+    -- soit ceux qui n'existent pas sous toutes les versions de PostgreSQL    
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        FOR item IN
+            -- extended planner statistics :
+            SELECT
+                stxname::text AS n_objet,
+                stxowner AS obj_owner,
+                format('ALTER STATISTICS %I.%I OWNER TO %I',
+                    n_schema, stxname, n_owner) AS commande
+                FROM pg_catalog.pg_statistic_ext
+                WHERE stxnamespace = quote_ident(n_schema)::regnamespace
+                    AND NOT stxowner = o_owner        
+        LOOP
+            IF pg_has_role(item.obj_owner, 'USAGE')
+            THEN
+                EXECUTE item.commande ;
+                RAISE NOTICE '> %', item.commande ;
+                k := k + 1 ;
+            ELSE
+                RAISE EXCEPTION 'FAP4. Vous n''êtes pas habilité à modifier le propriétaire de l''objet %.', item.n_objet
+                    USING DETAIL = format('Propriétaire courant : %s.', item.obj_owner::regrole) ;    
+            END IF ;
+        END LOOP ;
+    END IF ;
+
     ------ RESULTAT ------
     RETURN k ;
 END
@@ -1969,7 +2091,7 @@ $_$ ;
 ALTER FUNCTION z_asgard.asgard_admin_proprietaire(text, text, boolean)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_admin_proprietaire(text, text, boolean) IS 'ASGARD. Fonction qui modifie le propriétaire d''un schéma et de tous les objets qu''il contient.' ;
+COMMENT ON FUNCTION z_asgard.asgard_admin_proprietaire(text, text, boolean) IS 'ASGARD. Attribue un schéma et tous les objets qu''il contient au propriétaire désigné.' ;
 
 
 ------ 4.4 - TRANSFORMATION GRANT EN REVOKE ------
@@ -2015,24 +2137,37 @@ COMMENT ON FUNCTION z_asgard.asgard_grant_to_revoke(text) IS 'ASGARD. Fonction q
 -- Function: z_asgard_admin.asgard_initialisation_gestion_schema(text[], boolean)
 
 CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_initialisation_gestion_schema(
-                           exceptions text[] default NULL::text[], b_gs boolean default False
-                           )
+    exceptions text[] default NULL::text[], b_gs boolean default False
+    )
     RETURNS text
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction intègre à la table de gestion des droits
-           gestion_schema l'ensemble des schémas existants, hors
-           schémas système et ceux qui sont (optionnellement) listés
-           en argument.
-ARGUMENTS :
-- exceptions (optionnel) : un tableau text[] contenant les noms des schémas
-à omettre, le cas échéant ;
-- b_gs (optionnel) : un booléen indiquant si, dans l'hypothèse où un schéma
-serait déjà référencé - nécessairement comme non créé - dans la table de gestion,
-c'est le propriétaire du schéma qui doit devenir le "producteur" du schéma
-(False) ou le producteur pré-renseigné dans la table de gestion qui doit
-devenir le propriétaire du schéma (True). False par défaut.
-SORTIE : '__ FIN INTIALISATION.' si la requête s'est exécutée normalement. */
+/* Enregistre dans la table de gestion d'Asgard l'ensemble des schémas
+existants encore non référencés, hors schémas système et ceux qui sont
+(optionnellement) listés en argument.
+
+    Parameters
+    ----------
+    exceptions : text[], optional
+        Liste des noms des schémas à omettre, le cas échéant.
+    b_gs : boolean, default False
+        Un booléen indiquant si, dans l'hypothèse où un schéma serait
+        marqué comme non créé dans la table de gestion, c'est le propriétaire
+        actuel du schéma qui doit être déclaré comme son producteur (False,
+        comportement par défaut) ou si c'est le producteur pré-renseigné dans
+        la table de gestion qui doit devenir le propriétaire du schéma (True).
+        Ce paramètre est ignoré pour un schéma déjà marqué comme créé. Il vise
+        un cas anecdotique où le champ creation de la table de gestion n'est
+        pas cohérent avec l'état réel du schéma. La fonction rétablira alors
+        le lien entre le schéma et l'enregistrement portant son nom dans la
+        table de gestion.
+    
+    Returns
+    -------
+    text
+        '__ FIN INTIALISATION.' si la requête s'est exécutée normalement.
+
+*/
 DECLARE
     item record ;
     e_mssg text ;
@@ -2041,35 +2176,37 @@ DECLARE
     b_creation boolean ;
 BEGIN
 
-    FOR item IN SELECT nspname, nspowner FROM pg_catalog.pg_namespace
-                    WHERE NOT nspname ~ ANY(ARRAY['^pg_toast', '^pg_temp', '^pg_catalog$',
-                                            '^public$', '^information_schema$', '^topology$'])
-                        AND (exceptions IS NULL OR NOT nspname = ANY(exceptions))
+    FOR item IN SELECT nspname, nspowner, rolname
+        FROM pg_catalog.pg_namespace
+            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
+        WHERE NOT nspname ~ ANY(ARRAY['^pg_toast', '^pg_temp', '^pg_catalog$',
+                                '^public$', '^information_schema$', '^topology$'])
+            AND (exceptions IS NULL OR NOT nspname = ANY(exceptions))
     LOOP
         SELECT creation INTO b_creation
             FROM z_asgard.gestion_schema_usr
-            WHERE item.nspname::text = nom_schema ;
+            WHERE item.nspname = nom_schema ;
         IF b_creation IS NULL
         -- schéma non référencé dans gestion_schema
         THEN
             INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation)
-                VALUES (item.nspname::text, replace(item.nspowner::regrole::text, '"', ''), true) ;
-            RAISE NOTICE '... Schéma % enregistré dans la table de gestion.', item.nspname::text ;
+                VALUES (item.nspname, item.rolname, True) ;
+            RAISE NOTICE '... Schéma % enregistré dans la table de gestion.', item.nspname ;
         ELSIF NOT b_creation
         -- schéma pré-référencé dans gestion_schema
         THEN
             IF NOT b_gs
             THEN
                 UPDATE z_asgard.gestion_schema_usr
-                    SET creation = true,
-                        producteur = replace(item.nspowner::regrole::text, '"', '')
-                    WHERE item.nspname::text = nom_schema ;
+                    SET creation = True,
+                        producteur = item.rolname
+                    WHERE item.nspname = nom_schema ;
             ELSE
                 UPDATE z_asgard.gestion_schema_usr
-                    SET creation = true
-                    WHERE item.nspname::text = nom_schema ;
+                    SET creation = True
+                    WHERE item.nspname = nom_schema ;
             END IF ;
-            RAISE NOTICE '... Schéma % marqué comme créé dans la table de gestion.', item.nspname::text ;
+            RAISE NOTICE '... Schéma % marqué comme créé dans la table de gestion.', item.nspname ;
         END IF ;
     END LOOP ;
 
@@ -2084,13 +2221,12 @@ EXCEPTION WHEN OTHERS THEN
             HINT = e_hint ;
 
 END
-$_$;
+$_$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_initialisation_gestion_schema(text[], boolean)
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_initialisation_gestion_schema(text[], boolean) IS 'ASGARD. Fonction qui initialise la table de gestion à partir des schémas existants.' ;
-
+COMMENT ON FUNCTION z_asgard_admin.asgard_initialisation_gestion_schema(text[], boolean) IS 'ASGARD. Enregistre dans la table de gestion d''Asgard l''ensemble des schémas existants encore non référencés, hors schémas système et ceux qui sont (optionnellement) listés en argument.' ;
 
 
 ------ 4.6 - DEREFERENCEMENT D'UN SCHEMA ------
@@ -2194,37 +2330,58 @@ COMMENT ON FUNCTION z_asgard.asgard_nettoyage_roles() IS 'ASGARD. Fonction qui m
 -- Function: z_asgard.asgard_initialise_schema(text, boolean, boolean)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_initialise_schema(
-                              n_schema text,
-                              b_preserve boolean DEFAULT False,
-                              b_gs boolean default False
-                              )
+    n_schema text,
+    b_preserve boolean DEFAULT False,
+    b_gs boolean default False
+    )
     RETURNS text
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction permet de réinitialiser les droits
-           sur un schéma selon les privilèges standards associés
-           aux rôles désignés dans la table de gestion.
-           Si elle est appliquée à un schéma existant non référencé
-           dans la table de gestion, elle l'ajoute avec son
-           propriétaire courant. Elle échoue si le schéma n'existe
-           pas.
-ARGUMENTS :
-- n_schema : nom d'un schéma présumé existant ;
-- b_preserve (optionnel) : un paramètre booléen. Pour un schéma encore
-non référencé (ou pré-référencé comme non-créé) dans la table de gestion une valeur
-True signifie que les privilèges des rôles lecteur et éditeur doivent être
-ajoutés par dessus les droits actuels. Avec la valeur par défaut False,
-les privilèges sont réinitialisés. Ce paramètre est ignoré pour un schéma déjà
-référencé comme créé (et les privilèges sont réinitialisés) ;
-- b_gs (optionnel) : un booléen indiquant si, dans l'hypothèse où un schéma
-serait déjà référencé - nécessairement comme non créé - dans la table de gestion,
-c'est le propriétaire du schéma qui doit devenir le "producteur" (False) ou le
-producteur de la table de gestion qui doit devenir le propriétaire
-du schéma (True). False par défaut. Ce paramètre est ignoré pour un schéma déjà
-créé.
-SORTIE : '__ REINITIALISATION REUSSIE.' (ou '__INITIALISATION REUSSIE.' pour
-un schéma non référencé comme créé avec b_preserve = True) si la requête
-s'est exécutée normalement. */
+/* Réinitialise les droits sur un schéma et ses objets selon les privilèges
+standards du producteur, de l'éditeur et du lecteur désignés dans la table
+de gestion d'Asgard.
+
+    Elle a notamment pour effet de révoquer tout privilège accordé à 
+    d'autres rôles que le producteur et les éventuels éditeur et lecteur.
+
+    Si cette fonction est appliquée à un schéma existant non référencé
+    dans la table de gestion, elle l'y ajoute, avec son propriétaire
+    courant comme producteur.
+
+    La fonction échouera si le schéma n'existe pas.
+
+    Parameters
+    ----------
+    n_schema : text
+        Nom d'un schéma présumé existant.
+    b_preserve : boolean, default False
+        Pour un schéma encore non référencé ou pré-référencé comme non créé
+        dans la table de gestion, une valeur True signifie que les privilèges
+        des rôles lecteur et éditeur doivent être ajoutés par dessus les droits
+        actuels. Avec la valeur par défaut False, les privilèges sont
+        réinitialisés avant application des droits standards. Ce paramètre est
+        ignoré pour un schéma déjà référencé comme créé - les privilèges sont
+        alors quoi qu'il arrive réinitialisés.
+    b_gs : boolean, default False
+        Un booléen indiquant si, dans l'hypothèse où le schéma serait
+        marqué comme non créé dans la table de gestion, c'est le propriétaire
+        actuel du schéma qui doit être déclaré comme son producteur (False,
+        comportement par défaut) ou si c'est le producteur pré-renseigné dans
+        la table de gestion qui doit devenir le propriétaire du schéma (True).
+        Ce paramètre est ignoré pour un schéma déjà marqué comme créé. Il vise
+        un cas anecdotique où le champ creation de la table de gestion n'est
+        pas cohérent avec l'état réel du schéma. La fonction rétablira alors
+        le lien entre le schéma et l'enregistrement portant son nom dans la
+        table de gestion.
+    
+    Returns
+    -------
+    text
+        '__ REINITIALISATION REUSSIE.' (ou '__INITIALISATION REUSSIE.' pour
+        un schéma non référencé comme créé avec b_preserve = True) si la
+        requête s'est exécutée normalement.
+
+*/
 DECLARE
     roles record ;
     cree boolean ;
@@ -2247,9 +2404,10 @@ BEGIN
     END IF ;
     
     -- existence du schéma
-    SELECT replace(nspowner::regrole::text, '"', '') INTO n_owner
+    SELECT rolname INTO n_owner
         FROM pg_catalog.pg_namespace
-        WHERE n_schema = nspname::text ;
+            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
+        WHERE n_schema = nspname ;
     IF NOT FOUND
     THEN
         RAISE EXCEPTION 'FIS2. Echec. Le schéma % n''existe pas.', n_schema ;
@@ -2420,28 +2578,28 @@ BEGIN
     END IF ;
     
     ------ RECREATION DES PRIVILEGES SUR LES SCHEMAS D'ASGARD ------
-    IF n_schema = 'z_asgard' AND (roles.lecteur IS NULL OR NOT roles.lecteur = 'g_consult')
+    IF n_schema = 'z_asgard'
     THEN
-        -- rétablissement des droits de g_consult
-        RAISE NOTICE 'rétablissement des privilèges attendus pour g_consult :' ;
+        -- rétablissement des droits de public
+        RAISE NOTICE 'rétablissement des privilèges attendus pour le pseudo-rôle public :' ;
         
-        GRANT USAGE ON SCHEMA z_asgard TO g_consult ;
-        RAISE NOTICE '> GRANT USAGE ON SCHEMA z_asgard TO g_consult' ;
+        GRANT USAGE ON SCHEMA z_asgard TO public ;
+        RAISE NOTICE '> GRANT USAGE ON SCHEMA z_asgard TO public' ;
         
-        GRANT SELECT ON TABLE z_asgard.gestion_schema_usr TO g_consult ;
-        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.gestion_schema_usr TO g_consult' ;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_usr TO public ;
+        RAISE NOTICE '> GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_usr TO public' ;
         
-        GRANT SELECT ON TABLE z_asgard.gestion_schema_etr TO g_consult ;
-        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.gestion_schema_etr TO g_consult' ;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_etr TO public ;
+        RAISE NOTICE '> GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE z_asgard.gestion_schema_etr TO public' ;
                 
-        GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO g_consult ;
-        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO g_consult' ;
+        GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO public ;
+        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.asgardmenu_metadata TO public' ;
         
-        GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO g_consult ;
-        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO g_consult' ;
+        GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO public ;
+        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.asgardmanager_metadata TO public' ;
         
-        GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO g_consult ;
-        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO g_consult' ;
+        GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO public ;
+        RAISE NOTICE '> GRANT SELECT ON TABLE z_asgard.gestion_schema_read_only TO public' ;
     
     ELSIF n_schema = 'z_asgard_admin'
     THEN
@@ -2513,12 +2671,12 @@ EXCEPTION WHEN OTHERS THEN
             HINT = e_hint ;
     
 END
-$_$;
+$_$ ;
 
 ALTER FUNCTION z_asgard.asgard_initialise_schema(text, boolean, boolean)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_initialise_schema(text, boolean, boolean) IS 'ASGARD. Fonction qui réinitialise les privilèges sur un schéma (et l''ajoute à la table de gestion s''il n''y est pas déjà).' ;
+COMMENT ON FUNCTION z_asgard.asgard_initialise_schema(text, boolean, boolean) IS 'ASGARD. Réinitialise les droits sur un schéma et ses objets selon les privilèges standards du producteur, de l''éditeur et du lecteur désignés dans la table de gestion d''Asgard.' ;
 
 
 ------ 4.9 - REINITIALISATION DES PRIVILEGES SUR UN OBJET ------
@@ -2533,21 +2691,29 @@ CREATE OR REPLACE FUNCTION z_asgard.asgard_initialise_obj(
     RETURNS text
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction permet de réinitialiser les droits
-           sur un objet selon les privilèges standards associés
-           aux rôles désignés dans la table de gestion pour son schéma.
+/* Réinitialise les droits sur un objet selon les privilèges standards
+associés aux rôles désignés dans la table de gestion pour son schéma.
 
-ARGUMENTS :
-- "obj_schema" est le nom du schéma contenant l'objet, au format
-texte et sans guillemets ;
-- "obj_nom" est le nom de l'objet, au format texte et (sauf pour
-les fonctions !) sans guillemets ;
-- "obj_typ" est le type de l'objet au format text ('table',
-'partitioned table' (assimilé à 'table'), 'view', 'materialized view',
-'foreign table', 'sequence', 'function', 'aggregate', 'procedure',
-'routine', 'type', 'domain').
-SORTIE : '__ REINITIALISATION REUSSIE.' si la requête s'est exécutée
-normalement. */
+    Parameters
+    ----------
+    obj_schema : text
+        Le nom du schéma contenant l'objet.
+    obj_nom : text
+        Le nom de l'objet. À écrire sans les guillemets des identifiants
+        PostgreSQL SAUF pour les fonctions, dont le nom doit impérativement
+        être entre guillemets s'il ne respecte pas les conventions de
+        nommage des identifiants PostgreSQL.
+    obj_typ : str
+        Le type de l'objet, parmi 'table', 'partitioned table' (assimilé
+        à 'table'), 'view', 'materialized view', 'foreign table', 'sequence',
+        'function', 'aggregate', 'procedure', 'routine', 'type' et 'domain'.
+
+    Returns
+    -------
+    text
+        '__ REINITIALISATION REUSSIE.' si la requête s'est exécutée normalement.
+
+*/
 DECLARE
     class_info record ;
     roles record ;
@@ -2624,8 +2790,9 @@ BEGIN
                 END || ' AS appel'
             || ' FROM pg_catalog.' || class_info.xclass
             || ' WHERE ' || CASE WHEN class_info.xclass = 'pg_proc'
-                    THEN class_info.xclass || '.oid::regprocedure::text = '
+                    THEN class_info.xclass || '.oid = '
                         || quote_literal(quote_ident(obj_schema) || '.' || obj_nom)
+                        || '::regprocedure'
                 ELSE class_info.xname || ' = ' || quote_literal(obj_nom)
                     || ' AND ' || class_info.xschema || '::regnamespace::text = '
                     || quote_literal(quote_ident(obj_schema)) END
@@ -2762,7 +2929,7 @@ $_$;
 ALTER FUNCTION z_asgard.asgard_initialise_obj(text, text, text)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_initialise_obj(text, text, text) IS 'ASGARD. Fonction qui réinitialise les privilèges sur un objet.' ;
+COMMENT ON FUNCTION z_asgard.asgard_initialise_obj(text, text, text) IS 'ASGARD. Réinitialise les privilèges sur un objet.' ;
 
 
 ------ 4.10 - DEPLACEMENT D'OBJET ------
@@ -2770,63 +2937,75 @@ COMMENT ON FUNCTION z_asgard.asgard_initialise_obj(text, text, text) IS 'ASGARD.
 -- Function: z_asgard.asgard_deplace_obj(text, text, text, text, int)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_deplace_obj(
-                                obj_schema text,
-                                obj_nom text,
-                                obj_typ text,
-                                schema_cible text,
-                                variante int DEFAULT 1
-                                )
+    obj_schema text,
+    obj_nom text,
+    obj_typ text,
+    schema_cible text,
+    variante int DEFAULT 1
+    )
     RETURNS text
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction permet de déplacer un objet vers un nouveau
-           schéma en spécifiant la gestion voulue sur les droits de
-           l'objet : transfert ou réinitialisation des privilèges.
-           Dans le cas d'une table avec un ou plusieurs champs de
-           type serial, elle prend aussi en charge les privilèges
-           sur les séquences associées.
-ARGUMENTS :
-- "obj_schema" est le nom du schéma contenant l'objet, au format
-texte et sans guillemets ;
-- "obj_nom" est le nom de l'objet, au format texte et sans
-guillemets ;
-- "obj_typ" est le type de l'objet au format text, parmi 'table',
-'partitioned table' (assimilé à 'table'), 'view', 'materialized view',
-'foreign table', 'sequence', 'function', 'aggregate', 'procedure',
-'routine', 'type' et 'domain' ;
-- "schema_cible" est le nom du schéma où doit être déplacé l'objet,
-au format texte et sans guillemets ;
-- "variante" [optionnel] est un entier qui définit le comportement
-attendu par l'utilisateur vis à vis des privilèges :
-    - 1 (valeur par défaut) | TRANSFERT COMPLET + CONSERVATION :
-    les privilèges des rôles producteur, éditeur et lecteur de
-    l'ancien schéma sont transférés sur ceux du nouveau. Si un
-    éditeur ou lecteur a été désigné pour le nouveau schéma mais
-    qu'aucun n'était défini pour l'ancien, le rôle reçoit les
-    privilèges standards pour sa fonction. Le cas échéant,
-    les privilèges des autres rôles sont conservés ;
-    - 2 | REINITIALISATION COMPLETE : les nouveaux
-    producteur, éditeur et lecteur reçoivent les privilèges
-    standard. Les privilèges des autres rôles sont supprimés ;
-    - 3 | TRANSFERT COMPLET + NETTOYAGE : les privilèges des rôles
-    producteur, éditeur et lecteur de l'ancien schéma sont transférés
-    sur ceux du nouveau. Si un éditeur ou lecteur a été désigné pour
-    le nouveau schéma mais qu'aucun n'était défini pour l'ancien,
-    le rôle reçoit les privilèges standards pour sa fonction.
-    Les privilèges des autres rôles sont supprimés ;
-    - 4 | TRANSFERT PRODUCTEUR + CONSERVATION : les privilèges de
-    l'ancien producteur sont transférés sur le nouveau. Les privilèges
-    des autres rôles sont conservés tels quels. C'est le comportement
-    d'une commande ALTER [...] SET SCHEMA (interceptée par l'event
-    trigger asgard_on_alter_objet) ;
-    - 5 | TRANSFERT PRODUCTEUR + REINITIALISATION : les privilèges
-    de l'ancien producteur sont transférés sur le nouveau. Les
-    nouveaux éditeur et lecteur reçoivent les privilèges standards.
-    Les privilèges des autres rôles sont supprimés ;
-    - 6 | REINITIALISATION PARTIELLE : les nouveaux
-    producteur, éditeur et lecteur reçoivent les privilèges
-    standard. Les privilèges des autres rôles sont conservés.
-SORTIE : '__ DEPLACEMENT REUSSI.' si la requête s'est exécutée normalement. */
+/* Déplace un objet vers un nouveau schéma, en transférant ou réinitialisant
+les privilèges selon la variante choisie.
+
+    Lorsque des séquences sont associées aux champs de la table, la fonction
+    gère également leurs privilèges.
+   
+    Parameters
+    ----------
+    obj_schema : text
+        Le nom du schéma contenant l'objet.
+    obj_nom : text
+        Le nom de l'objet. À écrire sans les guillemets des identifiants
+        PostgreSQL SAUF pour les fonctions, dont le nom doit impérativement
+        être entre guillemets s'il ne respecte pas les conventions de
+        nommage des identifiants PostgreSQL.
+    obj_typ : str
+        Le type de l'objet, parmi 'table', 'partitioned table' (assimilé
+        à 'table'), 'view', 'materialized view', 'foreign table', 'sequence',
+        'function', 'aggregate', 'procedure', 'routine', 'type' et 'domain'.
+    schema_cible : str
+        Le nom du schéma où doit être déplacé l'objet.
+    variante : int, default 1
+        Un entier qui définit le comportement attendu par l'utilisateur
+        vis-à-vis des privilèges :
+        
+        * 1 (valeur par défaut) | TRANSFERT COMPLET + CONSERVATION :
+          les privilèges des rôles producteur, éditeur et lecteur de
+          l'ancien schéma sont transférés sur ceux du nouveau. Si un
+          éditeur ou lecteur a été désigné pour le nouveau schéma mais
+          qu'aucun n'était défini pour l'ancien, le rôle reçoit les
+          privilèges standards pour sa fonction. Le cas échéant,
+          les privilèges des autres rôles sont conservés.
+        * 2 | REINITIALISATION COMPLETE : les nouveaux
+          producteur, éditeur et lecteur reçoivent les privilèges
+          standard. Les privilèges des autres rôles sont supprimés.
+        * 3 | TRANSFERT COMPLET + NETTOYAGE : les privilèges des rôles
+          producteur, éditeur et lecteur de l'ancien schéma sont transférés
+          sur ceux du nouveau. Si un éditeur ou lecteur a été désigné pour
+          le nouveau schéma mais qu'aucun n'était défini pour l'ancien,
+          le rôle reçoit les privilèges standards pour sa fonction.
+          Les privilèges des autres rôles sont supprimés.
+        * 4 | TRANSFERT PRODUCTEUR + CONSERVATION : les privilèges de
+          l'ancien producteur sont transférés sur le nouveau. Les privilèges
+          des autres rôles sont conservés tels quels. C'est le comportement
+          d'une commande ALTER [...] SET SCHEMA (interceptée par le déclencheur
+          sur évènement asgard_on_alter_objet).
+        * 5 | TRANSFERT PRODUCTEUR + REINITIALISATION : les privilèges
+          de l'ancien producteur sont transférés sur le nouveau. Les
+          nouveaux éditeur et lecteur reçoivent les privilèges standards.
+          Les privilèges des autres rôles sont supprimés.
+        * 6 | REINITIALISATION PARTIELLE : les nouveaux
+          producteur, éditeur et lecteur reçoivent les privilèges
+          standard. Les privilèges des autres rôles sont conservés.
+    
+    Returns
+    -------
+    text
+        '__ DEPLACEMENT REUSSI.' si la requête s'est exécutée normalement.
+
+*/
 DECLARE
     class_info record ;
     roles record ;
@@ -2846,6 +3025,7 @@ DECLARE
     s record ;
     o oid ;
     supported boolean ;
+    duplicate oid ;
 BEGIN
 
     obj_typ := lower(obj_typ) ;
@@ -2912,26 +3092,55 @@ BEGIN
         RAISE EXCEPTION 'FDO4. Echec. Le type % n''existe pas ou n''est pas pris en charge.', obj_typ
             USING HINT = 'Types acceptés : ''table'', ''partitioned table'', ''view'', ''materialized view'', ''foreign table'', ''sequence'', ''function'', ''aggregate'', ''procedure'', ''routine'', ''type'', ''domain''.' ;
     END IF ;
-        
+    
     -- objet inexistant + récupération du propriétaire
     EXECUTE 'SELECT ' || class_info.xowner || '::regrole::text AS prop, '
             || class_info.xclass || '.oid, '
             || CASE WHEN class_info.xclass = 'pg_type'
                     THEN quote_literal(quote_ident(obj_schema) || '.' || quote_ident(obj_nom)) || '::text'
                 ELSE class_info.xclass || '.oid::' || class_info.xreg || '::text'
-                END || ' AS appel'
+                END || ' AS appel,'
+            || class_info.xname || ' AS objname'
+            || CASE WHEN class_info.xclass = 'pg_proc'
+                THEN ', pg_catalog.oidvectortypes(proargtypes) AS proargtypes' ELSE '' END
             || ' FROM pg_catalog.' || class_info.xclass
             || ' WHERE ' || CASE WHEN class_info.xclass = 'pg_proc'
-                    THEN class_info.xclass || '.oid::regprocedure::text = '
+                    THEN class_info.xclass || '.oid = '
                         || quote_literal(quote_ident(obj_schema) || '.' || obj_nom)
+                        || '::regprocedure'
                 ELSE class_info.xname || ' = ' || quote_literal(obj_nom)
                     || ' AND ' || class_info.xschema || '::regnamespace::text = '
                     || quote_literal(quote_ident(obj_schema)) END
         INTO obj ;
-     
+    
     IF obj.prop IS NULL
     THEN
         RAISE EXCEPTION 'FDO5. Echec. L''objet % n''existe pas.', obj_nom ;
+    END IF ;
+    
+    -- il existe déjà un objet de même définition dans le schéma cible
+    IF class_info.xclass = 'pg_proc' THEN
+        EXECUTE format('
+            SELECT oid FROM pg_catalog.pg_proc
+                WHERE pronamespace = %L::regnamespace
+                    AND proname = %L
+                    AND pg_catalog.oidvectortypes(proargtypes) = %L',
+            quote_ident(schema_cible), obj.objname, obj.proargtypes)
+            INTO duplicate ;
+    ELSE
+        EXECUTE format('
+            SELECT oid FROM pg_catalog.%s
+                WHERE %s = %L::regnamespace
+                    AND %s = %L',
+            class_info.xclass,
+            class_info.xschema, quote_ident(schema_cible),
+            class_info.xname, obj.objname)
+            INTO duplicate ;
+    END IF ;
+        
+    IF duplicate IS NOT NULL
+    THEN
+        RAISE EXCEPTION 'FDO8. Opération interdite. Il existe déjà un objet de même définition dans le schéma cible.' ;
     END IF ;
     
     ------ RECUPERATION DES ROLES ------
@@ -3072,6 +3281,53 @@ BEGIN
         END IF ;
     END LOOP ;
     
+    ------ BREF CONTRÔLE DES INDEX ------
+    -- il s'agit seulement de vérifier qu'il n'existe pas déjà d'index
+    -- de même nom dans le schéma cible
+    
+    -- 1. index qui dépendent d'une contrainte, tels les index
+    -- des clés primaires
+    FOR s IN (
+        SELECT
+            pg_class.oid,
+            pg_class.relname
+            FROM pg_catalog.pg_constraint
+                LEFT JOIN pg_catalog.pg_class ON pg_class.oid = pg_constraint.conindid
+            WHERE pg_constraint.conrelid = obj.oid 
+                AND pg_constraint.conindid IS NOT NULL
+        )
+    LOOP
+        IF EXISTS (SELECT oid FROM pg_catalog.pg_class
+            WHERE pg_class.relname = s.relname
+                AND relnamespace = quote_ident(schema_cible)::regnamespace)
+        THEN
+            RAISE EXCEPTION 'FDO9. Opération interdite. Il existe dans le schéma cible une relation de même nom que l''index associé %.', s.relname ;
+        END IF ;
+    END LOOP ;
+    
+    -- 2. autres index (qui dépendent directement de la table)
+    FOR s IN (
+        SELECT
+            pg_class.oid,
+            pg_class.relname
+            FROM pg_catalog.pg_depend LEFT JOIN pg_catalog.pg_class
+                ON pg_class.oid = pg_depend.objid
+            WHERE pg_depend.classid = 'pg_catalog.pg_class'::regclass::oid
+                AND pg_depend.refclassid = 'pg_catalog.pg_class'::regclass::oid
+                AND pg_depend.refobjid = obj.oid
+                AND pg_depend.refobjsubid > 0
+                AND pg_depend.deptype = ANY (ARRAY['a', 'i'])
+                AND pg_class.relkind = 'i'
+        )
+    LOOP
+        IF EXISTS (SELECT oid FROM pg_catalog.pg_class
+            WHERE pg_class.relname = s.relname
+                AND relnamespace = quote_ident(schema_cible)::regnamespace)
+        THEN
+            RAISE EXCEPTION 'FDO10. Opération interdite. Il existe dans le schéma cible une relation de même nom que l''index associé %.', s.relname ;
+        END IF ;
+    END LOOP ;
+    
     ------ PRIVILEGES SUR LES SEQUENCES ASSOCIEES ------
     IF obj_typ = 'table'
     THEN
@@ -3084,7 +3340,8 @@ BEGIN
         -- de type DEPENDENCY_INTERNAL (i) pour la séquence d'un champ IDENDITY
         FOR s IN (
             SELECT
-                pg_class.oid
+                pg_class.oid,
+                pg_class.relname
                 FROM pg_catalog.pg_depend LEFT JOIN pg_catalog.pg_class
                     ON pg_class.oid = pg_depend.objid
                 WHERE pg_depend.classid = 'pg_catalog.pg_class'::regclass::oid
@@ -3095,6 +3352,14 @@ BEGIN
                     AND pg_class.relkind = 'S'
             )
         LOOP
+            -- il existe déjà une séquence de même nom dans le schéma cible
+            IF EXISTS (SELECT oid FROM pg_catalog.pg_class
+                WHERE pg_class.relname = s.relname
+                    AND relnamespace = quote_ident(schema_cible)::regnamespace)
+            THEN
+                RAISE EXCEPTION 'FDO11. Opération interdite. Il existe dans le schéma cible une relation de même nom que la séquence associée %.', s.relname ;
+            END IF ;
+        
             -- liste des séquences
             seq_liste := array_append(seq_liste, s.oid) ;
             
@@ -3417,12 +3682,12 @@ BEGIN
 
     RETURN '__ DEPLACEMENT REUSSI.' ;
 END
-$_$;
+$_$ ;
 
 ALTER FUNCTION z_asgard.asgard_deplace_obj(text, text, text, text, int)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_deplace_obj(text, text, text, text, int) IS 'ASGARD. Fonction qui prend en charge le déplacement d''un objet dans un nouveau schéma, avec une gestion propre des privilèges.' ;
+COMMENT ON FUNCTION z_asgard.asgard_deplace_obj(text, text, text, text, int) IS 'ASGARD. Déplace un objet vers un nouveau schéma, en transférant ou réinitialisant les privilèges selon la variante choisie.' ;
 
 
 ------ 4.11 - OCTROI D'UN RÔLE À TOUS LES RÔLES DE CONNEXION ------
@@ -3433,17 +3698,26 @@ CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_all_login_grant_role(n_role tex
     RETURNS int
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction confère à tous les rôles de connexion du
-           serveur l'appartenance au rôle donné en argument.
-ARGUMENTS :
-- n_role : une chaîne de caractères présumée correspondre à un nom de
-  rôle valide ;
-- b : [optionnel] un booléen. Si b vaut False et qu'un rôle de connexion est
-déjà membre du rôle considéré par héritage, la fonction ne fait rien. Si
-b vaut True (défaut), la fonction ne passera un rôle de connexion que s'il est
-lui-même membre du rôle considéré.
-SORTIE : un entier correspondant au nombre de rôles pour lesquels
-la permission a été accordée. */
+/* Confère à tous les rôles de connexion du serveur l'appartenance au rôle
+donné en argument.
+
+    Parameters
+    ----------
+    n_role : text
+        Une chaîne de caractères présumée correspondre à un nom de
+        rôle valide.
+    b : boolean, default True
+        Si b vaut False et qu'un rôle de connexion est déjà membre
+        du rôle considéré par héritage, la fonction ne fait rien. Si
+        b vaut True (défaut), la fonction ne passera un rôle de connexion
+        que s'il est lui-même membre du rôle considéré.
+        
+    Returns
+    -------
+    int
+        Le nombre de rôles pour lesquels la permission a été accordée.
+
+*/
 DECLARE
     roles record ;
     attributeur text ;
@@ -3455,7 +3729,7 @@ BEGIN
     -- existance du rôle
     IF NOT n_role IN (SELECT rolname FROM pg_catalog.pg_roles)
     THEN
-        RAISE EXCEPTION 'FLG1. Echec. Le rôle % n''existe pas', n_role ;
+        RAISE EXCEPTION 'FLG1. Echec. Le rôle % n''existe pas.', n_role ;
     END IF ;
     
     -- on cherche un rôle dont l'utilisateur est
@@ -3473,38 +3747,38 @@ BEGIN
         IF NOT FOUND
         THEN
             RAISE EXCEPTION 'FLG2. Opération interdite. Permissions insuffisantes pour le rôle %.', n_role
-                USING HINT = 'Votre rôle doit être membre de ' || n_role
-                            || ' avec admin option ou disposer de l''attribut CREATEROLE pour réaliser cette opération.' ;
+                USING HINT = format('Votre rôle doit être membre de %s avec admin option ou disposer de l''attribut CREATEROLE pour réaliser cette opération.',
+                    n_role) ;
         END IF ;
     END IF ;
     
-    EXECUTE 'SET ROLE ' || quote_ident(attributeur) ;
+    EXECUTE format('SET ROLE %I', attributeur) ;
     
     IF b
     THEN
         FOR roles IN SELECT rolname
-                        FROM pg_roles LEFT JOIN pg_auth_members
-                                ON member = pg_roles.oid AND roleid = n_role::regrole::oid
-                        WHERE rolcanlogin AND member IS NULL
-                            AND NOT rolsuper
+            FROM pg_roles LEFT JOIN pg_auth_members
+                ON member = pg_roles.oid AND roleid = n_role::regrole::oid
+            WHERE rolcanlogin AND member IS NULL
+                AND NOT rolsuper
         LOOP
-            c := 'GRANT ' || quote_ident(n_role) || ' TO ' || quote_ident(roles.rolname) ;
+            c := format('GRANT %s TO %s', n_role, roles.rolname) ;
             EXECUTE c ;
             RAISE NOTICE '> %', c ;
             n := n + 1 ;
         END LOOP ;
     ELSE
         FOR roles IN SELECT rolname FROM pg_roles
-                        WHERE rolcanlogin AND NOT pg_has_role(rolname, n_role, 'MEMBER')
+            WHERE rolcanlogin AND NOT pg_has_role(rolname, n_role, 'MEMBER')
         LOOP
-            c := 'GRANT ' || quote_ident(n_role) || ' TO ' || quote_ident(roles.rolname) ;
+            c := format('GRANT %s TO %s', n_role, roles.rolname) ;
             EXECUTE c ;
             RAISE NOTICE '> %', c ;
             n := n + 1 ;
         END LOOP ;
     END IF ;
     
-    EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+    EXECUTE format('SET ROLE %I', utilisateur) ;
     
     RETURN n ;
 END
@@ -3513,8 +3787,7 @@ $_$;
 ALTER FUNCTION z_asgard_admin.asgard_all_login_grant_role(text, boolean)
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_all_login_grant_role(text, boolean) IS 'ASGARD. Fonction qui confère à tous les rôles de connexion du serveur l''appartenance au rôle donné en argument.' ;
-
+COMMENT ON FUNCTION z_asgard_admin.asgard_all_login_grant_role(text, boolean) IS 'ASGARD. Confère à tous les rôles de connexion du serveur l''appartenance au rôle donné en argument.' ;
 
 
 ------ 4.12 - IMPORT DE LA NOMENCLATURE DANS GESTION_SCHEMA ------
@@ -4271,44 +4544,9 @@ ALTER FUNCTION z_asgard_admin.asgard_initialise_all_schemas(integer)
 COMMENT ON FUNCTION z_asgard_admin.asgard_initialise_all_schemas(integer) IS 'ASGARD. Fonction qui réinitialise les droits sur l''ensemble des schémas référencés.' ;
 
 
------- 4.15 - TRANSFORMATION D'UN NOM DE RÔLE POUR COMPARAISON AVEC LES CHAMPS ACL ------
+------ 4.15 - TRANSFORMATION D'UN NOM DE RÔLE POUR COMPARAISON AVEC LES CHAMPS ACL ------  [supprimé version 1.4.0]
 
 -- Function: z_asgard.asgard_role_trans_acl(regrole)
-
-CREATE OR REPLACE FUNCTION z_asgard.asgard_role_trans_acl(n_role regrole)
-    RETURNS text
-    LANGUAGE plpgsql
-    AS $_$
-/* OBJET : Cette fonction transforme un nom de rôle pour qu'il soit utilisable
-           dans une expression régulière de comparaison avec les champs acl
-           de pg_catalog.
-ARGUMENT : un nom de rôle casté en regrole.
-SORTIE : sa traduction, en format text. */
-DECLARE
-    n_role_trans text ;
-BEGIN
-
-    IF n_role::text ~ '^["]?[a-zA-Z0-9_]+["]?$'
-    THEN
-        -- pour les noms ne comportant que des lettres et
-        -- des chiffres, même avec des majuscules, on
-        -- retire les guillemets
-        n_role_trans := replace(n_role::text, '"', '') ;
-    ELSE 
-        -- tous les caractères spéciaux vont entre crochets
-        n_role_trans := regexp_replace(n_role::text, '([^a-zA-Z0-9_]{1})', '[\1]', 'g') ;
-        -- les antislashs sont doublés
-        n_role_trans := replace(n_role_trans::text, '\', '\\') ; --'
-    END IF ;
-    
-    RETURN n_role_trans ;
-END
-$_$;
-
-ALTER FUNCTION z_asgard.asgard_role_trans_acl(regrole)
-    OWNER TO g_admin_ext ;
-
-COMMENT ON FUNCTION z_asgard.asgard_role_trans_acl(regrole) IS 'ASGARD. Fonction qui transforme un nom de rôle pour qu''il soit utilisable dans une expression régulière de comparaison avec les champs acl de pg_catalog.' ;
 
 
 ------ 4.16 - DIAGNOSTIC DES DROITS NON STANDARDS ------
@@ -4319,19 +4557,42 @@ CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_diagnostic(cibles text[] DEFAUL
     RETURNS TABLE (nom_schema text, nom_objet text, typ_objet text, critique boolean, anomalie text)
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Pour tous les schémas référencés par ASGARD et
-           existants dans la base, asgard_diagnostic liste
-           les écarts avec les droits standards.
-ARGUMENT : cibles (optionnel) permet de restreindre le diagnostic
-à la liste de schémas spécifiés.
-APPEL : SELECT * FROM z_asgard_admin.asgard_diagnostic() ;
-SORTIE : une table avec quatre attributs,
-    - nom_schema = nom du schéma ;
-    - nom_objet = nom de l'objet concerné ;
-    - typ_objet = le type d'objet ;
-    - critique = True si l'anomalie est problématique pour le
-      bon fonctionnement d'ASGARD, False si elle est bénigne ;
-    - anomalie = description de l'anomalie. */
+/* Pour tous les schémas actifs référencés par Asgard, liste les écarts
+entre les droits effectifs et les droits standards.
+
+    Cette fonction peut avoir une durée d'exécution conséquente
+    si elle est appliquée à un grand nombre de schémas.
+    
+    Les "anomalies" détectée peuvent être parfaitement justifiées
+    si elles résultent d'une personnalisation volontaire des
+    droits sur certains objets.
+
+    Parameters
+    ----------
+    cibles : text[], optional
+        Permet de restreindre le diagnostic à la liste de schémas
+        spécifiés.
+    
+    Returns
+    -------
+    table (nom_schema : text, nom_objet : text, typ_objet : text,
+    critique : boolean, anomalie : text)
+        Une table avec quatre attributs :
+        
+        * "nom_schema" est le nom du schéma.
+        * "nom_objet" est le nom de l'objet concerné.
+        * "typ_objet" est le type d'objet.
+        * "critique" vaut True si l'anomalie est problématique pour
+          le bon fonctionnement d'Asgard (et doit être corrigée au
+          plus tôt), False si elle est bénigne.
+        * "anomalie" est une description de l'anomalie.
+    
+    Examples
+    -------- 
+    SELECT * FROM z_asgard_admin.asgard_diagnostic() ;
+    SELECT * FROM z_asgard_admin.asgard_diagnostic(ARRAY['schema_1', 'schema_2']) ;
+    
+*/
 DECLARE
     item record ;
     catalogue record ;
@@ -4468,16 +4729,21 @@ BEGIN
                             catalogue.catalogue || '.oid AS objoid, ' ELSE '' END ||
                         CASE WHEN catalogue.catalogue = 'pg_default_acl' THEN ''
                             WHEN catalogue.catalogue = 'pg_attribute'
-                                THEN '(z_asgard.asgard_parse_relident(attrelid::regclass))[2] || '' ('' || ' || catalogue.prefixe || 'name || '')'' AS objname, '
+                                THEN '(z_asgard.asgard_parse_relident(attrelid::regclass))[2] || '' ('' || ' ||
+                                    catalogue.prefixe || 'name || '')'' AS objname, '
                             ELSE catalogue.prefixe || 'name::text AS objname, ' END || '
-                        regexp_replace(' || CASE WHEN catalogue.catalogue = 'pg_default_acl' THEN 'defaclrole'
-                            WHEN catalogue.catalogue = 'pg_attribute' THEN 'NULL'
-                            ELSE  catalogue.prefixe || 'owner' END || '::regrole::text, ''^["]?(.*?)["]?$'', ''\1'') AS objowner' ||
+                        rolname AS objowner' ||
                         CASE WHEN catalogue.droits THEN ', ' || catalogue.prefixe || 'acl AS objacl' ELSE '' END || '
                         FROM pg_catalog.' || catalogue.catalogue || '
+                            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = ' ||
+                                CASE WHEN catalogue.catalogue = 'pg_default_acl' THEN 'defaclrole'
+                                    WHEN catalogue.catalogue = 'pg_attribute' THEN 'NULL'
+                                    ELSE  catalogue.prefixe || 'owner' END || ' 
                         WHERE ' || CASE WHEN catalogue.catalogue = 'pg_attribute'
-                                    THEN 'quote_ident((z_asgard.asgard_parse_relident(attrelid::regclass))[1])::regnamespace::oid = ' || item.oid_schema::text
-                                WHEN catalogue.catalogue = 'pg_namespace' THEN catalogue.prefixe || 'name = ' || quote_literal(item.nom_schema)
+                                    THEN 'quote_ident((z_asgard.asgard_parse_relident(attrelid::regclass))[1])::regnamespace::oid = ' ||
+                                        item.oid_schema::text
+                                WHEN catalogue.catalogue = 'pg_namespace' THEN catalogue.prefixe || 'name = ' ||
+                                    quote_literal(item.nom_schema)
                                 ELSE catalogue.prefixe || 'namespace = ' || item.oid_schema::text END ||
                             CASE WHEN catalogue.attrib_genre IS NOT NULL
                                 THEN ' AND ' || catalogue.attrib_genre || ' ~ ' || quote_literal(catalogue.valeur_genre)
@@ -4532,12 +4798,12 @@ BEGIN
                                 VALUES
                                     ('z_asgard_admin', 'z_asgard_admin', 'schéma', 'g_admin_ext', 'U'),
                                     ('z_asgard_admin', 'gestion_schema', 'table', 'g_admin_ext', 'rawd'),
-                                    ('z_asgard', 'z_asgard', 'schéma', 'g_consult', 'U'),
-                                    ('z_asgard', 'gestion_schema_usr', 'vue', 'g_consult', 'r'),
-                                    ('z_asgard', 'gestion_schema_etr', 'vue', 'g_consult', 'r'),
-                                    ('z_asgard', 'asgardmenu_metadata', 'vue', 'g_consult', 'r'),
-                                    ('z_asgard', 'asgardmanager_metadata', 'vue', 'g_consult', 'r'),
-                                    ('z_asgard', 'gestion_schema_read_only', 'vue', 'g_consult', 'r')
+                                    ('z_asgard', 'z_asgard', 'schéma', 'public', 'U'),
+                                    ('z_asgard', 'gestion_schema_usr', 'vue', 'public', 'rawd'),
+                                    ('z_asgard', 'gestion_schema_etr', 'vue', 'public', 'rawd'),
+                                    ('z_asgard', 'asgardmenu_metadata', 'vue', 'public', 'r'),
+                                    ('z_asgard', 'asgardmanager_metadata', 'vue', 'public', 'r'),
+                                    ('z_asgard', 'gestion_schema_read_only', 'vue', 'public', 'r')
                                 ) AS t (a_schema, a_objet, a_type, role, droits)
                             WHERE a_schema = item.nom_schema AND a_objet = objet.objname::text AND a_type = catalogue.lib_obj ;
                     
@@ -4628,12 +4894,12 @@ BEGIN
         END LOOP ;        
     END LOOP ;
 END
-$_$;
+$_$ ;
 
 ALTER FUNCTION z_asgard_admin.asgard_diagnostic(text[])
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_diagnostic(text[]) IS 'ASGARD. Fonction qui liste les écarts vis-à-vis des droits standards sur les schémas actifs référencés par ASGARD.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_diagnostic(text[]) IS 'ASGARD. Pour tous les schémas actifs référencés par Asgard, liste les écarts entre les droits effectifs et les droits standards.' ;
 
 
 ------ 4.17 - EXTRACTION DE NOMS D'OBJETS A PARTIR D'IDENTIFIANTS ------
@@ -4676,6 +4942,7 @@ ALTER FUNCTION z_asgard.asgard_parse_relident(regclass)
 COMMENT ON FUNCTION z_asgard.asgard_parse_relident(regclass) IS 'ASGARD. Fonction qui retourne le nom du schéma et le nom de la relation à partir d''un identifiant de relation.' ;
 
 
+
 ------ 4.18 - EXPLICITATION DES CODES DE PRIVILÈGES ------
 
 -- Function: z_asgard.asgard_expend_privileges(text)
@@ -4711,6 +4978,7 @@ ALTER FUNCTION z_asgard.asgard_expend_privileges(text)
 COMMENT ON FUNCTION z_asgard.asgard_expend_privileges(text) IS 'ASGARD. Fonction qui explicite les privilèges correspondant aux codes données en argument.' ;
 
 
+
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
@@ -4724,14 +4992,15 @@ COMMENT ON FUNCTION z_asgard.asgard_expend_privileges(text) IS 'ASGARD. Fonction
 
 -- Function: z_asgard_admin.asgard_on_modify_gestion_schema_before()
 
-CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_before() RETURNS trigger
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_before()
+    RETURNS trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par le trigger asgard_on_modify_gestion_schema_before,
-           qui valide les informations saisies dans la table de gestion.
-CIBLES : z_asgard_admin.gestion_schema.
-PORTEE : FOR EACH ROW.
-DECLENCHEMENT : BEFORE INSERT, UPDATE, DELETE.*/
+/* Fonction exécutée par le déclencheur asgard_on_modify_gestion_schema_before
+sur z_asgard_admin.gestion_schema, qui valide et normalise les informations
+saisies dans la table de gestion avant leur enregistrement.
+
+*/
 DECLARE
     n_role text ;
 BEGIN
@@ -4797,9 +5066,9 @@ BEGIN
             IF NOT pg_has_role(OLD.oid_producteur, 'USAGE')
             THEN
                 RAISE EXCEPTION 'TB23. Opération interdite (schéma %).', OLD.nom_schema
-                    USING DETAIL = 'Seul les membres du rôle producteur ' || OLD.oid_producteur::regrole::text || ' peuvent supprimer ce schéma.' ;
+                    USING DETAIL = format('Seuls les membres du rôle producteur %s peuvent supprimer ce schéma.', OLD.oid_producteur::regrole) ;
             ELSE
-                EXECUTE 'DROP SCHEMA ' || quote_ident(OLD.nom_schema) || ' CASCADE' ;
+                EXECUTE format('DROP SCHEMA %I CASCADE', OLD.nom_schema) ;
                 RAISE NOTICE '... Le schéma % a été supprimé.', OLD.nom_schema ;
                 RETURN NULL ;
             END IF ;
@@ -4974,9 +5243,10 @@ BEGIN
                     -- commande ALTER SCHEMA OWNER TO aurait été interceptée
                     -- mais, s'il advient, on repart du propriétaire
                     -- renseigné dans pg_namespace
-                    SELECT replace(nspowner::regrole::text, '"', ''), nspowner
+                    SELECT rolname, nspowner
                         INTO NEW.producteur, NEW.oid_producteur
                         FROM pg_catalog.pg_namespace
+                            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
                         WHERE pg_namespace.oid = NEW.oid_schema ;
                     RAISE NOTICE '[table de gestion] ANOMALIE. Schéma %. L''OID actuellement renseigné pour le producteur est invalide. Poursuite avec l''OID du propriétaire courant du schéma.', NEW.nom_schema ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN producteur') ;
@@ -4985,7 +5255,7 @@ BEGIN
                 THEN
                     NEW.producteur := n_role ;
                     RAISE NOTICE '[table de gestion] Schéma %. Mise à jour du libellé du rôle producteur, renommé entre temps.', NEW.nom_schema
-                        USING DETAIL = 'Ancien nom "' || OLD.producteur || '", nouveau nom "' || NEW.producteur || '".' ;
+                        USING DETAIL = format('Ancien nom "%s", nouveau nom "%s".', OLD.producteur, NEW.producteur) ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN producteur') ;
                 END IF ; 
             END IF ;
@@ -5002,14 +5272,14 @@ BEGIN
                     NEW.editeur := NULL ;
                     NEW.oid_editeur := NULL ;
                     RAISE NOTICE '[table de gestion] Schéma %. Le rôle éditeur n''existant plus, il est déréférencé.', NEW.nom_schema
-                        USING DETAIL = 'Ancien nom "' || OLD.editeur || '".' ;
+                        USING DETAIL = format('Ancien nom "%s".', OLD.editeur) ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN editeur') ;
                 ELSIF NOT n_role = NEW.editeur
                 -- libellé obsolète de l'éditeur
                 THEN
                     NEW.editeur := n_role ;
                     RAISE NOTICE '[table de gestion] Schéma %. Mise à jour du libellé du rôle éditeur, renommé entre temps.', NEW.nom_schema
-                        USING DETAIL = 'Ancien nom "' || OLD.editeur || '", nouveau nom "' || NEW.editeur || '".' ;
+                        USING DETAIL = format('Ancien nom "%s", nouveau nom "%s".', OLD.editeur, NEW.editeur) ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN editeur') ;
                 END IF ; 
             END IF ;
@@ -5026,14 +5296,14 @@ BEGIN
                     NEW.lecteur := NULL ;
                     NEW.oid_lecteur := NULL ;
                     RAISE NOTICE '[table de gestion] Schéma %. Le rôle lecteur n''existant plus, il est déréférencé.', NEW.nom_schema
-                        USING DETAIL = 'Ancien nom "' || OLD.lecteur || '".' ;
+                        USING DETAIL = format('Ancien nom "%s".', OLD.lecteur) ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN lecteur') ;
                 ELSIF NOT n_role = NEW.lecteur
                 -- libellé obsolète du lecteur
                 THEN
                     NEW.lecteur := n_role ;
                     RAISE NOTICE '[table de gestion] Schéma %. Mise à jour du libellé du rôle lecteur, renommé entre temps.', NEW.nom_schema
-                        USING DETAIL = 'Ancien nom "' || OLD.lecteur || '", nouveau nom "' || NEW.lecteur || '".' ;
+                        USING DETAIL = format('Ancien nom "%s", nouveau nom "%s".', OLD.lecteur, NEW.lecteur) ;
                     NEW.ctrl := array_append(NEW.ctrl, 'CLEAN lecteur') ;
                 END IF ; 
             END IF ;    
@@ -5092,7 +5362,8 @@ BEGIN
                 IF NEW.bloc IS NULL   
                 THEN
                     NEW.bloc := 'd' ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                        NEW.nom_schema, NEW.bloc) ;
                     
                     NEW.nom_schema := substring(NEW.nom_schema, '^d_(.*)$') ;
                     RAISE NOTICE '[table de gestion] Le préfixe du schéma % a été supprimé.', NEW.nom_schema ;
@@ -5113,7 +5384,8 @@ BEGIN
                 -- et le bloc + s'il y a un ancien bloc récupérable
                 THEN
                     NEW.nom_schema := regexp_replace(NEW.nom_schema, '^(d)_', OLD.bloc || '_') ;
-                    RAISE NOTICE '[table de gestion] Restauration du préfixe du schéma %.', NEW.nom_schema || ' d''après son ancien bloc (' || OLD.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Restauration du préfixe du schéma %s d''après son ancien bloc (%s).',
+                        NEW.nom_schema, OLD.bloc) ;
                     -- on ne reprend pas l'ancien nom au cas où autre chose que le préfixe aurait été
                     -- changé.
                     
@@ -5122,10 +5394,12 @@ BEGIN
                 -- parallèle + s'il y a un ancien bloc récupérable
                 THEN
                     NEW.nom_schema := regexp_replace(NEW.nom_schema, '^(d)_', OLD.bloc || '_') ;
-                    RAISE NOTICE '[table de gestion] Restauration du préfixe du schéma %.', NEW.nom_schema || ' d''après son ancien bloc (' || OLD.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Restauration du préfixe du schéma %s d''après son ancien bloc (%s).',
+                        NEW.nom_schema, OLD.bloc) ;
                 
                     NEW.bloc := 'd' ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                        NEW.nom_schema, NEW.bloc) ;
                     
                 ELSIF NEW.bloc = 'd' AND OLD.bloc = 'd' 
                     AND OLD.nom_schema ~ '^[a-ce-z]_'
@@ -5148,7 +5422,8 @@ BEGIN
                 -- mise à la corbeille d'un schéma sans bloc
                 THEN
                     NEW.bloc := 'd' ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                        NEW.nom_schema, NEW.bloc) ;
                     
                     NEW.nom_schema := substring(NEW.nom_schema, '^d_(.*)$') ;
                     RAISE NOTICE '[table de gestion] Le préfixe du schéma % a été supprimé.', NEW.nom_schema ;
@@ -5165,10 +5440,12 @@ BEGIN
                 -- valeur que d
                 THEN
                     NEW.nom_schema := regexp_replace(NEW.nom_schema, '^(d)_', OLD.bloc || '_') ;
-                    RAISE NOTICE '[table de gestion] Restauration du préfixe du schéma %.', NEW.nom_schema || ' d''après son ancien bloc (' || OLD.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Restauration du préfixe du schéma %s d''après son ancien bloc (%s).',
+                        NEW.nom_schema, OLD.bloc) ;
                     
                     NEW.bloc := 'd' ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;   
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                        NEW.nom_schema, NEW.bloc) ;
                 END IF ;
                 
             END IF ;
@@ -5196,13 +5473,15 @@ BEGIN
                 ELSE
                 -- sinon, on met le préfixe du nom du schéma dans bloc
                     NEW.bloc := substring(NEW.nom_schema, '^([a-z])_') ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                        NEW.nom_schema, NEW.bloc) ;
                 END IF ;
             ELSE
                 -- sur un INSERT,
                 -- on met le préfixe du nom du schéma dans bloc
                 NEW.bloc := substring(NEW.nom_schema, '^([a-z])_') ;
-                RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                    NEW.nom_schema, NEW.bloc) ;
             END IF ;
         ELSIF NEW.bloc IS NULL
         -- si bloc est NULL, et que (sous-entendu) le nom du schéma ne
@@ -5240,7 +5519,8 @@ BEGIN
                     -- on met à jour le bloc selon le nouveau préfixe du schéma
                     THEN
                         NEW.bloc := substring(NEW.nom_schema, '^([a-z])_') ;
-                        RAISE NOTICE '[table de gestion] Mise à jour du bloc pour le schéma %.', NEW.nom_schema || ' (' || NEW.bloc || ')' ;
+                        RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du bloc pour le schéma %s (%s).',
+                            NEW.nom_schema, NEW.bloc) ;
                     ELSIF NOT NEW.bloc ~ '^[a-z]$'
                     -- si le nouveau bloc est invalide, on renvoie une erreur
                     THEN
@@ -5248,7 +5528,8 @@ BEGIN
                     ELSE
                     -- si le bloc est valide, on met à jour le préfixe du schéma d'après le bloc
                         NEW.nom_schema := regexp_replace(NEW.nom_schema, '^([a-z])?_', NEW.bloc || '_') ;
-                        RAISE NOTICE '[table de gestion] Mise à jour du préfixe du schéma %.', NEW.nom_schema || ' d''après son bloc (' || NEW.bloc || ')' ;
+                        RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du préfixe du schéma %s d''après son bloc (%s)',
+                            NEW.nom_schema, NEW.bloc) ;
                     END IF ;
                 ELSIF NOT NEW.bloc ~ '^[a-z]$'
                 -- (sur un INSERT)
@@ -5260,7 +5541,8 @@ BEGIN
                 -- (sur un INSERT)
                 -- si le bloc est valide, on met à jour le préfixe du schéma d'après le bloc
                     NEW.nom_schema := regexp_replace(NEW.nom_schema, '^([a-z])?_', NEW.bloc || '_') ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du préfixe du schéma %.', NEW.nom_schema || ' d''après son bloc (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du préfixe du schéma %s d''après son bloc (%s)',
+                        NEW.nom_schema, NEW.bloc) ;
                 END IF ;
             ELSIF NOT NEW.bloc ~ '^[a-z]$'
             -- (si le nom du schéma ne contient pas de préfixe valide)
@@ -5283,12 +5565,14 @@ BEGIN
                 ELSE
                 -- sinon, préfixage du schéma selon le bloc
                     NEW.nom_schema := NEW.bloc || '_' || NEW.nom_schema ;
-                    RAISE NOTICE '[table de gestion] Mise à jour du préfixe du schéma %.', NEW.nom_schema || ' d''après son bloc (' || NEW.bloc || ')' ;
+                    RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du préfixe du schéma %s d''après son bloc (%s)',
+                        NEW.nom_schema, NEW.bloc) ;
                 END IF ;
             ELSE
             -- sur un INSERT, préfixage du schéma selon le bloc
                 NEW.nom_schema := NEW.bloc || '_' || NEW.nom_schema ;
-                RAISE NOTICE '[table de gestion] Mise à jour du préfixe du schéma %.', NEW.nom_schema || ' d''après son bloc (' || NEW.bloc || ')' ;
+                RAISE NOTICE USING MESSAGE = format('[table de gestion] Mise à jour du préfixe du schéma %s d''après son bloc (%s)',
+                    NEW.nom_schema, NEW.bloc) ;
             END IF ;
             -- le trigger AFTER se chargera de renommer physiquement le
             -- schéma d'autant que de besoin
@@ -5360,7 +5644,7 @@ BEGIN
             IF NOT pg_has_role(OLD.producteur, 'USAGE')
             THEN
                 RAISE EXCEPTION 'TB20. Opération interdite (schéma %).', OLD.nom_schema
-                    USING DETAIL = 'Seul le rôle producteur ' || OLD.producteur || ' (super-utilisateur) peut modifier ce schéma.' ;
+                    USING DETAIL = format('Seul le rôle producteur %s (super-utilisateur) peut modifier ce schéma.', OLD.producteur) ;
             END IF ;
         END IF ;
         
@@ -5371,7 +5655,7 @@ BEGIN
             IF NOT pg_has_role(NEW.producteur, 'USAGE')
             THEN
                 RAISE EXCEPTION 'TB21. Opération interdite (schéma %).', NEW.nom_schema
-                    USING DETAIL = 'Seul le super-utilisateur ' || NEW.producteur || ' peut créer un schéma dont il est identifié comme producteur.' ;
+                    USING DETAIL = format('Seul le super-utilisateur %s peut créer un schéma dont il est identifié comme producteur.', NEW.producteur) ;
             END IF ;
         END IF ;
         
@@ -5382,7 +5666,7 @@ BEGIN
             IF NOT pg_has_role(NEW.producteur, 'USAGE')
             THEN
                 RAISE EXCEPTION 'TB24. Opération interdite (schéma %).', NEW.nom_schema
-                    USING DETAIL = 'Seul le super-utilisateur ' || NEW.producteur || ' peut se désigner comme producteur d''un schéma.' ;
+                    USING DETAIL = format('Seul le super-utilisateur %s peut se désigner comme producteur d''un schéma.', NEW.producteur) ;
             END IF ;
         END IF ;
         
@@ -5397,7 +5681,7 @@ BEGIN
             IF NOT pg_has_role(NEW.producteur, 'USAGE')                
             THEN
                 RAISE EXCEPTION 'TB22. Opération interdite (schéma %).', NEW.nom_schema
-                    USING DETAIL = 'Seul le super-utilisateur ' || NEW.producteur || ' peut créer un schéma dont il est identifié comme producteur.' ;
+                    USING DETAIL = format('Seul le super-utilisateur %s peut créer un schéma dont il est identifié comme producteur.', NEW.producteur) ;
             END IF ;
         END IF ;            
         
@@ -5408,7 +5692,7 @@ BEGIN
             IF NOT pg_has_role(NEW.producteur, 'USAGE') 
             THEN
                 RAISE EXCEPTION 'TB25. Opération interdite (schéma %).', NEW.nom_schema
-                    USING DETAIL = 'Seul le super-utilisateur ' || NEW.producteur || ' peut référencer dans ASGARD un schéma dont il est identifié comme producteur.' ;
+                    USING DETAIL = format('Seul le super-utilisateur %s peut référencer dans ASGARD un schéma dont il est identifié comme producteur.', NEW.producteur) ;
             END IF ;
         END IF ;
     END IF ;
@@ -5428,7 +5712,7 @@ $BODY$ ;
 ALTER FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_before()
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_before() IS 'ASGARD. Fonction appelée par le trigger qui valide les modifications de la table de gestion.';
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_before() IS 'ASGARD. Fonction exécutée par le déclencheur asgard_on_modify_gestion_schema_before sur z_asgard_admin.gestion_schema, qui valide et normalise les informations saisies dans la table de gestion avant leur enregistrement.' ;
 
 
 -- Trigger: asgard_on_modify_gestion_schema_before
@@ -5439,7 +5723,7 @@ CREATE TRIGGER asgard_on_modify_gestion_schema_before
     FOR EACH ROW
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_modify_gestion_schema_before() ;
     
-COMMENT ON TRIGGER asgard_on_modify_gestion_schema_before ON z_asgard_admin.gestion_schema IS 'ASGARD. Trigger qui valide les modifications de la table de gestion.';
+COMMENT ON TRIGGER asgard_on_modify_gestion_schema_before ON z_asgard_admin.gestion_schema IS 'ASGARD. Déclencheur qui valide et normalise les informations saisies dans la table de gestion avant leur enregistrement.' ;
     
 
 
@@ -5447,14 +5731,15 @@ COMMENT ON TRIGGER asgard_on_modify_gestion_schema_before ON z_asgard_admin.gest
 
 -- Function: z_asgard_admin.asgard_on_modify_gestion_schema_after()
 
-CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_after() RETURNS trigger
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_after()
+    RETURNS trigger
     LANGUAGE plpgsql
     AS $BODY$
-/* OBJET : Fonction exécutée par le trigger asgard_on_modify_gestion_schema_after,
-           qui répercute physiquement les modifications de la table de gestion.
-CIBLES : z_asgard_admin.gestion_schema.
-PORTEE : FOR EACH ROW.
-DECLENCHEMENT : AFTER INSERT OR UPDATE.*/
+/* Fonction exécutée par le déclencheur asgard_on_modify_gestion_schema_after
+sur z_asgard_admin.gestion_schema, qui répercute physiquement les modifications
+de la table de gestion.
+
+*/
 DECLARE
     utilisateur text ;
     createur text ;
@@ -5530,8 +5815,9 @@ BEGIN
         IF NOT FOUND AND OLD.creation AND (NEW.ctrl IS NULL OR NOT 'CLEAN producteur' = ANY(array_remove(NEW.ctrl, NULL)))
         THEN
             RAISE NOTICE '[table de gestion] ANOMALIE. Schéma %. L''OID actuellement renseigné pour le producteur dans la table de gestion est invalide. Poursuite avec l''OID du propriétaire courant du schéma.', OLD.nom_schema ;
-            SELECT replace(nspowner::regrole::text, '"', '') INTO a_producteur
+            SELECT rolname INTO a_producteur
                 FROM pg_catalog.pg_namespace
+                    LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspowner
                 WHERE pg_namespace.oid = NEW.oid_schema ;
             IF NOT FOUND
             THEN
@@ -5544,8 +5830,7 @@ BEGIN
     IF NOT NEW.oid_schema::regnamespace::text = quote_ident(NEW.nom_schema)
     -- le schéma existe et ne porte pas déjà le nom NEW.nom_schema
     THEN
-        EXECUTE 'ALTER SCHEMA '|| NEW.oid_schema::regnamespace::text ||
-                ' RENAME TO ' || quote_ident(NEW.nom_schema) ;
+        EXECUTE format('ALTER SCHEMA %s RENAME TO %I', NEW.oid_schema::regnamespace, NEW.nom_schema) ;
         RAISE NOTICE '... Le schéma % a été renommé.', NEW.nom_schema ;
     END IF ; 
     -- exclusion des remontées d'event trigger correspondant
@@ -5594,10 +5879,10 @@ BEGIN
                 RAISE EXCEPTION 'TA2. Opération interdite. Vous n''êtes pas habilité à créer le rôle %.', NEW.producteur
                     USING HINT = 'Être membre d''un rôle disposant des attributs CREATEROLE et INHERIT est nécessaire pour créer de nouveaux producteurs.' ;
             END IF ;
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
-            EXECUTE 'CREATE ROLE ' || quote_ident(NEW.producteur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
+            EXECUTE format('CREATE ROLE %I', NEW.producteur) ;
             RAISE NOTICE '... Le rôle de groupe % a été créé.', NEW.producteur ;
-            EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;                
+            EXECUTE format('SET ROLE %I', utilisateur) ;                
         ELSE
         -- si le rôle producteur existe, on vérifie qu'il n'a pas l'option LOGIN
         -- les superusers avec LOGIN (comme postgres) sont tolérés
@@ -5637,8 +5922,8 @@ BEGIN
             IF createur IS NULL OR b_superuser
             THEN
                 RAISE EXCEPTION 'TA4. Opération interdite. Permissions insuffisantes pour le rôle %.', NEW.producteur
-                    USING HINT = 'Votre rôle doit être membre de ' || NEW.producteur
-                                     || ' ou disposer de l''attribut CREATEROLE pour réaliser cette opération.' ;
+                    USING HINT = format('Votre rôle doit être membre de %s ou disposer de l''attribut CREATEROLE pour réaliser cette opération.',
+                        NEW.producteur) ;
             END IF ;
         END IF ;
         IF TG_OP = 'UPDATE'
@@ -5652,31 +5937,31 @@ BEGIN
                 IF createur IS NULL OR b_superuser
                 THEN
                     RAISE EXCEPTION 'TA5. Opération interdite. Permissions insuffisantes pour le rôle %.', a_producteur
-                        USING HINT = 'Votre rôle doit être membre de ' || a_producteur
-                                         || ' ou disposer de l''attribut CREATEROLE pour réaliser cette opération.' ;
+                        USING HINT = format('Votre rôle doit être membre de %s ou disposer de l''attribut CREATEROLE pour réaliser cette opération.',
+                            a_producteur) ;
                 END IF ;            
             END IF ;
         END IF ;       
         IF b_test
         THEN
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;            
+            EXECUTE format('SET ROLE %I', createur) ;            
             -- par commodité, on rend createur membre à la fois de NEW et (si besoin)
             -- de OLD.producteur, même si l'utilisateur avait déjà accès à
             -- l'un des deux par ailleurs :
             IF NOT pg_has_role(createur, NEW.producteur, 'USAGE') AND NOT b_superuser
             THEN
-                EXECUTE 'GRANT ' || quote_ident(NEW.producteur) || ' TO ' || quote_ident(createur) ;
-                RAISE NOTICE '... Permission accordée à %.', createur || ' sur le rôle ' || NEW.producteur ;
+                EXECUTE format('GRANT %I TO %I', NEW.producteur, createur) ;
+                RAISE NOTICE USING MESSAGE = format('... Permission accordée à %s sur le rôle %s.', createur, NEW.producteur) ;
             END IF ;
             IF TG_OP = 'UPDATE'
             THEN
                 IF NOT pg_has_role(createur, a_producteur, 'USAGE') AND NOT b_superuser
                 THEN
-                    EXECUTE 'GRANT ' || quote_ident(a_producteur) || ' TO ' || quote_ident(createur) ;
-                    RAISE NOTICE '... Permission accordée à %.', createur || ' sur le rôle ' || a_producteur ;
+                    EXECUTE format('GRANT %I TO %I', a_producteur, createur) ;
+                    RAISE NOTICE USING MESSAGE = format('... Permission accordée à %s sur le rôle %s.', createur, a_producteur) ;
                 END IF ;
             END IF ;
-            EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+            EXECUTE format('SET ROLE %I', utilisateur) ;
         END IF ;
            
         -- permission de g_admin sur le producteur, s'il y a encore lieu
@@ -5690,25 +5975,25 @@ BEGIN
         THEN
             IF createur IS NOT NULL
             THEN
-                EXECUTE 'SET ROLE ' || quote_ident(createur) ;
-                EXECUTE 'GRANT ' || quote_ident(NEW.producteur) || ' TO g_admin' ;
+                EXECUTE format('SET ROLE %I', createur) ;
+                EXECUTE format('GRANT %I TO g_admin', NEW.producteur) ;
                 RAISE NOTICE '... Permission accordée à g_admin sur le rôle %.', NEW.producteur ;
-                EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+                EXECUTE format('SET ROLE %I', utilisateur) ;
             ELSE
                 SELECT grantee INTO administrateur
                     FROM information_schema.applicable_roles
                     WHERE is_grantable = 'YES' AND role_name = NEW.producteur ;
                 IF FOUND
                 THEN
-                    EXECUTE 'SET ROLE ' || quote_ident(administrateur) ;
-                    EXECUTE 'GRANT ' || quote_ident(NEW.producteur) || ' TO g_admin' ;
+                    EXECUTE format('SET ROLE %I', administrateur) ;
+                    EXECUTE format('GRANT %I TO g_admin', NEW.producteur) ;
                     RAISE NOTICE '... Permission accordée à g_admin sur le rôle %.', NEW.producteur ;
-                    EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+                    EXECUTE format('SET ROLE %I', utilisateur) ;
                 ELSE
                     RAISE EXCEPTION 'TA6. Opération interdite. Permissions insuffisantes pour le rôle %.', NEW.producteur
-                        USING DETAIL = 'GRANT ' || quote_ident(NEW.producteur) || ' TO g_admin',
-                              HINT = 'Votre rôle doit être membre de ' || NEW.producteur
-                                         || ' avec admin option ou disposer de l''attribut CREATEROLE pour réaliser cette opération.' ;
+                        USING DETAIL = format('GRANT %I TO g_admin', NEW.producteur),
+                              HINT = format('Votre rôle doit être membre de %s avec admin option ou disposer de l''attribut CREATEROLE pour réaliser cette opération.',
+                                NEW.producteur) ;
                 END IF ;
             END IF ;
         END IF ;
@@ -5749,10 +6034,10 @@ BEGIN
                 RAISE EXCEPTION 'TA7. Opération interdite. Vous n''êtes pas habilité à créer le rôle %.', NEW.editeur
                     USING HINT = 'Être membre d''un rôle disposant des attributs CREATEROLE et INHERIT est nécessaire pour créer de nouveaux éditeurs.' ;
             END IF ;
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
-            EXECUTE 'CREATE ROLE ' || quote_ident(NEW.editeur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
+            EXECUTE format('CREATE ROLE %I', NEW.editeur) ;
             RAISE NOTICE '... Le rôle de groupe % a été créé.', NEW.editeur ;
-            EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+            EXECUTE format('SET ROLE %I', utilisateur) ;
         END IF ;
         
         -- mise à jour du champ d'OID de l'éditeur
@@ -5811,10 +6096,10 @@ BEGIN
                 RAISE EXCEPTION 'TA8. Opération interdite. Vous n''êtes pas habilité à créer le rôle %.', NEW.lecteur
                     USING HINT = 'Être membre d''un rôle disposant des attributs CREATEROLE et INHERIT est nécessaire pour créer de nouveaux éditeurs.' ;
             END IF ;
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
-            EXECUTE 'CREATE ROLE ' || quote_ident(NEW.lecteur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
+            EXECUTE format('CREATE ROLE %I', NEW.lecteur) ;
             RAISE NOTICE '... Le rôle de groupe % a été créé.', NEW.lecteur ;
-            EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+            EXECUTE format('SET ROLE %I', utilisateur) ;
         END IF ;
         
         -- mise à jour du champ d'OID du lecteur
@@ -5873,7 +6158,7 @@ BEGIN
                 -- s'il est habilité à créer des schémas
                 IF createur IS NOT NULL
                 THEN
-                    EXECUTE 'SET ROLE ' || quote_ident(createur) ;
+                    EXECUTE format('SET ROLE %I', createur) ;
                 END IF ;
                 IF NOT has_database_privilege(current_database(), 'CREATE')
                         OR NOT pg_has_role(NEW.producteur, 'USAGE')
@@ -5882,8 +6167,8 @@ BEGIN
                         USING HINT = 'Être membre d''un rôle disposant du privilège CREATE sur la base de données est nécessaire pour créer des schémas.' ;
                 END IF ;
             END IF ;
-            EXECUTE 'CREATE SCHEMA ' || quote_ident(NEW.nom_schema) || ' AUTHORIZATION ' || quote_ident(NEW.producteur) ;
-            EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+            EXECUTE format('CREATE SCHEMA %I AUTHORIZATION %I', NEW.nom_schema, NEW.producteur) ;
+            EXECUTE format('SET ROLE %I', utilisateur) ;
             RAISE NOTICE '... Le schéma % a été créé.', NEW.nom_schema ;
         ELSE
             RAISE NOTICE '(schéma % pré-existant)', NEW.nom_schema ;
@@ -5938,12 +6223,12 @@ BEGIN
         -- NOINHERIT) aura les privilèges nécessaires
         IF NOT pg_has_role(NEW.producteur, 'USAGE')
         THEN
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
         ELSIF TG_OP = 'UPDATE'
         THEN
             IF NOT pg_has_role(a_producteur, 'USAGE')
             THEN
-                EXECUTE 'SET ROLE ' || quote_ident(createur) ; 
+                EXECUTE format('SET ROLE %I', createur) ; 
             END IF ;
         END IF ;
         
@@ -5973,7 +6258,7 @@ BEGIN
             PERFORM z_asgard.asgard_admin_proprietaire(NEW.nom_schema, NEW.producteur) ;
         END IF ;
         
-        EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+        EXECUTE format('SET ROLE %I', utilisateur) ;
     END IF ;
     
     ------ APPLICATION DES DROITS DE L'EDITEUR ------
@@ -6004,7 +6289,7 @@ BEGIN
         -- NOINHERIT) aura les privilèges nécessaires
         IF NOT pg_has_role(NEW.producteur, 'USAGE')
         THEN
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
         END IF ;
         
         IF TG_OP = 'UPDATE'
@@ -6070,18 +6355,18 @@ BEGIN
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle éditeur du schéma % :', NEW.nom_schema ;
             
-            EXECUTE 'GRANT USAGE ON SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
-            RAISE NOTICE '> %', 'GRANT USAGE ON SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
+            EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
+            RAISE NOTICE '> %', format('GRANT USAGE ON SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
             
-            EXECUTE 'GRANT SELECT, UPDATE, DELETE, INSERT ON ALL TABLES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
-            RAISE NOTICE '> %', 'GRANT SELECT, UPDATE, DELETE, INSERT ON ALL TABLES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
+            EXECUTE format('GRANT SELECT, UPDATE, DELETE, INSERT ON ALL TABLES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
+            RAISE NOTICE '> %', format('GRANT SELECT, UPDATE, DELETE, INSERT ON ALL TABLES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
             
-            EXECUTE 'GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
-            RAISE NOTICE '> %', 'GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.editeur) ;
+            EXECUTE format('GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
+            RAISE NOTICE '> %', format('GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.editeur) ;
             
         END IF ;
         
-        EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+        EXECUTE format('SET ROLE %I', utilisateur) ;
     END IF ;
     
     ------ APPLICATION DES DROITS DU LECTEUR ------
@@ -6113,7 +6398,7 @@ BEGIN
         -- NOINHERIT) aura les privilèges nécessaires
         IF NOT pg_has_role(NEW.producteur, 'USAGE')
         THEN
-            EXECUTE 'SET ROLE ' || quote_ident(createur) ;
+            EXECUTE format('SET ROLE %I', createur) ;
         END IF ;
         
         IF TG_OP = 'UPDATE'
@@ -6179,18 +6464,18 @@ BEGIN
         THEN
             RAISE NOTICE 'application des privilèges standards pour le rôle lecteur du schéma % :', NEW.nom_schema ;
             
-            EXECUTE 'GRANT USAGE ON SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
-            RAISE NOTICE '> %', 'GRANT USAGE ON SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
+            EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
+            RAISE NOTICE '> %', format('GRANT USAGE ON SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
             
-            EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
-            RAISE NOTICE '> %', 'GRANT SELECT ON ALL TABLES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
+            EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
+            RAISE NOTICE '> %', format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
             
-            EXECUTE 'GRANT SELECT ON ALL SEQUENCES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
-            RAISE NOTICE '> %', 'GRANT SELECT ON ALL SEQUENCES IN SCHEMA ' || quote_ident(NEW.nom_schema) || ' TO ' || quote_ident(NEW.lecteur) ;
+            EXECUTE format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
+            RAISE NOTICE '> %', format('GRANT SELECT ON ALL SEQUENCES IN SCHEMA %I TO %I', NEW.nom_schema, NEW.lecteur) ;
             
         END IF ;
         
-        EXECUTE 'SET ROLE ' || quote_ident(utilisateur) ;
+        EXECUTE format('SET ROLE %I', utilisateur) ;
     END IF ;
     
 	RETURN NULL ;
@@ -6209,7 +6494,7 @@ $BODY$ ;
 ALTER FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_after()
     OWNER TO g_admin ;
 
-COMMENT ON FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_after() IS 'ASGARD. Fonction appelée par le trigger qui répercute physiquement les modifications de la table de gestion.' ;
+COMMENT ON FUNCTION z_asgard_admin.asgard_on_modify_gestion_schema_after() IS 'ASGARD. Fonction exécutée par le déclencheur asgard_on_modify_gestion_schema_after sur z_asgard_admin.gestion_schema, qui répercute physiquement les modifications de la table de gestion.' ;
 
 
 -- Trigger: asgard_on_modify_gestion_schema_after
@@ -6218,13 +6503,12 @@ CREATE TRIGGER asgard_on_modify_gestion_schema_after
     AFTER INSERT OR UPDATE
     ON z_asgard_admin.gestion_schema
     FOR EACH ROW
-    EXECUTE PROCEDURE z_asgard_admin.asgard_on_modify_gestion_schema_after();
+    EXECUTE PROCEDURE z_asgard_admin.asgard_on_modify_gestion_schema_after() ;
 
-COMMENT ON TRIGGER asgard_on_modify_gestion_schema_after ON z_asgard_admin.gestion_schema IS 'ASGARD. Trigger qui répercute physiquement les modifications de la table de gestion.' ;
+COMMENT ON TRIGGER asgard_on_modify_gestion_schema_after ON z_asgard_admin.gestion_schema IS 'ASGARD. Déclencheur qui répercute physiquement les modifications de la table de gestion.' ;
 
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 
 -----------------------------------------------------------
 ------ 6 - GESTION DES PERMISSIONS SUR LAYER_STYLES ------
@@ -6236,23 +6520,34 @@ COMMENT ON TRIGGER asgard_on_modify_gestion_schema_after ON z_asgard_admin.gesti
 
 -- Function: z_asgard.asgard_has_role_usage(text, text)
 
-CREATE OR REPLACE FUNCTION z_asgard.asgard_has_role_usage(role_parent text, role_enfant text DEFAULT current_user)
+CREATE OR REPLACE FUNCTION z_asgard.asgard_has_role_usage(
+    role_parent text,
+    role_enfant text DEFAULT current_user
+    )
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction détermine si un rôle est membre d'un autre (
-           y compris indirectement) et hérite de ses droits. Elle est
-           équivalente à pg_has_role(role_enfant, role_parent, 'USAGE')
-           en plus permissif - elle renvoie False quand l'un des rôles
-           n'existe pas plutôt que d'échouer.
-ARGUMENTS :
-- role_parent est le nom du rôle dont on souhaite savoir si l'autre
-est membre ;
-- (optionnel) role_enfant est le nom du rôle dont on souhaite savoir
-s'il est membre de l'autre. Si non renseigné, la fonction testera
-l'utilisateur courant.
-SORTIE : True si la relation entre les rôles est vérifiée. False
-si elle ne l'est pas ou si l'un des rôles n'existe pas. */
+/* Détermine si un rôle est membre d'un autre (y compris indirectement) et hérite de ses droits. 
+
+    Cette fonction est équivalente à pg_has_role(role_enfant, role_parent, 'USAGE')
+    en plus permissif - elle renvoie False quand l'un des rôles
+    n'existe pas plutôt que d'échouer.
+
+    Parameters
+    ----------
+    role_parent : text
+        Nom du rôle dont on souhaite savoir si l'autre est membre.
+    role_enfant : text, optional
+        Nom du rôle dont on souhaite savoir s'il est membre de l'autre.
+        Si non renseigné, la fonction testera l'utilisateur courant.
+    
+    Returns
+    -------
+    boolean
+        True si la relation entre les rôles est vérifiée. False
+        si elle ne l'est pas ou si l'un des rôles n'existe pas.
+
+*/
 BEGIN
     
     RETURN pg_has_role(role_enfant, role_parent, 'USAGE') ;
@@ -6273,28 +6568,37 @@ COMMENT ON FUNCTION z_asgard.asgard_has_role_usage(text, text) IS 'ASGARD. Le se
 -- Function: z_asgard.asgard_is_relation_owner(text, text, text)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_is_relation_owner(
-        nom_schema text,
-        nom_relation text,
-        nom_role text DEFAULT current_user
-        )
+    nom_schema text,
+    nom_relation text,
+    nom_role text DEFAULT current_user
+    )
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction détermine si un rôle est membre du
-           propriétaire d'une table, vue ou autre relation.
-ARGUMENTS :
-- nom_schema est une chaîne de caractères correspondant au nom
-du schéma contenant la relation ;
-- nom_relation est une chaîne de caractères correspondant au nom
-de la relation ;
-- (optionnel) nom_role est le nom du rôle dont on veut vérifier
-les permissions. Si non renseigné, la fonction testera
-l'utilisateur courant.
-Tous les arguments sont en écriture naturelle, sans les
-guillemets des identifiants PostgreSQL.
-SORTIE : True si le rôle est membre du propriétaire de la relation.
-False sinon, incluant les cas où le rôle ou la relation n'existe
-pas. */
+/* Détermine si un rôle est membre du propriétaire d'une table, vue ou autre relation.
+
+    Tous les arguments sont en écriture naturelle, sans les
+    guillemets des identifiants PostgreSQL.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Chaîne de caractères correspondant au nom du schéma dont
+        dépend la relation.
+    nom_relation : text
+        Chaîne de caractères correspondant au nom de la relation.
+    nom_role : text, optional
+        Nom du rôle dont on veut vérifier les permissions. Si non
+        renseigné, la fonction testera l'utilisateur courant.
+
+    Returns
+    -------
+    boolean
+        True si le rôle est membre du propriétaire de la relation.
+        False sinon, incluant les cas où le rôle ou la relation n'existe
+        pas.
+
+*/
 DECLARE
     owner text ;
 BEGIN
@@ -6318,31 +6622,39 @@ $_$;
 ALTER FUNCTION z_asgard.asgard_is_relation_owner(text, text, text)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_is_relation_owner(text, text, text) IS 'ASGARD. Le rôle est-il membre du propriétaire de la relation considérée ?' ;
+COMMENT ON FUNCTION z_asgard.asgard_is_relation_owner(text, text, text) IS 'ASGARD. Détermine si un rôle est membre du propriétaire d''une table, vue ou autre relation.' ;
 
 
 -- Function: z_asgard.asgard_is_producteur(text, text)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_is_producteur(
-        schema_cible text,
-        nom_role text DEFAULT current_user
-        )
+    schema_cible text,
+    nom_role text DEFAULT current_user
+    )
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction détermine si le rôle considéré est membre
-           du rôle producteur d'un schéma donné.
-ARGUMENTS :
-- nom_schema est une chaîne de caractères correspondant à un
-nom de schéma ;
-- (optionnel) nom_role est le nom du rôle dont on veut vérifier
-les permissions. Si non renseigné, la fonction testera
-l'utilisateur courant.
-Tous les arguments sont en écriture naturelle, sans les
-guillemets des identifiants PostgreSQL.
-SORTIE : True si le rôle est membre du rôle producteur du schéma.
-False si le schéma n'existe pas ou si le rôle n'est pas membre de
-son producteur. */
+/* Détermine si le rôle considéré est membre du rôle producteur d'un schéma donné.
+
+    Tous les arguments sont en écriture naturelle, sans les
+    guillemets des identifiants PostgreSQL.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Chaîne de caractères correspondant à un nom de schéma.
+    nom_role : text, optional
+        Nom du rôle dont on veut vérifier les permissions. Si
+        non renseigné, la fonction testera l'utilisateur courant.
+
+    Returns
+    -------
+    boolean
+        True si le rôle est membre du rôle producteur du schéma.
+        False si le schéma n'existe pas ou si le rôle n'est pas
+        membre de son producteur.
+
+*/
 DECLARE
     producteur text ;
 BEGIN
@@ -6351,7 +6663,7 @@ BEGIN
         FROM z_asgard.gestion_schema_read_only
         WHERE gestion_schema_read_only.nom_schema = schema_cible ;
         
-    IF NOT FOUND
+    IF producteur IS NULL
     THEN
         RETURN False ;
     END IF ;
@@ -6359,36 +6671,44 @@ BEGIN
     RETURN z_asgard.asgard_has_role_usage(producteur, nom_role) ;
     
 END
-$_$;
+$_$ ;
 
 ALTER FUNCTION z_asgard.asgard_is_producteur(text, text)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_is_producteur(text, text) IS 'ASGARD. Le rôle est-il membre du producteur du schéma considéré ?' ;
+COMMENT ON FUNCTION z_asgard.asgard_is_producteur(text, text) IS 'ASGARD. Détermine si le rôle considéré est membre du rôle producteur d''un schéma donné.' ;
 
 
 -- Function: z_asgard.asgard_is_editeur(text, text)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_is_editeur(
-        schema_cible text,
-        nom_role text DEFAULT current_user
-        )
+    schema_cible text,
+    nom_role text DEFAULT current_user
+    )
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction détermine si le rôle considéré est membre
-           du rôle éditeur d'un schéma donné.
-ARGUMENTS :
-- nom_schema est une chaîne de caractères correspondant à un
-nom de schéma ;
-- (optionnel) nom_role est le nom du rôle dont on veut vérifier
-les permissions. Si non renseigné, la fonction testera
-l'utilisateur courant.
-Tous les arguments sont en écriture naturelle, sans les
-guillemets des identifiants PostgreSQL.
-SORTIE : True si le rôle est membre du rôle editeur du schéma.
-False si le schéma n'existe pas ou si le rôle n'est pas membre de
-son éditeur. */
+/* Détermine si le rôle considéré est membre du rôle éditeur d'un schéma donné.
+
+    Tous les arguments sont en écriture naturelle, sans les
+    guillemets des identifiants PostgreSQL.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Chaîne de caractères correspondant à un nom de schéma.
+    nom_role : text, optional
+        Nom du rôle dont on veut vérifier les permissions. Si
+        non renseigné, la fonction testera l'utilisateur courant.
+
+    Returns
+    -------
+    boolean
+        True si le rôle est membre du rôle éditeur du schéma.
+        False si le schéma n'existe pas ou si le rôle n'est pas
+        membre de son éditeur.
+
+*/
 DECLARE
     editeur text ;
 BEGIN
@@ -6410,31 +6730,39 @@ $_$;
 ALTER FUNCTION z_asgard.asgard_is_editeur(text, text)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_is_editeur(text, text) IS 'ASGARD. Le rôle est-il membre du éditeur du schéma considéré ?' ;
+COMMENT ON FUNCTION z_asgard.asgard_is_editeur(text, text) IS 'ASGARD. Détermine si le rôle considéré est membre du rôle éditeur d''un schéma donné.' ;
 
 
 -- Function: z_asgard.asgard_is_lecteur(text, text)
 
 CREATE OR REPLACE FUNCTION z_asgard.asgard_is_lecteur(
-        schema_cible text,
-        nom_role text DEFAULT current_user
-        )
+    schema_cible text,
+    nom_role text DEFAULT current_user
+    )
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Cette fonction détermine si le rôle considéré est membre
-           du rôle lecteur d'un schéma donné.
-ARGUMENTS :
-- nom_schema est une chaîne de caractères correspondant à un
-nom de schéma ;
-- (optionnel) nom_role est le nom du rôle dont on veut vérifier
-les permissions. Si non renseigné, la fonction testera
-l'utilisateur courant.
-Tous les arguments sont en écriture naturelle, sans les
-guillemets des identifiants PostgreSQL.
-SORTIE : True si le rôle est membre du rôle lecteur du schéma.
-False si le schéma n'existe pas ou si le rôle n'est pas membre de
-son lecteur. */
+/* Détermine si le rôle considéré est membre du rôle lecteur d'un schéma donné.
+
+    Tous les arguments sont en écriture naturelle, sans les
+    guillemets des identifiants PostgreSQL.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Chaîne de caractères correspondant à un nom de schéma.
+    nom_role : text, optional
+        Nom du rôle dont on veut vérifier les permissions. Si
+        non renseigné, la fonction testera l'utilisateur courant.
+
+    Returns
+    -------
+    boolean
+        True si le rôle est membre du rôle lecteur du schéma.
+        False si le schéma n'existe pas ou si le rôle n'est pas
+        membre de son lecteur.
+
+*/
 DECLARE
     lecteur text ;
 BEGIN
@@ -6456,7 +6784,7 @@ $_$;
 ALTER FUNCTION z_asgard.asgard_is_lecteur(text, text)
     OWNER TO g_admin_ext ;
 
-COMMENT ON FUNCTION z_asgard.asgard_is_lecteur(text, text) IS 'ASGARD. Le rôle est-il membre du lecteur du schéma considéré ?' ;
+COMMENT ON FUNCTION z_asgard.asgard_is_lecteur(text, text) IS 'ASGARD. Détermine si le rôle considéré est membre du rôle lecteur d''un schéma donné.' ;
 
 
 ------ 6.2 - FONCTION D'ADMINISTRATION DES PERMISSIONS SUR LAYER_STYLES ------
