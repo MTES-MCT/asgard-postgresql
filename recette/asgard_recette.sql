@@ -17194,6 +17194,204 @@ $_$ ;
 COMMENT ON FUNCTION z_asgard_recette.t092() IS 'ASGARD recette. TEST : (asgard_deplace_obj) Quand l''objet existe déjà dans le schéma cible.' ;
 
 
+-- FUNCTION: z_asgard_recette.t092b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t092b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE SCHEMA "c_LIB $rairie" ;
+
+    CREATE TYPE "c_Bibliothèque".intervalle AS (d int, f int) ;
+    
+    CREATE FUNCTION "c_Bibliothèque"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    CREATE FUNCTION "c_LIB $rairie"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    -- arguments différents
+    CREATE FUNCTION "c_LIB $rairie"."CHERCHE intervalle_sfunc B!S"("c_Bibliothèque".intervalle, int, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2, $3), GREATEST($1.f, $2, $3) $$
+        LANGUAGE SQL ;
+
+    CREATE SEQUENCE "c_Bibliothèque"."""compteur""" ;
+    CREATE SEQUENCE "c_LIB $rairie"."""compteur""" ;
+    -- séquence témoin : ne sera pas déplacée, donc ne devrait pas
+    -- empêcher le déplacement de la table
+
+    CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
+        "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        "ID$" serial,
+        id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+        jour date, entree text, auteur text
+        ) ;
+    CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
+        "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        "ID$" serial,
+        id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+        jour date, entree text, auteur text
+        ) ;
+
+    CREATE INDEX "JournalDuMur_auteur_idx" ON "c_Bibliothèque"."JournalDuMur"
+        USING btree (auteur) ;
+    CREATE INDEX "JournalDuMur_auteur_idx" ON "c_LIB $rairie"."JournalDuMur B!s"
+        USING btree (auteur) ;
+
+    -- fonction
+    BEGIN
+        -- avec espaces et diminutifs dans la liste des types
+        -- d'arguments de la fonction, ce qui est supposé passer
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            '"CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)',
+            'function', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        RAISE NOTICE '%', e_mssg ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 1-b' ;
+    END ;
+    
+    ALTER FUNCTION "c_Bibliothèque"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RENAME TO "CHERCHE intervalle_sfunc B!S" ;
+    PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+        '"CHERCHE intervalle_sfunc B!S"("c_Bibliothèque".intervalle, int)',
+        'function', 'c_LIB $rairie') ;
+    
+    -- index libre
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO10[.].*JournalDuMur_auteur_idx', 'échec assertion 2-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_auteur_idx"
+        RENAME TO "JournalDuMur_auteur_bis_idx" ;
+    
+    -- index de contrainte
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_pkey"
+        RENAME TO "JournalDuMur_pkey" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 3-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO9[.].*JournalDuMur_pkey', 'échec assertion 3-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_pkey"
+        RENAME TO "JournalDuMur B!s_pkey" ;
+    
+    -- séquence serial
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_ID$_seq"
+        RENAME TO "JournalDuMur_ID$_seq" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 4-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_ID[$]_seq', 'échec assertion 4-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_ID$_seq"
+        RENAME TO "JournalDuMur B!s_ID$_seq" ;
+    
+    -- séquence identity
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_IDI_seq"
+        RENAME TO "JournalDuMur_IDI_seq" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 5-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_IDI_seq', 'échec assertion 5-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_IDI_seq"
+        RENAME TO "JournalDuMur B!s_IDI_seq" ;
+    
+    -- table
+    ALTER TABLE "c_LIB $rairie"."JournalDuMur B!s"
+        RENAME TO "JournalDuMur" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 6-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 6-b' ;
+    END ;
+    
+    ALTER TABLE "c_LIB $rairie"."JournalDuMur"
+        RENAME TO "JournalDuMur B!s" ;
+    
+    PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+        'JournalDuMur', 'table', 'c_LIB $rairie') ;
+    
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-a' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-b' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_auteur_idx'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-c' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_IDI_seq'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-d' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_ID$_seq'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-e' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_pkey'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-f' ;
+    
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_LIB $rairie" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t092b() IS 'ASGARD recette. TEST : (asgard_deplace_obj) Quand l''objet existe déjà dans le schéma cible.' ;
+
+
 -- FUNCTION: z_asgard_recette.t093()
 
 CREATE OR REPLACE FUNCTION z_asgard_recette.t093()
@@ -17233,3 +17431,124 @@ $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t093() IS 'ASGARD recette. TEST : Répercution des commandes DROP OWNED sur la table de gestion.' ;
 
+
+-- FUNCTION: z_asgard_recette.t094()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t094()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_admin_delegue ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_connexion ;
+    GRANT g_asgard_admin_delegue TO g_asgard_connexion WITH ADMIN OPTION ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO %I', current_database(), 'g_asgard_admin_delegue') ;
+
+    -- tentative de création de schéma via la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE g_asgard_producteur ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_librairie', True, 'g_asgard_producteur') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    -- tentative d'ajout d'un schéma inactif dans la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE g_asgard_producteur ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_librairie', False, 'g_asgard_producteur') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 2-b' ;
+    END ;
+
+    ------ Manipulations par un rôle habilité à créer des schémas ------
+    SET ROLE g_asgard_connexion ;
+
+    -- création d'un schéma par un rôle qui en a le droit
+    -- - commande directe :
+    CREATE SCHEMA x_secret AUTHORIZATION g_asgard_admin_delegue ;
+    -- - via la table de gestion :
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_librairy', True, 'g_asgard_admin_delegue') ;
+    -- modification par commande directe :
+    ALTER SCHEMA c_librairy RENAME TO c_librairie ;
+    -- modification par la table de gestion :
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma jolie librairie'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT FOUND, 'échec assertion 3' ;
+    -- suppression :
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT FOUND, 'échec assertion 4' ;
+
+    ------ Manipulations par un rôle non habilité ------
+    SET ROLE g_asgard_producteur ;
+
+    -- vérification qu'un rôle ne voit pas les schémas dont
+    -- il n'est pas producteur dans gestion_schema_usr
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'x_secret') = 0, 'échec assertion 5' ;
+
+    -- ... et ça ne fait évidemment rien quand il tente de modifier
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'blabla'
+        WHERE nom_schema = 'x_secret' ;
+    ASSERT NOT FOUND, 'échec assertion 6' ;
+
+    -- ... mais dans gestion_schema_read_only, il voit le schéma
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only
+        WHERE nom_schema = 'x_secret') = 1, 'échec assertion 7' ;
+    
+    ------ Manipulations par le producteur du schéma ------
+    -- via la table de gestion
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma grande bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT FOUND, 'échec assertion 8' ;
+
+    -- pas de test de modification du schéma par
+    -- commande directe ou indirecte - les ALTER SCHEMA requièrent
+    -- le privilège CREATE sur la base    
+
+    -- création d'un objet dans le schéma
+    CREATE TABLE c_bibliotheque.journal_du_mur (jour date PRIMARY KEY, entree text) ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA x_secret ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), 'g_asgard_admin_delegue') ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_connexion ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t094() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
