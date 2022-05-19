@@ -4986,7 +4986,8 @@ COMMENT ON FUNCTION z_asgard.asgard_expend_privileges(text) IS 'ASGARD. Fonction
 ------ 5 - TRIGGERS SUR GESTION_SCHEMA ------
 ---------------------------------------------
 /* 5.1 - TRIGGER BEFORE
-   5.2 - TRIGGER AFTER */
+   5.2 - TRIGGER AFTER
+   5.3 - TRIGGER DE GESTION DES PERMISSIONS DE G_ADMIN */
    
 ------ 5.1 - TRIGGER BEFORE ------
 
@@ -6506,6 +6507,139 @@ CREATE TRIGGER asgard_on_modify_gestion_schema_after
     EXECUTE PROCEDURE z_asgard_admin.asgard_on_modify_gestion_schema_after() ;
 
 COMMENT ON TRIGGER asgard_on_modify_gestion_schema_after ON z_asgard_admin.gestion_schema IS 'ASGARD. Déclencheur qui répercute physiquement les modifications de la table de gestion.' ;
+
+
+------ 5.3 - TRIGGER DE GESTION DES PERMISSIONS DE G_ADMIN ------
+
+-- Function: z_asgard_admin.asgard_visibilite_admin_after()
+
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_visibilite_admin_after()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    SECURITY DEFINER
+    AS $BODY$
+/* Fonction exécutée par le déclencheur asgard_visibilite_admin_after sur
+z_asgard_admin.gestion_schema, qui assure que g_admin soit toujours membre
+des rôles producteurs des schémas référencés, hors super-utilisateurs.
+
+    Notes
+    -----
+    Il s'agit d'une fonction SECURITY DEFINER, qui s'exécute avec les
+    droits de g_admin, profitant notamment de son attribut CREATEROLE.
+
+    Ne pas renommer le déclencheur asgard_visibilite_admin_after à la légère.
+    Il est essentiel que cette fonction soit lancée alors que la table
+    de gestion est déjà à jour, soit après l'exécution de la fonction
+    asgard_on_modify_gestion_schema_after(). Pour mémoire, l'ordre
+    d'activation des déclencheurs est déterminé par un tri alphabétique
+    de leurs noms.
+
+    Raises
+    ------
+    trigger_protocol_violated
+        TVA1. Lorsque la fonction est utilisée dans un contexte autre que
+        celui prévu par Asgard.
+    invalid_grant_operation
+        TVA2. Lorsque le rôle producteur du schéma auquel se rapporte
+        l'enregistrement en cours d'édition est membre de g_admin, directement
+        ou non (permissions circulaires).
+
+*/
+DECLARE
+    e_mssg text ;
+    e_hint text ;
+    e_detl text ;
+    e_errcode text ;
+    e_schema text ;
+BEGIN
+  
+    ------ CONTRÔLES PREALABLES ------
+    -- comme asgard_visibilite_admin_after() est une fonction SECURITY DEFINER,
+    -- on s'assure qu'elle est bien appelée dans le seul contexte autorisé,
+    -- à savoir par un trigger asgard_visibilite_admin_after sur une table
+    -- z_asgard_admin.gestion_schema.
+    IF NOT TG_TABLE_NAME = 'gestion_schema' OR NOT TG_TABLE_SCHEMA = 'z_asgard_admin'
+        OR NOT TG_NAME = 'asgard_visibilite_admin_after'
+    THEN
+        RAISE EXCEPTION 'TVA1. Opération interdite. La fonction asgard_visibilite_admin_after() ne peut être appelée que par le déclencheur asgard_visibilite_admin_after défini sur la table z_asgard_admin.gestion_schema.'
+            USING ERRCODE = 'trigger_protocol_violated' ;
+    END IF ;
+
+    ------- GESTION DES PERMISSIONS DE G_ADMIN ------
+
+    -- on écarte les schémas non actifs et le cas où le
+    -- producteur est g_admin
+    IF NOT NEW.creation OR NEW.producteur = 'g_admin'
+    THEN
+        RETURN NULL ;
+    END IF ;
+
+    -- pas de contrôle sur le fait que le producteur a changé, car il n'est
+    -- pas plus mal de confirmer les permissions de g_admin, au cas où elles
+    -- auraient été supprimées entre temps, ce qui ne sera jamais une bonne
+    -- chose
+
+    -- on ne considère pas le cas où le producteur est un super-utilisateur
+    IF NEW.producteur IN (SELECT rolname FROM pg_catalog.pg_roles WHERE rolsuper)
+    THEN
+        RETURN NULL ;
+    END IF ;
+
+    -- ni le cas où g_admin est déjà directement membre du producteur
+    IF 'g_admin'::regrole IN (
+            SELECT member FROM pg_catalog.pg_auth_members
+                WHERE roleid = quote_ident(NEW.producteur)::regrole
+            )
+        -- NB: on n'utilise pas NEW.oid_producteur, car c'est 
+        -- asgard_on_modify_gestion_schema_after qui arrête définitivement
+        -- sa valeur.
+    THEN
+        RETURN NULL ;
+    END IF ;
+    
+    -- si le producteur est membres de g_admin, on retourne une erreur
+    IF pg_has_role(NEW.producteur, 'g_admin', 'MEMBER')
+    THEN
+        RAISE EXCEPTION 'TVA2. Opération interdite. Les rôles producteurs/propriétaires de schémas non super-utilisateurs ne peuvent pas être membres de g_admin, y compris par héritage.'
+            USING HINT = format('Pourquoi ne pas désigner directement de g_admin comme producteur du schéma %I ?', NEW.nom_schema),
+                SCHEMA = NEW.nom_schema,
+                ERRCODE = 'invalid_grant_operation' ;
+    END IF ;
+
+    EXECUTE format('GRANT %I TO g_admin', NEW.producteur) ;
+    RAISE NOTICE '... Permission accordée à g_admin sur le rôle %.', NEW.producteur ;
+
+    RETURN NULL ;
+    
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_hint = PG_EXCEPTION_HINT,
+                            e_detl = PG_EXCEPTION_DETAIL,
+                            e_errcode = RETURNED_SQLSTATE,
+                            e_schema = SCHEMA_NAME ;
+    RAISE EXCEPTION 'TVA0 > %', e_mssg
+        USING DETAIL = e_detl,
+            HINT = e_hint,
+            SCHEMA = e_schema,
+            ERRCODE = e_errcode ;
+               
+END
+$BODY$ ;
+
+ALTER FUNCTION z_asgard_admin.asgard_visibilite_admin_after()
+    OWNER TO g_admin ;
+    
+COMMENT ON FUNCTION z_asgard_admin.asgard_visibilite_admin_after() IS 'ASGARD. Fonction exécutée par le déclencheur asgard_visibilite_admin_after sur z_asgard_admin.gestion_schema, qui assure que g_admin soit toujours membre des rôles producteurs des schémas référencés, hors super-utilisateurs.' ;
+
+-- Trigger: asgard_visibilite_admin_after
+
+CREATE TRIGGER asgard_visibilite_admin_after
+    AFTER INSERT OR UPDATE
+    ON z_asgard_admin.gestion_schema
+    FOR EACH ROW
+    EXECUTE PROCEDURE z_asgard_admin.asgard_visibilite_admin_after() ;
+
+COMMENT ON TRIGGER asgard_visibilite_admin_after ON z_asgard_admin.gestion_schema IS 'ASGARD. Déclencheur qui assure que g_admin soit toujours membre des rôles producteurs des schémas référencés, hors super-utilisateurs.' ;
 
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
