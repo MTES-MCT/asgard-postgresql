@@ -1032,37 +1032,36 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t011()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin_ext ;
     
     ------ révocation d''un privilège ------
-   REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_admin_ext ;
+    REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_admin_ext ;
     
-    SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-
-    r := b ;
+    ASSERT (SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_bibliotheque'),
+        'échec assertion #1' ;
     
     ALTER SCHEMA c_bibliotheque OWNER TO g_admin ;
 
-    SELECT nspacl::text ~ ('g_admin=U' || '[/]' || nspowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT nspacl::text ~ ('g_admin=U' || '[/]' || nspowner::regrole::text)
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_bibliotheque'),
+        'échec assertion #2' ;
 
     DROP SCHEMA c_bibliotheque ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -4926,30 +4925,22 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t039()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
    s record ;
 BEGIN
     
     ------ hors z_asgard_admin ------
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema(ARRAY['z_asgard_admin']) ;
         
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette' ;
-        
-    r := b ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE NOT nom_schema = 'z_asgard_recette') = 1, 'échec assertion #1' ;
     
     ------ le reste ------    
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema() ;
         
-    SELECT count(*) = 2
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE NOT nom_schema = 'z_asgard_recette') = 2, 'échec assertion #1' ;
 
     FOR s IN (SELECT * FROM z_asgard.gestion_schema_usr)
     LOOP
@@ -4957,13 +4948,18 @@ BEGIN
     END LOOP ;
     DELETE FROM z_asgard.gestion_schema_usr ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t039() IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
 
