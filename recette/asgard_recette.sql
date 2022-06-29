@@ -5645,8 +5645,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t045()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -5661,13 +5659,13 @@ BEGIN
             SET nom_schema = 'c_librairie'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #1-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #1-b' ;
     END ;
     
     ------ modification du champ producteur ------
@@ -5676,13 +5674,13 @@ BEGIN
             SET producteur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #2-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #2-b' ;
     END ;
     
     ------ modification du champ éditeur ------
@@ -5691,13 +5689,13 @@ BEGIN
             SET editeur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #3-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #3-b' ;
     END ;
     
     ------ modification du champ lecteur ------
@@ -5706,13 +5704,13 @@ BEGIN
             SET lecteur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #4-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #4-b' ;
     END ;
     
     ------ mise à la corbeille ------
@@ -5726,13 +5724,13 @@ BEGIN
             SET creation = False
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #5-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False, 'échec assertion #5-b' ;
     END ;
     
     ------ restauration du schéma ------
@@ -5747,14 +5745,14 @@ BEGIN
     BEGIN
         PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #6-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
-                   OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
+            OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False, 'échec assertion #6-b' ;
     END ;
     
     ------ référencement du schéma (par un INSERT) ------
@@ -5762,13 +5760,13 @@ BEGIN
         INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation)
             VALUES ('c_bibliotheque', 'postgres', True) ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #7-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False, 'échec assertion #7-b' ;
     END ;
     
     ------ création d'un schéma par INSERT ------
@@ -5778,13 +5776,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS c_librairie ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #8-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False, 'échec assertion #8-b' ;
     END ;
     
     ------ création d'un schéma par bascule de creation ------
@@ -5798,13 +5796,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS c_librairie ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #9-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False, 'échec assertion #9-b' ;
     END ;
     
     ------ attributation à postgres d'un schéma existant ------
@@ -5816,13 +5814,13 @@ BEGIN
             SET producteur = 'postgres'
             WHERE nom_schema = 'c_archives' ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #10-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False, 'échec assertion #10-b' ;
     END ;
 
     RESET ROLE ;
@@ -5830,9 +5828,14 @@ BEGIN
     DROP SCHEMA c_archives ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema IN ('c_bibliotheque', 'c_librairie', 'c_archives') ;
         
-    RETURN coalesce(r, False) ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
 
 END
@@ -17442,7 +17445,7 @@ BEGIN
     CREATE ROLE g_asgard_admin_delegue ;
     CREATE ROLE g_asgard_producteur ;
     CREATE ROLE g_asgard_connexion ;
-    GRANT g_asgard_admin_delegue TO g_asgard_connexion WITH ADMIN OPTION ;
+    GRANT g_asgard_admin_delegue TO g_asgard_connexion ;
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
 
     EXECUTE format('GRANT CREATE ON DATABASE %I TO %I', current_database(), 'g_asgard_admin_delegue') ;
@@ -17548,3 +17551,125 @@ END
 $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t094() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
+
+-- FUNCTION: z_asgard_recette.t094b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t094b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_ADMIN_délégué" ;
+    CREATE ROLE "g_asgard_PROducteur" ;
+    CREATE ROLE "g_asgard.connexion" ;
+    GRANT "g_asgard_ADMIN_délégué" TO "g_asgard.connexion" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_PROducteur" ;
+
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO %I', current_database(), 'g_asgard_ADMIN_délégué') ;
+
+    -- tentative de création de schéma via la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE "g_asgard_PROducteur" ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_"Librairie"', True, 'g_asgard_PROducteur') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    -- tentative d'ajout d'un schéma inactif dans la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE "g_asgard_PROducteur" ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_"Librairie"', False, 'g_asgard_PROducteur') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 2-b' ;
+    END ;
+
+    ------ Manipulations par un rôle habilité à créer des schémas ------
+    SET ROLE "g_asgard.connexion" ;
+
+    -- création d'un schéma par un rôle qui en a le droit
+    -- - commande directe :
+    CREATE SCHEMA "X=secret" AUTHORIZATION "g_asgard_ADMIN_délégué" ;
+    -- - via la table de gestion :
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_$Librairy$', True, 'g_asgard_ADMIN_délégué') ;
+    -- modification par commande directe :
+    ALTER SCHEMA "c_$Librairy$" RENAME TO "c_""Librairie""" ;
+    -- modification par la table de gestion :
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma jolie librairie'
+        WHERE nom_schema = 'c_"Librairie"' ;
+    ASSERT FOUND, 'échec assertion 3' ;
+    -- suppression :
+    DROP SCHEMA "c_""Librairie""" ;
+    DELETE FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_"Librairie"' ;
+    ASSERT FOUND, 'échec assertion 4' ;
+
+    ------ Manipulations par un rôle non habilité ------
+    SET ROLE "g_asgard_PROducteur" ;
+
+    -- vérification qu'un rôle ne voit pas les schémas dont
+    -- il n'est pas producteur dans gestion_schema_usr
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'X=secret') = 0, 'échec assertion 5' ;
+
+    -- ... et ça ne fait évidemment rien quand il tente de modifier
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'blabla'
+        WHERE nom_schema = 'X=secret' ;
+    ASSERT NOT FOUND, 'échec assertion 6' ;
+
+    -- ... mais dans gestion_schema_read_only, il voit le schéma
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only
+        WHERE nom_schema = 'X=secret') = 1, 'échec assertion 7' ;
+    
+    ------ Manipulations par le producteur du schéma ------
+    -- via la table de gestion
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma grande bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT FOUND, 'échec assertion 8' ;
+
+    -- pas de test de modification du schéma par
+    -- commande directe ou indirecte - les ALTER SCHEMA requièrent
+    -- le privilège CREATE sur la base    
+
+    -- création d'un objet dans le schéma
+    CREATE TABLE "c_Bibliothèque"."journal du mur" (jour date PRIMARY KEY, entree text) ;
+
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "X=secret" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), 'g_asgard_ADMIN_délégué') ;
+    DROP ROLE "g_asgard_ADMIN_délégué" ;
+    DROP ROLE "g_asgard_PROducteur" ;
+    DROP ROLE "g_asgard.connexion" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t094b() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
+
