@@ -292,7 +292,7 @@ CREATE TABLE z_asgard_admin.gestion_schema
     CONSTRAINT gestion_schema_oid_roles_check CHECK ((oid_lecteur IS NULL OR NOT oid_lecteur = oid_producteur)
                                                     AND (oid_editeur IS NULL OR NOT oid_editeur = oid_producteur)
                                                     AND (oid_lecteur IS NULL OR oid_editeur IS NULL OR NOT oid_lecteur = oid_editeur)),
-    CONSTRAINT gestion_schema_ctrl_check CHECK (ctrl IS NULL OR array_length(ctrl, 1) >= 2 AND ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'MANUEL', 'EXIT'))
+    CONSTRAINT gestion_schema_ctrl_check CHECK (ctrl IS NULL OR array_length(ctrl, 1) >= 2 AND ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'MANUEL', 'EXIT', 'END'))
 )
 WITH (
     OIDS = FALSE
@@ -361,7 +361,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_usr AS (
         WHERE pg_has_role('g_admin'::text, 'USAGE'::text) OR
             CASE
                 WHEN gestion_schema.creation AND gestion_schema.oid_producteur IS NULL
-                    THEN pg_has_role(quote_ident(gestion_schema.producteur::text)::name, 'USAGE'::text)
+                    THEN pg_has_role(gestion_schema.producteur::text, 'USAGE'::text)
                 WHEN gestion_schema.creation
                     THEN pg_has_role(gestion_schema.oid_producteur, 'USAGE'::text)
                 ELSE has_database_privilege(current_database()::text, 'CREATE'::text) OR CURRENT_USER = gestion_schema.producteur::name
@@ -415,7 +415,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_etr AS (
         WHERE pg_has_role('g_admin'::text, 'USAGE'::text) OR
             CASE
                 WHEN gestion_schema.creation AND gestion_schema.oid_producteur IS NULL
-                    THEN pg_has_role(quote_ident(gestion_schema.producteur::text)::name, 'USAGE'::text)
+                    THEN pg_has_role(gestion_schema.producteur::text, 'USAGE'::text)
                 WHEN gestion_schema.creation
                     THEN pg_has_role(gestion_schema.oid_producteur, 'USAGE'::text)
                 ELSE has_database_privilege(current_database()::text, 'CREATE'::text) OR CURRENT_USER = gestion_schema.producteur::name
@@ -5091,7 +5091,7 @@ BEGIN
         IF NEW.ctrl[2] IS NULL
             OR NOT array_length(NEW.ctrl, 1) >= 2
             OR NEW.ctrl[1] IS NULL
-            OR NOT NEW.ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'EXIT')
+            OR NOT NEW.ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'EXIT', 'END')
             OR NOT NEW.ctrl[2] = 'x7-A;#rzo'
             -- ctrl NULL ou invalide
         THEN
@@ -5143,7 +5143,7 @@ BEGIN
         END IF ;
         
         ------ REQUETES AUTO A IGNORER ------
-        -- les remontées du trigger AFTER (SELF)
+        -- les remontées du trigger AFTER (SELF ou END)
         -- sont exclues, car les contraintes ont déjà
         -- été validées (et pose problèmes avec les
         -- contrôles d'OID sur les UPDATE, car ceux-ci
@@ -5151,7 +5151,7 @@ BEGIN
         -- les requêtes EXIT de même, car c'est un
         -- pré-requis à la suppression qui ne fait
         -- que modifier le champ ctrl
-        IF NEW.ctrl[1] IN ('SELF', 'EXIT')
+        IF NEW.ctrl[1] IN ('SELF', 'EXIT', 'END')
         THEN
             -- aucune action
             RETURN NEW ;
@@ -5760,7 +5760,7 @@ DECLARE
 BEGIN
 
     ------ REQUETES AUTO A IGNORER ------
-    -- les remontées du trigger lui-même (SELF),
+    -- les remontées du trigger lui-même (SELF ou END),
     -- ainsi que des event triggers sur les
     -- suppressions de schémas (DROP), n'appellent
     -- aucune action, elles sont donc exclues dès
@@ -5775,7 +5775,7 @@ BEGIN
     -- des opérations sur les droits plus lourdes
     -- qui ne permettent pas de les exclure en
     -- amont
-    IF NEW.ctrl[1] IN ('SELF', 'DROP')
+    IF NEW.ctrl[1] IN ('SELF', 'END', 'DROP')
     THEN
         -- aucune action
         RETURN NULL ;
@@ -5838,7 +5838,13 @@ BEGIN
     -- à des changements de noms
     IF NEW.ctrl[1] = 'RENAME'
     THEN
-        -- aucune action
+        -- on signale la fin du traitement, ce qui
+        -- va notamment permettre l'exécution de
+        -- asgard_visibilite_admin_after
+        UPDATE z_asgard.gestion_schema_etr
+            SET ctrl = ARRAY['END', 'x7-A;#rzo']
+            WHERE nom_schema = NEW.nom_schema ;
+        
         RETURN NULL ;
     END IF ;
 
@@ -5963,40 +5969,6 @@ BEGIN
                 END IF ;
             END IF ;
             EXECUTE format('SET ROLE %I', utilisateur) ;
-        END IF ;
-           
-        -- permission de g_admin sur le producteur, s'il y a encore lieu
-        -- à noter que, dans le cas où le producteur n'a pas été modifié, g_admin
-        -- devrait déjà avoir une permission sur NEW.producteur, sauf à ce qu'elle
-        -- lui ait été retirée manuellement entre temps. Les requêtes suivantes
-        -- génèreraient alors une erreur même dans le cas où la modification ne
-        -- porte que sur les rôles lecteur/éditeur - ce qui peut-être perçu comme
-        -- discutable.
-        IF NOT pg_has_role('g_admin', NEW.producteur, 'USAGE') AND NOT b_superuser
-        THEN
-            IF createur IS NOT NULL
-            THEN
-                EXECUTE format('SET ROLE %I', createur) ;
-                EXECUTE format('GRANT %I TO g_admin', NEW.producteur) ;
-                RAISE NOTICE '... Permission accordée à g_admin sur le rôle %.', NEW.producteur ;
-                EXECUTE format('SET ROLE %I', utilisateur) ;
-            ELSE
-                SELECT grantee INTO administrateur
-                    FROM information_schema.applicable_roles
-                    WHERE is_grantable = 'YES' AND role_name = NEW.producteur ;
-                IF FOUND
-                THEN
-                    EXECUTE format('SET ROLE %I', administrateur) ;
-                    EXECUTE format('GRANT %I TO g_admin', NEW.producteur) ;
-                    RAISE NOTICE '... Permission accordée à g_admin sur le rôle %.', NEW.producteur ;
-                    EXECUTE format('SET ROLE %I', utilisateur) ;
-                ELSE
-                    RAISE EXCEPTION 'TA6. Opération interdite. Permissions insuffisantes pour le rôle %.', NEW.producteur
-                        USING DETAIL = format('GRANT %I TO g_admin', NEW.producteur),
-                              HINT = format('Votre rôle doit être membre de %s avec admin option ou disposer de l''attribut CREATEROLE pour réaliser cette opération.',
-                                NEW.producteur) ;
-                END IF ;
-            END IF ;
         END IF ;
     END IF ;
     
@@ -6478,6 +6450,14 @@ BEGIN
         
         EXECUTE format('SET ROLE %I', utilisateur) ;
     END IF ;
+
+    -- on signale la fin du traitement, ce qui
+    -- va notamment permettre l'exécution de
+    -- asgard_visibilite_admin_after
+    UPDATE z_asgard.gestion_schema_etr
+        SET ctrl = ARRAY['END', 'x7-A;#rzo']
+        WHERE nom_schema = NEW.nom_schema
+            AND (ctrl[1] IS NULL OR NOT ctrl[1] = 'EXIT') ;
     
 	RETURN NULL ;
 
@@ -6563,6 +6543,16 @@ BEGIN
     THEN
         RAISE EXCEPTION 'TVA1. Opération interdite. La fonction asgard_visibilite_admin_after() ne peut être appelée que par le déclencheur asgard_visibilite_admin_after défini sur la table z_asgard_admin.gestion_schema.'
             USING ERRCODE = 'trigger_protocol_violated' ;
+    END IF ;
+
+    ------ REQUETES AUTO A IGNORER ------
+    -- ce trigger ne doit être déclenché qu'une fois, après la
+    -- fin de l'exécution de asgard_modify_gestion_schema_after,
+    -- soit quand ctrl indique END
+    IF NEW.ctrl[1] IS NULL OR NOT NEW.ctrl[1] = 'END'
+    THEN
+        -- aucune action
+        RETURN NULL ;
     END IF ;
 
     ------- GESTION DES PERMISSIONS DE G_ADMIN ------
