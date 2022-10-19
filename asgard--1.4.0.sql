@@ -4,10 +4,10 @@
 -- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.4.0
 --
 -- Copyright République Française, 2020-2022.
--- Secrétariat général du Ministère de la transition écologique, du
--- Ministère de la cohésion des territoires et des relations avec les
--- collectivités territoriales et du Ministère de la Mer.
--- Service du numérique.
+-- Secrétariat général du Ministère de la Transition écologique et
+-- de la Cohésion des territoires, du Ministère de la Transition
+-- énergétique et du Secrétariat d'Etat à la Mer.
+-- Direction du numérique.
 --
 -- contributeurs : Leslie Lemaire (SNUM/UNI/DRC) et Alain Ferraton
 -- (SNUM/MSP/DS/GSG).
@@ -1299,7 +1299,8 @@ BEGIN
                 'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
                 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
                 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE')
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER OPERATOR CLASS',
+                'ALTER OPERATOR FAMILY')
             EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
     ELSIF current_setting('server_version_num')::int < 110000
     THEN
@@ -1309,8 +1310,8 @@ BEGIN
                 'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
                 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
                 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER STATISTICS',
-                'ALTER OPERATOR CLASS', 'ALTER OPERATOR FAMILY')
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER OPERATOR CLASS',
+                'ALTER OPERATOR FAMILY', 'ALTER STATISTICS')
             EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
     ELSE
         -- + ALTER PROCEDURE, ALTER ROUTINE
@@ -1319,8 +1320,8 @@ BEGIN
                 'ALTER MATERIALIZED VIEW', 'ALTER SEQUENCE', 'ALTER FOREIGN TABLE',
                 'ALTER FUNCTION', 'ALTER OPERATOR', 'ALTER AGGREGATE', 'ALTER COLLATION',
                 'ALTER CONVERSION', 'ALTER DOMAIN', 'ALTER TEXT SEARCH CONFIGURATION',
-                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER STATISTICS',
-                'ALTER OPERATOR CLASS', 'ALTER OPERATOR FAMILY', 'ALTER PROCEDURE',
+                'ALTER TEXT SEARCH DICTIONARY', 'ALTER TYPE', 'ALTER OPERATOR CLASS',
+                'ALTER OPERATOR FAMILY', 'ALTER STATISTICS', 'ALTER PROCEDURE',
                 'ALTER ROUTINE')
             EXECUTE PROCEDURE z_asgard_admin.asgard_on_alter_objet() ;
     END IF ;
