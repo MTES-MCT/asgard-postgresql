@@ -4,10 +4,10 @@
 -- > Script de recette.
 --
 -- Copyright République Française, 2020-2022.
--- Secrétariat général du Ministère de la transition écologique, du
--- Ministère de la cohésion des territoires et des relations avec les
--- collectivités territoriales et du Ministère de la Mer.
--- Service du numérique.
+-- Secrétariat général du Ministère de la Transition écologique et
+-- de la Cohésion des territoires, du Ministère de la Transition
+-- énergétique et du Secrétariat d'Etat à la Mer.
+-- Direction du numérique.
 --
 -- contributeurs pour la recette : Leslie Lemaire (SNUM/UNI/DRC).
 -- 
@@ -17030,18 +17030,32 @@ BEGIN
     -- séquence témoin : ne sera pas déplacée, donc ne devrait pas
     -- empêcher le déplacement de la table
 
-    CREATE TABLE c_bibliotheque.journal_du_mur (
-        idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        ids serial,
-        id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
-        jour date, entree text, auteur text
-        ) ;
-    CREATE TABLE c_librairie.journal_du_mur_bis (
-        idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        ids serial,
-        id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
-        jour date, entree text, auteur text
-        ) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur (
+            idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            ids serial,
+            id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+        EXECUTE 'CREATE TABLE c_librairie.journal_du_mur_bis (
+            idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            ids serial,
+            id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur (
+            ids serial PRIMARY KEY,
+            id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+        CREATE TABLE c_librairie.journal_du_mur_bis (
+            ids serial PRIMARY KEY,
+            id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+    END IF ;
 
     CREATE INDEX journal_du_mur_auteur_idx ON c_bibliotheque.journal_du_mur
         USING btree (auteur) ;
@@ -17114,20 +17128,23 @@ BEGIN
         RENAME TO journal_du_mur_bis_ids_seq ;
     
     -- séquence identity
-    ALTER INDEX c_librairie.journal_du_mur_bis_idi_seq
-        RENAME TO journal_du_mur_idi_seq ;
-    
-    BEGIN
-        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
-            'journal_du_mur', 'table', 'c_librairie') ;
-        ASSERT False, 'échec assertion 5-a' ;
-    EXCEPTION WHEN OTHERS THEN 
-        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
-        ASSERT e_mssg ~ '^FDO11[.].*journal_du_mur_idi_seq', 'échec assertion 5-b' ;
-    END ;
-    
-    ALTER INDEX c_librairie.journal_du_mur_idi_seq
-        RENAME TO journal_du_mur_bis_idi_seq ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ALTER INDEX c_librairie.journal_du_mur_bis_idi_seq
+            RENAME TO journal_du_mur_idi_seq ;
+        
+        BEGIN
+            PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+                'journal_du_mur', 'table', 'c_librairie') ;
+            ASSERT False, 'échec assertion 5-a' ;
+        EXCEPTION WHEN OTHERS THEN 
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+            ASSERT e_mssg ~ '^FDO11[.].*journal_du_mur_idi_seq', 'échec assertion 5-b' ;
+        END ;
+
+        ALTER INDEX c_librairie.journal_du_mur_idi_seq
+            RENAME TO journal_du_mur_bis_idi_seq ;
+    END IF ;
     
     -- table
     ALTER TABLE c_librairie.journal_du_mur_bis
@@ -17160,10 +17177,13 @@ BEGIN
         WHERE relname = 'journal_du_mur_auteur_idx'
         AND relnamespace = 'c_librairie'::regnamespace),
         'échec assertion 7-c' ;
-    ASSERT EXISTS (SELECT relname FROM pg_class
-        WHERE relname = 'journal_du_mur_idi_seq'
-        AND relnamespace = 'c_librairie'::regnamespace),
-        'échec assertion 7-d' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT EXISTS (SELECT relname FROM pg_class
+            WHERE relname = 'journal_du_mur_idi_seq'
+            AND relnamespace = 'c_librairie'::regnamespace),
+            'échec assertion 7-d' ;
+    END IF ;
     ASSERT EXISTS (SELECT relname FROM pg_class
         WHERE relname = 'journal_du_mur_ids_seq'
         AND relnamespace = 'c_librairie'::regnamespace),
@@ -17228,18 +17248,32 @@ BEGIN
     -- séquence témoin : ne sera pas déplacée, donc ne devrait pas
     -- empêcher le déplacement de la table
 
-    CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
-        "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        "ID$" serial,
-        id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
-        jour date, entree text, auteur text
-        ) ;
-    CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
-        "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        "ID$" serial,
-        id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
-        jour date, entree text, auteur text
-        ) ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
+            "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            "ID$" serial,
+            id int DEFAULT nextval(''"c_Bibliothèque"."""compteur"""''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+        EXECUTE 'CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
+            "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            "ID$" serial,
+            id int DEFAULT nextval(''"c_Bibliothèque"."""compteur"""''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
+            "ID$" serial PRIMARY KEY,
+            id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+        CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
+            "ID$" serial PRIMARY KEY,
+            id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+    END IF ;
 
     CREATE INDEX "JournalDuMur_auteur_idx" ON "c_Bibliothèque"."JournalDuMur"
         USING btree (auteur) ;
@@ -17312,20 +17346,23 @@ BEGIN
         RENAME TO "JournalDuMur B!s_ID$_seq" ;
     
     -- séquence identity
-    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_IDI_seq"
-        RENAME TO "JournalDuMur_IDI_seq" ;
-    
-    BEGIN
-        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
-            'JournalDuMur', 'table', 'c_LIB $rairie') ;
-        ASSERT False, 'échec assertion 5-a' ;
-    EXCEPTION WHEN OTHERS THEN 
-        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
-        ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_IDI_seq', 'échec assertion 5-b' ;
-    END ;
-    
-    ALTER INDEX "c_LIB $rairie"."JournalDuMur_IDI_seq"
-        RENAME TO "JournalDuMur B!s_IDI_seq" ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_IDI_seq"
+            RENAME TO "JournalDuMur_IDI_seq" ;
+        
+        BEGIN
+            PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+                'JournalDuMur', 'table', 'c_LIB $rairie') ;
+            ASSERT False, 'échec assertion 5-a' ;
+        EXCEPTION WHEN OTHERS THEN 
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+            ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_IDI_seq', 'échec assertion 5-b' ;
+        END ;
+
+        ALTER INDEX "c_LIB $rairie"."JournalDuMur_IDI_seq"
+            RENAME TO "JournalDuMur B!s_IDI_seq" ;
+    END IF ;
     
     -- table
     ALTER TABLE "c_LIB $rairie"."JournalDuMur B!s"
@@ -17358,10 +17395,13 @@ BEGIN
         WHERE relname = 'JournalDuMur_auteur_idx'
         AND relnamespace = '"c_LIB $rairie"'::regnamespace),
         'échec assertion 7-c' ;
-    ASSERT EXISTS (SELECT relname FROM pg_class
-        WHERE relname = 'JournalDuMur_IDI_seq'
-        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
-        'échec assertion 7-d' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT EXISTS (SELECT relname FROM pg_class
+            WHERE relname = 'JournalDuMur_IDI_seq'
+            AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+            'échec assertion 7-d' ;
+    END IF ;
     ASSERT EXISTS (SELECT relname FROM pg_class
         WHERE relname = 'JournalDuMur_ID$_seq'
         AND relnamespace = '"c_LIB $rairie"'::regnamespace),
@@ -17672,4 +17712,73 @@ END
 $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t094b() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
+
+
+-- FUNCTION: z_asgard_recette.t095()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t095()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE mister_asgard_x ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Bibliothèque' ;
+
+    SET ROLE mister_asgard_x ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only) = 1,
+        'échec assertion 1' ;
+    ASSERT (
+        SELECT niv1 FROM z_asgard.gestion_schema_read_only
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'Bibliothèque',
+        'échec assertion 2' ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr) = 0,
+        'échec assertion 3' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Archives' ;
+    ASSERT (
+        SELECT niv1 FROM z_asgard.gestion_schema_read_only
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'Bibliothèque',
+        'échec assertion 4' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only) = 1,
+        'échec assertion 5' ;
+    
+    BEGIN
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation)
+            VALUES ('c_librairie', False) ;
+        ASSERT False, 'échec assertion 6' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE mister_asgard_x ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t095() IS 'ASGARD recette. TEST : Un utilisateur lambda ne peut rien faire avec la table de gestion.' ;
 
