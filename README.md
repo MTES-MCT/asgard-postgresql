@@ -9,7 +9,7 @@ ASGARD a été conçue et développée dans le cadre du groupe de travail PostGI
 
 ## Compatibilité
 
-PostgreSQL 9.5 ou supérieur. Toutes les versions d'ASGARD sont testées sur les versions de PostgreSQL officiellement supportées au moment de leur déploiement, ainsi que la version 9.5. La version 1.3.2 d'ASGARD est par exemple la première dont la compatibilité avec PostgreSQL 14 a été évaluée.
+PostgreSQL 9.5 et PostgreSQL 10 ou supérieur. Toutes les versions d'ASGARD sont testées sur les versions de PostgreSQL officiellement supportées au moment de leur déploiement, ainsi que la version 9.5. La version 1.4.0 d'ASGARD est par exemple la première dont la compatibilité avec PostgreSQL 15 a été évaluée.
 
 ## Installation et utilisation
 
@@ -21,13 +21,15 @@ L'extension PostgreSQL ASGARD est un logiciel libre publié sous licence CeCILL-
 
 Cf. [LICENCE.txt](https://github.com/MTES-MCT/asgard-postgresql/blob/master/LICENCE.txt).
 
+La documentation de la suite ASGARD, incluant ses illustrations (répertoire `docs`), est publiée sous [licence ouverte Etalab 2.0](https://spdx.org/licenses/etalab-2.0).
+
 ## Crédits
 
 © République Française, 2020-2022.
 
 ### Éditeur
 
-Service du numérique du ministère de la transition écologique, du ministère de la cohésion des territoires et des relations avec les collectivités territoriales et du ministère de la mer.
+Direction du numérique du Ministère de la transition écologique et de la cohésion des territoires, du Ministère de la transition énergétique et du Secrétariat d'Etat à la mer.
 
 ### Contributeurs
 
