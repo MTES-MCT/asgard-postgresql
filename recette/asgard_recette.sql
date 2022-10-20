@@ -18149,3 +18149,90 @@ END
 $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t097b() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma sans préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t098()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t098()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_producteur ;
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_producteur ;
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RESET ROLE ;
+    DROP ROLE g_asgard_producteur ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t098() IS 'ASGARD recette. TEST : Un producteur peut mettre à la corbeille et supprimer son schéma.' ;
+
+
+-- FUNCTION: z_asgard_recette.t098b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t098b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g ASGARD producteur" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g ASGARD producteur" ;
+
+    SET ROLE "g ASGARD producteur" ;
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g ASGARD producteur" ;
+
+    SET ROLE "g ASGARD producteur" ;
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RESET ROLE ;
+    DROP ROLE "g ASGARD producteur" ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t098b() IS 'ASGARD recette. TEST : Un producteur peut mettre à la corbeille et supprimer son schéma.' ;
+
