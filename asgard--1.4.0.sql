@@ -833,8 +833,13 @@ BEGIN
                     WHERE object_type = 'schema'
     LOOP
         ------ ENREGISTREMENT DE LA SUPPRESSION ------
+        -- avec réinitialisation du bloc, pour les schémas
+        -- qui avait été mis à la corbeille
 		UPDATE z_asgard.gestion_schema_etr
-			SET (creation, oid_schema, ctrl) = (False, NULL, ARRAY['DROP', 'x7-A;#rzo'])
+			SET creation = false,
+                oid_schema = NULL,
+                ctrl = ARRAY['DROP', 'x7-A;#rzo'],
+                bloc = substring(nom_schema, '^([a-z])_')
 			WHERE quote_ident(nom_schema) = obj.object_identity
             RETURNING nom_schema INTO objname ;    
 		IF FOUND THEN
