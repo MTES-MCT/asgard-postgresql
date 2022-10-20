@@ -17782,3 +17782,370 @@ $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t095() IS 'ASGARD recette. TEST : Un utilisateur lambda ne peut rien faire avec la table de gestion.' ;
 
+
+-- FUNCTION: z_asgard_recette.t096()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t096()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t096() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma avec préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t096b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t096b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t096b() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma avec préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t097()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t097()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'bibliotheque' ;
+
+    DROP SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t097() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma sans préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t097b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t097b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'Bibliothèque' ;
+
+    DROP SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA "Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t097b() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma sans préfixe).' ;
