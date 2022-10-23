@@ -4201,8 +4201,8 @@ BEGIN
 
     DROP SCHEMA c_librairie ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_librairie' ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
     RESET ROLE ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
         
     RETURN r ;
     
@@ -4428,6 +4428,7 @@ DECLARE
    e_detl text ;
 BEGIN
 
+    SET ROLE g_admin ;
     EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO g_admin_ext' ;
   
     ------ avec g_admin_ext ------
@@ -4478,12 +4479,11 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t035b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
 
+    SET ROLE g_admin ;
     CREATE ROLE "Admin EXT" ;
     GRANT g_admin_ext TO "Admin EXT" ;
 
@@ -4496,13 +4496,13 @@ BEGIN
         INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation, nomenclature)
             VALUES ('c_Bibliothèque', 'Admin EXT', True, True) ;
             
-        r := False ;
+        ASSERT False, 'échec assertion 1' ;
             
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                  e_detl = PG_EXCEPTION_DETAIL ;
                             
-        r := e_mssg ~ 'TB19[.]' OR e_detl ~ 'TB19[.]' OR False ;
+        ASSERT e_mssg ~ 'TB19[.]' OR e_detl ~ 'TB19[.]' OR False, 'échec assertion 2' ;
     END ;
     
     ------ avec g_admin ------
@@ -4510,22 +4510,24 @@ BEGIN
     
     INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation, nomenclature)
             VALUES ('c_Bibliothèque', 'Admin EXT', True, True) ;
-            
-
+    
     UPDATE z_asgard.gestion_schema_usr
         SET nomenclature = False
         WHERE nom_schema = 'c_Bibliothèque' ;
     DROP SCHEMA "c_Bibliothèque" ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
-    
-    RESET ROLE ;
     EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM "Admin EXT"' ;
-    
     DROP ROLE "Admin EXT" ;
+    RESET ROLE ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
