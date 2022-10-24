@@ -18238,3 +18238,415 @@ $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t098b() IS 'ASGARD recette. TEST : Un producteur peut mettre à la corbeille et supprimer son schéma.' ;
 
+
+-- FUNCTION: z_asgard_recette.t099()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t099()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_ghost ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_bibliotheque', true, 'g_asgard_producteur') ;
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_librairie', true, 'g_asgard_producteur') ;
+
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-a' ;
+    ASSERT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+
+    SET ROLE g_asgard_producteur ;
+    DROP SCHEMA c_librairie ;
+
+    SET ROLE g_asgard_ghost ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    SET ROLE g_asgard_producteur ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-a' ;
+    ASSERT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT NOT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 3' ;
+    
+    SET ROLE g_admin ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT NOT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 4' ;
+
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_ghost ;
+    RESET ROLE ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t099() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur du schéma pour l''effacer de la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t099b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t099b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE "g_asgard producteur" ;
+    CREATE ROLE "g_asgard_GHOST" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_Bibliothèque', true, 'g_asgard producteur') ;
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c $Librairie', true, 'g_asgard producteur') ;
+
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-a' ;
+    ASSERT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+
+    SET ROLE "g_asgard producteur" ;
+    DROP SCHEMA "c $Librairie" ;
+
+    SET ROLE "g_asgard_GHOST" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    SET ROLE "g_asgard producteur" ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-a' ;
+    ASSERT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT NOT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 3' ;
+    
+    SET ROLE g_admin ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT NOT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 4' ;
+
+    DROP ROLE "g_asgard producteur" ;
+    DROP ROLE "g_asgard_GHOST" ;
+    RESET ROLE ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t099b() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur du schéma pour l''effacer de la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t100()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t100()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_ghost ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur)
+        VALUES ('c_bibliotheque', 'g_asgard_producteur') ;
+
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 1' ;
+
+    SET ROLE g_asgard_ghost ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_librairie' ;
+    
+    SET ROLE g_asgard_producteur ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 2' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_librairie'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT NOT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-a' ;
+    ASSERT 'c_librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_consult',
+            editeur = 'n_existe_pas'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT 'g_consult' IN (
+        SELECT lecteur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_librairie'
+    ), 'échec assertion 4-a' ;
+    ASSERT 'n_existe_pas' IN (
+        SELECT editeur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_librairie'
+    ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT NOT 'c_librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 5' ;
+
+    SET ROLE g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_bibliotheque'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 6' ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_ghost ;
+
+    RESET ROLE ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t100() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur d''un schéma inactif pour modifier ses informations dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t100b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t100b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE "g_asgard producteur" ;
+    CREATE ROLE "g_asgard_GHOST" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur)
+        VALUES ('c_Bibliothèque', 'g_asgard producteur') ;
+
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 1' ;
+
+    SET ROLE "g_asgard_GHOST" ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c $librairie' ;
+    
+    SET ROLE "g_asgard producteur" ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 2' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c $librairie'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT NOT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-a' ;
+    ASSERT 'c $librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_consult',
+            editeur = 'N''existe pas'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT 'g_consult' IN (
+        SELECT lecteur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c $librairie'
+    ), 'échec assertion 4-a' ;
+    ASSERT 'N''existe pas' IN (
+        SELECT editeur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c $librairie'
+    ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT NOT 'c $librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 5' ;
+
+    SET ROLE g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_Bibliothèque'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 6' ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard producteur" ;
+    DROP ROLE "g_asgard_GHOST" ;
+
+    RESET ROLE ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t100b() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur d''un schéma inactif pour modifier ses informations dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t101()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t101()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_prod_edi ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_prod_edi ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'USAGE'),
+        'échec assertion 1-a' ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 1-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin',
+            editeur = 'g_asgard_prod_edi'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'USAGE'),
+        'échec assertion 2-a' ;
+    ASSERT NOT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 2-b' ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion 3' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_prod_edi ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t101() IS 'ASGARD recette. TEST : Quand un producteur devient éditeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t101b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t101b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_PROD#edi" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_PROD#edi" ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion 1-a' ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 1-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin',
+            editeur = 'g_asgard_PROD#edi'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion 2-a' ;
+    ASSERT NOT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 2-b' ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion 3' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_PROD#edi" ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t101b() IS 'ASGARD recette. TEST : Quand un producteur devient éditeur.' ;
+
