@@ -163,6 +163,53 @@ ALTER TABLE z_asgard_admin.gestion_schema
 
 ------ 2.4 - VUES D'ALIMENTATION DE GESTION_SCHEMA ------
 
+-- Function: z_asgard.asgard_has_role_usage(text, text)
+
+CREATE OR REPLACE FUNCTION z_asgard.asgard_has_role_usage(
+    role_parent text,
+    role_enfant text DEFAULT current_user
+    )
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+/* Détermine si un rôle est membre d'un autre (y compris indirectement) et hérite de ses droits. 
+
+    Cette fonction est équivalente à pg_has_role(role_enfant, role_parent, 'USAGE')
+    en plus permissif - elle renvoie False quand l'un des rôles
+    n'existe pas plutôt que d'échouer.
+
+    Parameters
+    ----------
+    role_parent : text
+        Nom du rôle dont on souhaite savoir si l'autre est membre.
+    role_enfant : text, optional
+        Nom du rôle dont on souhaite savoir s'il est membre de l'autre.
+        Si non renseigné, la fonction testera l'utilisateur courant.
+    
+    Returns
+    -------
+    boolean
+        True si la relation entre les rôles est vérifiée. False
+        si elle ne l'est pas ou si l'un des rôles n'existe pas.
+
+*/
+BEGIN
+    
+    RETURN pg_has_role(role_enfant, role_parent, 'USAGE') ;
+    
+EXCEPTION WHEN undefined_object
+THEN
+    RETURN False ;
+    
+END
+$_$;
+
+ALTER FUNCTION z_asgard.asgard_has_role_usage(text, text)
+    OWNER TO g_admin_ext ;
+
+COMMENT ON FUNCTION z_asgard.asgard_has_role_usage(text, text) IS 'ASGARD. Le second rôle est-il membre du premier (avec héritage de ses droits) ?' ;
+
+
 -- View: z_asgard.gestion_schema_usr
 
 CREATE OR REPLACE VIEW z_asgard.gestion_schema_usr AS (
@@ -185,7 +232,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_usr AS (
                     THEN pg_has_role(gestion_schema.producteur::text, 'USAGE'::text)
                 WHEN gestion_schema.creation
                     THEN pg_has_role(gestion_schema.oid_producteur, 'USAGE'::text)
-                ELSE has_database_privilege(current_database()::text, 'CREATE'::text) OR CURRENT_USER = gestion_schema.producteur::name
+                ELSE z_asgard.asgard_has_role_usage(gestion_schema.producteur)
             END
 ) ;
 
@@ -217,7 +264,7 @@ CREATE OR REPLACE VIEW z_asgard.gestion_schema_etr AS (
                     THEN pg_has_role(gestion_schema.producteur::text, 'USAGE'::text)
                 WHEN gestion_schema.creation
                     THEN pg_has_role(gestion_schema.oid_producteur, 'USAGE'::text)
-                ELSE has_database_privilege(current_database()::text, 'CREATE'::text) OR CURRENT_USER = gestion_schema.producteur::name
+                ELSE z_asgard.asgard_has_role_usage(gestion_schema.producteur)
             END
 ) ;
 
@@ -4860,53 +4907,6 @@ COMMENT ON TRIGGER asgard_visibilite_admin_after ON z_asgard_admin.gestion_schem
    6.2 - FONCTION D'ADMINISTRATION DES PERMISSIONS SUR LAYER_STYLES */
 
 ------ 6.1 - PETITES FONCTIONS UTILITAIRES ------
-
--- Function: z_asgard.asgard_has_role_usage(text, text)
-
-CREATE OR REPLACE FUNCTION z_asgard.asgard_has_role_usage(
-    role_parent text,
-    role_enfant text DEFAULT current_user
-    )
-    RETURNS boolean
-    LANGUAGE plpgsql
-    AS $_$
-/* Détermine si un rôle est membre d'un autre (y compris indirectement) et hérite de ses droits. 
-
-    Cette fonction est équivalente à pg_has_role(role_enfant, role_parent, 'USAGE')
-    en plus permissif - elle renvoie False quand l'un des rôles
-    n'existe pas plutôt que d'échouer.
-
-    Parameters
-    ----------
-    role_parent : text
-        Nom du rôle dont on souhaite savoir si l'autre est membre.
-    role_enfant : text, optional
-        Nom du rôle dont on souhaite savoir s'il est membre de l'autre.
-        Si non renseigné, la fonction testera l'utilisateur courant.
-    
-    Returns
-    -------
-    boolean
-        True si la relation entre les rôles est vérifiée. False
-        si elle ne l'est pas ou si l'un des rôles n'existe pas.
-
-*/
-BEGIN
-    
-    RETURN pg_has_role(role_enfant, role_parent, 'USAGE') ;
-    
-EXCEPTION WHEN undefined_object
-THEN
-    RETURN False ;
-    
-END
-$_$;
-
-ALTER FUNCTION z_asgard.asgard_has_role_usage(text, text)
-    OWNER TO g_admin_ext ;
-
-COMMENT ON FUNCTION z_asgard.asgard_has_role_usage(text, text) IS 'ASGARD. Le second rôle est-il membre du premier (avec héritage de ses droits) ?' ;
-
 
 -- Function: z_asgard.asgard_is_relation_owner(text, text, text)
 
