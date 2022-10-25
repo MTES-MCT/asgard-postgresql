@@ -126,6 +126,16 @@ $_$ ;
 COMMENT ON FUNCTION z_asgard_recette.execute_recette() IS 'ASGARD recette. Exécution de la recette.' ;
 
 
+-- FUNCTION: z_asgard_recette.count_tests()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.count_tests()
+    RETURNS int 
+    LANGUAGE SQL
+    AS '
+    SELECT count(*)::int FROM pg_catalog.pg_proc
+        WHERE pronamespace = ''z_asgard_recette''::regnamespace::oid
+            AND proname ~ ''^t[0-9]+b*$''
+    ' ;
 
 ------ 9.02 - Bibliothèque de tests ------
 
@@ -18649,4 +18659,136 @@ END
 $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t101b() IS 'ASGARD recette. TEST : Quand un producteur devient éditeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t102()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t102()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_delegue ;
+    CREATE ROLE g_asgard_other ;
+    GRANT g_asgard_other TO g_asgard_delegue ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO g_asgard_delegue',
+        current_database()
+    ) ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_delegue ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('c_bibliotheque') ;
+    ASSERT NOT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 1' ;
+
+    CREATE TABLE c_bibliotheque.journal_du_mur (jour date PRIMARY KEY, entree text) ;
+    ALTER TABLE c_bibliotheque.journal_du_mur OWNER TO g_asgard_other ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_bibliotheque', 'journal_du_mur', 'g_asgard_other'
+    ), 'échec assertion 2' ;
+
+    SET ROLE g_asgard_delegue ;
+    PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3' ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_bibliotheque', 'journal_du_mur', 'g_asgard_delegue'
+    ),  'échec assertion 4' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    RESET ROLE ;
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM g_asgard_delegue',
+        current_database()
+    ) ;
+    DROP ROLE g_asgard_delegue ;
+    DROP ROLE g_asgard_other ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t102() IS 'ASGARD recette. TEST : Référencement d''un schéma par un administrateur délégué.' ;
+
+
+-- FUNCTION: z_asgard_recette.t102b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t102b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_Délégué" ;
+    CREATE ROLE "g_asgard OTHER" ;
+    GRANT "g_asgard OTHER" TO "g_asgard_Délégué" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO "g_asgard_Délégué"',
+        current_database()
+    ) ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_Délégué" ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('c_Bibliothèque') ;
+    ASSERT NOT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 1' ;
+
+    CREATE TABLE "c_Bibliothèque"."journal du mur" (jour date PRIMARY KEY, entree text) ;
+    ALTER TABLE "c_Bibliothèque"."journal du mur" OWNER TO "g_asgard OTHER" ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_Bibliothèque', 'journal du mur', 'g_asgard OTHER'
+    ), 'échec assertion 2' ;
+
+    SET ROLE "g_asgard_Délégué" ;
+    PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3' ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_Bibliothèque', 'journal du mur', 'g_asgard_Délégué'
+    ),  'échec assertion 4' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    RESET ROLE ;
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM "g_asgard_Délégué"',
+        current_database()
+    ) ;
+    DROP ROLE "g_asgard_Délégué" ;
+    DROP ROLE "g_asgard OTHER" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t102b() IS 'ASGARD recette. TEST : Référencement d''un schéma par un administrateur délégué.' ;
 
