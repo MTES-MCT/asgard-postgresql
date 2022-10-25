@@ -380,6 +380,7 @@ def pg_connection(
                         '''
                         DROP EXTENSION IF EXISTS {extension} ;
                         CREATE EXTENSION {extension} ;
+                        DROP SCHEMA IF EXISTS z_asgard_recette CASCADE ;
                         '''
                     ).format(extension=sql.Identifier(extension_name))
                 )
@@ -437,16 +438,22 @@ def run(pg_versions=None, extension_version=None, do_not_copy=False):
                 with conn.cursor() as cur:
                     cur.execute(
                         '''
+                        SELECT z_asgard_recette.count_tests() ;
+                        '''
+                    )
+                    nb_tests = cur.fetchone()[0]
+                    cur.execute(
+                        '''
                         SELECT * FROM z_asgard_recette.execute_recette() ;
                         '''
                     )
                     failures = cur.fetchall()
         if failures:
-            print('... {} erreurs'.format(len(failures)))
+            print('... {} tests, {} erreurs'.format(nb_tests, len(failures)))
             for failure in failures:
                 print(f'{failure[0]}: {failure[1]}')
         else:
-            print('... aucune erreur')
+            print(f'... {nb_tests} tests, aucune erreur')
 
 if __name__ == '__main__':
     run()
