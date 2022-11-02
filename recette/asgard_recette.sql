@@ -1,13 +1,13 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.3.2
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.4.0
 -- > Script de recette.
 --
 -- Copyright République Française, 2020-2022.
--- Secrétariat général du Ministère de la transition écologique, du
--- Ministère de la cohésion des territoires et des relations avec les
--- collectivités territoriales et du Ministère de la Mer.
--- Service du numérique.
+-- Secrétariat général du Ministère de la Transition écologique et
+-- de la Cohésion des territoires, du Ministère de la Transition
+-- énergétique et du Secrétariat d'Etat à la Mer.
+-- Direction du numérique.
 --
 -- contributeurs pour la recette : Leslie Lemaire (SNUM/UNI/DRC).
 -- 
@@ -61,7 +61,7 @@ EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t000() IS 'ASGARD recette. TEST : .' ;
 */
@@ -126,6 +126,16 @@ $_$ ;
 COMMENT ON FUNCTION z_asgard_recette.execute_recette() IS 'ASGARD recette. Exécution de la recette.' ;
 
 
+-- FUNCTION: z_asgard_recette.count_tests()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.count_tests()
+    RETURNS int 
+    LANGUAGE SQL
+    AS '
+    SELECT count(*)::int FROM pg_catalog.pg_proc
+        WHERE pronamespace = ''z_asgard_recette''::regnamespace::oid
+            AND proname ~ ''^t[0-9]+b*$''
+    ' ;
 
 ------ 9.02 - Bibliothèque de tests ------
 
@@ -136,64 +146,47 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t001()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
-
     ------ création ------
     CREATE SCHEMA c_bibliotheque ;
     
-    SELECT creation
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_bibliotheque' ;
-        
-    r := b ;
+    ASSERT (SELECT creation FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_bibliotheque'), 'échec assertion #1' ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
+    ASSERT 'c_bibliotheque' IN (SELECT nspname FROM pg_namespace),
+        'échec assertion #2' ;
         
     ------ suppression ------
     DROP SCHEMA c_bibliotheque ;
     
-    SELECT NOT creation
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (SELECT NOT creation FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_bibliotheque'), 'échec assertion #3' ;
         
-    r := r AND b ;
-    
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
+    ASSERT NOT 'c_bibliotheque' IN (SELECT nspname FROM pg_namespace),
+        'échec assertion #4' ;
     
     ------ effacement ------
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
     
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT NOT 'c_bibliotheque' IN (SELECT nom_schema
+        FROM z_asgard.gestion_schema_usr), 'échec assertion #5' ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
         
-    r := r AND b ;
-    
-    RETURN r ;
-    
-EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t001() IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
-
 
 -- FUNCTION: z_asgard_recette.t001b()
 
@@ -202,61 +195,45 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t001b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
-
     ------ création ------
     CREATE SCHEMA "c_Bibliothèque" ;
     
-    SELECT creation
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_Bibliothèque' ;
-        
-    r := b ;
+    ASSERT (SELECT creation FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_Bibliothèque'), 'échec assertion #1' ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
-        
-    r := r AND b ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nspname FROM pg_namespace),
+        'échec assertion #2' ;
         
     ------ suppression ------
     DROP SCHEMA "c_Bibliothèque" ;
     
-    SELECT NOT creation
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (SELECT NOT creation FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_Bibliothèque'), 'échec assertion #3' ;
         
-    r := r AND b ;
-    
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
-        
-    r := r AND b ;
+    ASSERT NOT 'c_Bibliothèque' IN (SELECT nspname FROM pg_namespace),
+        'échec assertion #4' ;
     
     ------ effacement ------
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT NOT 'c_Bibliothèque' IN (SELECT nom_schema
+        FROM z_asgard.gestion_schema_usr), 'échec assertion #5' ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
         
-    r := r AND b ;
-    
-    RETURN r ;
-    
-EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t001b() IS 'ASGARD recette. TEST : création, suppression, effacement d''un schéma par commandes directes.' ;
 
@@ -1065,37 +1042,36 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t011()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin_ext ;
     
     ------ révocation d''un privilège ------
-   REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_admin_ext ;
+    REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_admin_ext ;
     
-    SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-
-    r := b ;
+    ASSERT (SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_bibliotheque'),
+        'échec assertion #1' ;
     
     ALTER SCHEMA c_bibliotheque OWNER TO g_admin ;
 
-    SELECT nspacl::text ~ ('g_admin=U' || '[/]' || nspowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT nspacl::text ~ ('g_admin=U' || '[/]' || nspowner::regrole::text)
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_bibliotheque'),
+        'échec assertion #2' ;
 
     DROP SCHEMA c_bibliotheque ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -1122,7 +1098,7 @@ BEGIN
     ------ révocation d''un privilège ------
     REVOKE CREATE ON SCHEMA "c_Bibliothèque" FROM "Admin EXT" ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U/"Admin EXT"')
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
@@ -1512,8 +1488,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t015b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE "Admin EXT" ;
@@ -1528,53 +1504,38 @@ BEGIN
         
     CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id serial PRIMARY KEY, jour date, entree text) ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
-        
-    r := b ;
+    ASSERT (SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || nspowner::regrole::text)
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'), 'échec assertion #1' ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || relowner::regrole::text)
+        FROM pg_catalog.pg_class WHERE relname = 'Journal du mur'), 'échec assertion #2' ;
+
+    ASSERT (SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || relowner::regrole::text)
+        FROM pg_catalog.pg_class WHERE relname = 'Journal du mur_id_seq'), 'échec assertion #3' ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur_id_seq' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || relowner::regrole::text)
+        FROM pg_catalog.pg_class WHERE relname = 'Journal du mur_bis'), 'échec assertion #4' ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur_bis' ;
-        
-    r := r AND b ;
-    
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur_bis_id_seq' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || relowner::regrole::text)
+        FROM pg_catalog.pg_class WHERE relname = 'Journal du mur_bis_id_seq'), 'échec assertion #5' ;
 
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
     
     DROP ROLE "Admin EXT" ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t015b() IS 'ASGARD recette. TEST : désignation d''un éditeur.' ;
 
@@ -1671,35 +1632,35 @@ BEGIN
         
     CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id serial PRIMARY KEY, jour date, entree text) ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis_id_seq' ;
@@ -1846,14 +1807,14 @@ BEGIN
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwad]{4}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -2002,21 +1963,21 @@ BEGIN
         SET lecteur = 'Admin EXT'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=U' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -2390,21 +2351,21 @@ BEGIN
         SET editeur = 'Admin EXT'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwa]{3}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwa]{3}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -2519,21 +2480,21 @@ BEGIN
         SET lecteur = 'Admin EXT'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rw]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rw]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -2647,35 +2608,35 @@ BEGIN
         
     CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id serial PRIMARY KEY, jour date, entree text) ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=U' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwad]{4}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwad]{4}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwad]{4}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwad]{4}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis_id_seq' ;
@@ -2787,35 +2748,35 @@ BEGIN
         
     CREATE TABLE "c_Bibliothèque"."Journal du mur_bis" (id serial PRIMARY KEY, jour date, entree text) ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=U' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=U' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_bis_id_seq' ;
@@ -3184,21 +3145,21 @@ BEGIN
         SET editeur = 'Admin EXT'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwa]{3}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwa]{3}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -3211,21 +3172,21 @@ BEGIN
         SET editeur = 'public'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwa]{3}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rwa]{3}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=r' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -3366,21 +3327,21 @@ BEGIN
         SET lecteur = 'Admin EXT'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('"Admin EXT"=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rw]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rw]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -3392,21 +3353,21 @@ BEGIN
         SET lecteur = 'public'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=[UC]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(nspowner::regrole))
+    SELECT array_to_string(nspacl, ',') ~ ('^(.*,)?=[UC]{2}' || '[/]' || nspowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_Bibliothèque' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rw]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rw]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur' ;
         
     r := r AND b ;
     
-    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || z_asgard.asgard_role_trans_acl(relowner::regrole))
+    SELECT array_to_string(relacl, ',') ~ ('^(.*,)?=[rU]{2}' || '[/]' || relowner::regrole::text)
         INTO STRICT b
         FROM pg_catalog.pg_class
         WHERE relname = 'Journal du mur_id_seq' ;
@@ -4250,8 +4211,8 @@ BEGIN
 
     DROP SCHEMA c_librairie ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_librairie' ;
-    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
     RESET ROLE ;
+    EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin_ext' ;
         
     RETURN r ;
     
@@ -4477,6 +4438,7 @@ DECLARE
    e_detl text ;
 BEGIN
 
+    SET ROLE g_admin ;
     EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO g_admin_ext' ;
   
     ------ avec g_admin_ext ------
@@ -4527,12 +4489,11 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t035b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
 
+    SET ROLE g_admin ;
     CREATE ROLE "Admin EXT" ;
     GRANT g_admin_ext TO "Admin EXT" ;
 
@@ -4545,13 +4506,13 @@ BEGIN
         INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation, nomenclature)
             VALUES ('c_Bibliothèque', 'Admin EXT', True, True) ;
             
-        r := False ;
+        ASSERT False, 'échec assertion 1' ;
             
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                  e_detl = PG_EXCEPTION_DETAIL ;
                             
-        r := e_mssg ~ 'TB19[.]' OR e_detl ~ 'TB19[.]' OR False ;
+        ASSERT e_mssg ~ 'TB19[.]' OR e_detl ~ 'TB19[.]' OR False, 'échec assertion 2' ;
     END ;
     
     ------ avec g_admin ------
@@ -4559,22 +4520,24 @@ BEGIN
     
     INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation, nomenclature)
             VALUES ('c_Bibliothèque', 'Admin EXT', True, True) ;
-            
-
+    
     UPDATE z_asgard.gestion_schema_usr
         SET nomenclature = False
         WHERE nom_schema = 'c_Bibliothèque' ;
     DROP SCHEMA "c_Bibliothèque" ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
-    
-    RESET ROLE ;
     EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM "Admin EXT"' ;
-    
     DROP ROLE "Admin EXT" ;
+    RESET ROLE ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -4974,30 +4937,22 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t039()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
    s record ;
 BEGIN
     
     ------ hors z_asgard_admin ------
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema(ARRAY['z_asgard_admin']) ;
         
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette' ;
-        
-    r := b ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE NOT nom_schema = 'z_asgard_recette') = 1, 'échec assertion #1' ;
     
     ------ le reste ------    
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema() ;
         
-    SELECT count(*) = 2
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette' ;
-        
-    r := r AND b ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE NOT nom_schema = 'z_asgard_recette') = 2, 'échec assertion #1' ;
 
     FOR s IN (SELECT * FROM z_asgard.gestion_schema_usr)
     LOOP
@@ -5005,13 +4960,18 @@ BEGIN
     END LOOP ;
     DELETE FROM z_asgard.gestion_schema_usr ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t039() IS 'ASGARD recette. TEST : initialisation de la table de gestion (référencement des schémas existants).' ;
 
@@ -5433,8 +5393,8 @@ BEGIN
             lecteur = 'rec_nouveau_lecteur'
         WHERE nom_schema = 'c_bibliotheque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'::regrole::text
-            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'::regrole::text
+    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
+            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
             AND nspowner = 'rec_nouveau_producteur'::regrole::oid
         INTO STRICT r
         FROM pg_catalog.pg_namespace
@@ -5465,7 +5425,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t042b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA "c_Bibliothèque" ;
@@ -5476,12 +5437,15 @@ BEGIN
             lecteur = 'REC"Nouveau lecteur'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC\Nouvel éditeur"'::regrole)
-            AND array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC""Nouveau lecteur"'::regrole)
-            AND nspowner = '"RECNouveauProducteur"'::regrole::oid
-        INTO STRICT r
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
+    ASSERT has_schema_privilege('REC\Nouvel éditeur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #1' ;
+    
+    ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #2' ;
+    
+    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
+        'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5490,13 +5454,18 @@ BEGIN
     DROP ROLE "REC\Nouvel éditeur" ;
     DROP ROLE "REC""Nouveau lecteur" ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t042b() IS 'ASGARD recette. TEST : création de nouveaux rôles via un UPDATE dans la table de gestion.' ;
 
@@ -5514,8 +5483,8 @@ BEGIN
     INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur) VALUES
         ('c_bibliotheque', True, 'rec_nouveau_producteur', 'rec_nouvel_editeur', 'rec_nouveau_lecteur') ;
     
-    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'::regrole::text
-            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'::regrole::text
+    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
+            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
             AND nspowner = 'rec_nouveau_producteur'::regrole::oid
         INTO STRICT r
         FROM pg_catalog.pg_namespace
@@ -5546,18 +5515,22 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t043b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
-    
+
     INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur) VALUES
         ('c_Bibliothèque', True, 'RECNouveauProducteur', 'REC\Nouvel éditeur', 'REC"Nouveau lecteur') ;
     
-    SELECT array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC\Nouvel éditeur"'::regrole)
-            AND array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC""Nouveau lecteur"'::regrole)
-            AND nspowner = '"RECNouveauProducteur"'::regrole::oid
-        INTO STRICT r
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
+    ASSERT has_schema_privilege('REC\Nouvel éditeur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #1' ;
+    
+    ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #2' ;
+    
+    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
+        'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5566,13 +5539,18 @@ BEGIN
     DROP ROLE "REC\Nouvel éditeur" ;
     DROP ROLE "REC""Nouveau lecteur" ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t043b() IS 'ASGARD recette. TEST : création de nouveaux rôles via un INSERT dans la table de gestion.' ;
 
@@ -5595,8 +5573,8 @@ BEGIN
         SET creation = True
         WHERE nom_schema = 'c_bibliotheque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'::regrole::text
-            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'::regrole::text
+    SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
+            AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
             AND nspowner = 'rec_nouveau_producteur'::regrole::oid
         INTO STRICT r
         FROM pg_catalog.pg_namespace
@@ -5628,9 +5606,10 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t044b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
-    
+
     INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur) VALUES
         ('c_Bibliothèque', False, 'RECNouveauProducteur', 'REC\Nouvel éditeur', 'REC"Nouveau lecteur') ;
         
@@ -5638,12 +5617,15 @@ BEGIN
         SET creation = True
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    SELECT array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC\Nouvel éditeur"'::regrole)
-            AND array_to_string(nspacl, ',') ~ z_asgard.asgard_role_trans_acl('"REC""Nouveau lecteur"'::regrole)
-            AND nspowner = '"RECNouveauProducteur"'::regrole::oid
-        INTO STRICT r
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_Bibliothèque' ;
+    ASSERT has_schema_privilege('REC\Nouvel éditeur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #1' ;
+    
+    ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion #2' ;
+    
+    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
+        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
+        'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5652,13 +5634,18 @@ BEGIN
     DROP ROLE "REC\Nouvel éditeur" ;
     DROP ROLE "REC""Nouveau lecteur" ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t044b() IS 'ASGARD recette. TEST : création de nouveaux rôles par bascule de creation.' ;
 
@@ -5670,8 +5657,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t045()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -5686,13 +5671,13 @@ BEGIN
             SET nom_schema = 'c_librairie'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #1-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #1-b' ;
     END ;
     
     ------ modification du champ producteur ------
@@ -5701,13 +5686,13 @@ BEGIN
             SET producteur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #2-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #2-b' ;
     END ;
     
     ------ modification du champ éditeur ------
@@ -5716,13 +5701,13 @@ BEGIN
             SET editeur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #3-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #3-b' ;
     END ;
     
     ------ modification du champ lecteur ------
@@ -5731,13 +5716,13 @@ BEGIN
             SET lecteur = 'g_admin'
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #4-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #4-b' ;
     END ;
     
     ------ mise à la corbeille ------
@@ -5751,13 +5736,13 @@ BEGIN
             SET creation = False
             WHERE nom_schema = 'c_bibliotheque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #5-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False, 'échec assertion #5-b' ;
     END ;
     
     ------ restauration du schéma ------
@@ -5772,14 +5757,14 @@ BEGIN
     BEGIN
         PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #6-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
-                   OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
+            OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False, 'échec assertion #6-b' ;
     END ;
     
     ------ référencement du schéma (par un INSERT) ------
@@ -5787,13 +5772,13 @@ BEGIN
         INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation)
             VALUES ('c_bibliotheque', 'postgres', True) ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #7-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False, 'échec assertion #7-b' ;
     END ;
     
     ------ création d'un schéma par INSERT ------
@@ -5803,13 +5788,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS c_librairie ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #8-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False, 'échec assertion #8-b' ;
     END ;
     
     ------ création d'un schéma par bascule de creation ------
@@ -5823,13 +5808,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS c_librairie ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #9-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False, 'échec assertion #9-b' ;
     END ;
     
     ------ attributation à postgres d'un schéma existant ------
@@ -5841,13 +5826,13 @@ BEGIN
             SET producteur = 'postgres'
             WHERE nom_schema = 'c_archives' ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #10-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False) ;
+        ASSERT e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False, 'échec assertion #10-b' ;
     END ;
 
     RESET ROLE ;
@@ -5855,9 +5840,14 @@ BEGIN
     DROP SCHEMA c_archives ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema IN ('c_bibliotheque', 'c_librairie', 'c_archives') ;
         
-    RETURN coalesce(r, False) ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
 
 END
@@ -6130,7 +6120,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
+        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1'
             AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
         
     r := r AND b ;
@@ -6143,8 +6133,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-3 > %', r::text ;
@@ -6158,8 +6147,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46-4 > %', r::text ;
@@ -6172,8 +6160,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-5 > %', r::text ;
@@ -6185,8 +6172,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-6 > %', r::text ;
@@ -6198,8 +6184,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
             AND defaclobjtype = 'S'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][rwU]{3}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwU]{3}[/]') ;
                     
     r := r AND b ;
     RAISE NOTICE '46-7 > %', r::text ;
@@ -6211,8 +6196,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'f'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=]X[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]X[/]') ;
                     
     r := r AND b ;
     RAISE NOTICE '46-8 > %', r::text ;
@@ -6228,7 +6212,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole) ;
+        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1' ;
         
     r := r AND b ;
     RAISE NOTICE '46-9b > %', r::text ;
@@ -6240,8 +6224,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-10 > %', r::text ;
@@ -6255,8 +6238,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46-11 > %', r::text ;
@@ -6269,8 +6251,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-12 > %', r::text ;
@@ -6286,7 +6267,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
+        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2'
             AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
     
     r := r AND b ;
@@ -6299,8 +6280,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-14 > %', r::text ;
@@ -6314,8 +6294,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46-15 > %', r::text ;
@@ -6328,8 +6307,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46-16 > %', r::text ;
@@ -6345,7 +6323,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec2')::regrole) ;
+        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2' ;
     
     r := r AND b ;
     RAISE NOTICE '46-18 > %', r::text ;
@@ -6429,7 +6407,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
+        WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1'
             AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
         
     r := r AND b ;
@@ -6442,8 +6420,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-3 > %', r::text ;
@@ -6457,8 +6434,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46b-4 > %', r::text ;
@@ -6471,8 +6447,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-5 > %', r::text ;
@@ -6484,8 +6459,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-6 > %', r::text ;
@@ -6497,8 +6471,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
             AND defaclobjtype = 'S'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][rwU]{3}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwU]{3}[/]') ;
                     
     r := r AND b ;
     RAISE NOTICE '46b-7 > %', r::text ;
@@ -6510,8 +6483,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'f'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=]X[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]X[/]') ;
                     
     r := r AND b ;
     RAISE NOTICE '46b-8 > %', r::text ;
@@ -6527,7 +6499,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD_REC1')::regrole) ;
+        WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1' ;
         
     r := r AND b ;
     RAISE NOTICE '46b-9b > %', r::text ;
@@ -6539,8 +6511,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-10 > %', r::text ;
@@ -6554,8 +6525,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46b-11 > %', r::text ;
@@ -6568,8 +6538,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-12 > %', r::text ;
@@ -6585,7 +6554,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
+        WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"'
             AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
     
     r := r AND b ;
@@ -6598,8 +6567,7 @@ BEGIN
         WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
             AND defaclrole = quote_ident('g_admin')::regrole::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-14 > %', r::text ;
@@ -6613,8 +6581,7 @@ BEGIN
             WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                        || '[=][UC]{2}[/]') ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]') ;
         
         r := r AND b ;
         RAISE NOTICE '46b-15 > %', r::text ;
@@ -6627,8 +6594,7 @@ BEGIN
         WHERE defaclnamespace = 0
             AND defaclrole = quote_ident(current_user)::regrole::oid
             AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]') ;
     
     r := r AND b ;
     RAISE NOTICE '46b-16 > %', r::text ;
@@ -6644,7 +6610,7 @@ BEGIN
         count(*) = 0
         INTO STRICT b 
         FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD *REC2')::regrole) ;
+        WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"' ;
     
     r := r AND b ;
     RAISE NOTICE '46b-18 > %', r::text ;
@@ -7284,8 +7250,7 @@ BEGIN
         FROM pg_class
         WHERE relnamespace = quote_ident('c_librairie')::regnamespace::oid
             AND relname = 'journal_du_mur'
-            AND array_to_string(relacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(relacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
                     
     r := b ;
     RAISE NOTICE '49-1 > %', r::text ; 
@@ -7297,8 +7262,7 @@ BEGIN
         FROM pg_default_acl
         WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
         
     r := r AND b ;
     RAISE NOTICE '49-2 > %', r::text ; 
@@ -7344,8 +7308,7 @@ BEGIN
         FROM pg_class
         WHERE relnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
             AND relname = 'Journal du mur !'
-            AND array_to_string(relacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD rec*1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(relacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][rwadDxt]{7}[/]') ;
                     
     r := b ;
     RAISE NOTICE '49b-1 > %', r::text ; 
@@ -7357,8 +7320,7 @@ BEGIN
         FROM pg_default_acl
         WHERE defaclnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
             AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_ASGARD rec*1')::regrole)
-                    || '[=][rwadDxt]{7}[/]') ;
+            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][rwadDxt]{7}[/]') ;
         
     r := r AND b ;
     RAISE NOTICE '49b-2 > %', r::text ; 
@@ -7405,8 +7367,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_bibliotheque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_admin_ext')::regrole)
-                    || '[=][UC]{2}[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?g_admin_ext[=][UC]{2}[/]') ;
                     
     r := b ;
     RAISE NOTICE '50-1 > %', r::text ;
@@ -7417,8 +7378,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_bibliotheque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_consult')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?g_consult[=]U[/]') ;
                     
     r := b ;
     RAISE NOTICE '50-2 > %', r::text ; 
@@ -7436,8 +7396,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_bibliotheque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_admin_ext')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?g_admin_ext[=]U[/]') ;
                     
     r := b ;
     RAISE NOTICE '50-3 > %', r::text ;
@@ -7498,8 +7457,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_Bibliothèque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g ADMIN ext')::regrole)
-                    || '[=][UC]{2}[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?"g ADMIN ext"[=][UC]{2}[/]') ;
                     
     r := b ;
     RAISE NOTICE '50b-1 > %', r::text ;
@@ -7510,8 +7468,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_Bibliothèque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g Consult !')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?"g Consult !"[=]U[/]') ;
                     
     r := b ;
     RAISE NOTICE '50b-2 > %', r::text ; 
@@ -7529,8 +7486,7 @@ BEGIN
         INTO STRICT b 
         FROM pg_namespace
         WHERE nspname = 'c_Bibliothèque'
-            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g ADMIN ext')::regrole)
-                    || '[=]U[/]') ;
+            AND array_to_string(nspacl, ',') ~ ('^(.*[,])?"g ADMIN ext"[=]U[/]') ;
                     
     r := b ;
     RAISE NOTICE '50b-3 > %', r::text ;
@@ -7934,12 +7890,12 @@ BEGIN
     
     REVOKE USAGE ON SCHEMA z_asgard_admin FROM g_admin_ext ;
     REVOKE UPDATE, DELETE, INSERT ON TABLE z_asgard_admin.gestion_schema FROM g_admin_ext ;
-    REVOKE USAGE ON SCHEMA z_asgard FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.gestion_schema_etr FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.gestion_schema_usr FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.asgardmenu_metadata FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.asgardmanager_metadata FROM g_consult ;
-    REVOKE SELECT ON TABLE z_asgard.gestion_schema_read_only FROM g_consult ;
+    REVOKE USAGE ON SCHEMA z_asgard FROM public ;
+    REVOKE SELECT ON TABLE z_asgard.gestion_schema_etr FROM public ;
+    REVOKE SELECT ON TABLE z_asgard.gestion_schema_usr FROM public ;
+    REVOKE SELECT ON TABLE z_asgard.asgardmenu_metadata FROM public ;
+    REVOKE SELECT ON TABLE z_asgard.asgardmanager_metadata FROM public ;
+    REVOKE SELECT ON TABLE z_asgard.gestion_schema_read_only FROM public ;
 
     -- #21
     SELECT count(*) = 10
@@ -7959,12 +7915,12 @@ BEGIN
                 ('z_asgard_admin', 'gestion_schema', 'table', 'INSERT', 'g_admin_ext'),
                 ('z_asgard_admin', 'gestion_schema', 'table', 'UPDATE', 'g_admin_ext'),
                 ('z_asgard_admin', 'gestion_schema', 'table', 'DELETE', 'g_admin_ext'),
-                ('z_asgard', 'z_asgard', 'schéma', 'USAGE', 'g_consult'),
-                ('z_asgard', 'gestion_schema_usr', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'gestion_schema_etr', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'asgardmenu_metadata', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'asgardmanager_metadata', 'vue', 'SELECT', 'g_consult'),
-                ('z_asgard', 'gestion_schema_read_only', 'vue', 'SELECT', 'g_consult')
+                ('z_asgard', 'z_asgard', 'schéma', 'USAGE', 'public'),
+                ('z_asgard', 'gestion_schema_usr', 'vue', 'SELECT', 'public'),
+                ('z_asgard', 'gestion_schema_etr', 'vue', 'SELECT', 'public'),
+                ('z_asgard', 'asgardmenu_metadata', 'vue', 'SELECT', 'public'),
+                ('z_asgard', 'asgardmanager_metadata', 'vue', 'SELECT', 'public'),
+                ('z_asgard', 'gestion_schema_read_only', 'vue', 'SELECT', 'public')
             ) AS t (a_schema, a_objet, a_type, a_commande, a_role)
         ON typ_objet = a_type AND nom_schema = a_schema
             AND nom_objet = a_objet
@@ -9492,8 +9448,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t055()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean := True ;
    variante record ;
    o_roles record ;
    c_roles record ;
@@ -9502,8 +9456,8 @@ DECLARE
    t text ;
    e_mssg text ;
    e_detl text ;
-   acl_idi text ;
-   acl_ids text ;
+   acl_idi aclitem[] ;
+   acl_ids aclitem[] ;
 BEGIN
 
     CREATE ROLE g_asgard_rec ;
@@ -9534,19 +9488,18 @@ BEGIN
     FOR variante IN (
             SELECT *
                 FROM unnest(
-                    ARRAY[1,            2,              3,              4,              5,              6], -- numéro de variante
-                    ARRAY[NULL,         NULL,           NULL,           NULL,           NULL,           NULL], -- droits du producteur du schéma de départ
-                    ARRAY['[rw]{2}',   '[rwU]{3}',     '[rw]{2}',       '[rw]{2}',      '[rw]{2}',      '[rwU]{3}'], -- droits du producteur du schéma d'arrivée
-                    ARRAY[NULL,         NULL,           NULL,           '[rU]{2}',      NULL,           NULL], -- droits de l'éditeur du schéma de départ
-                    ARRAY['[rU]{2}',   '[rU]{2}',       '[rU]{2}',      NULL,           '[rU]{2}',      '[rU]{2}'], -- droits de l'éditeur du schéma d'arrivée
-                    ARRAY[NULL,         NULL,           NULL,           '[rU]{2}',      NULL,           NULL], -- droits du lecteur du schéma de départ
-                    ARRAY['[rU]{2}',    'r',            '[rU]{2}',      NULL,           'r',            'r'], -- droits du lecteur du schéma d'arrivée
-                    ARRAY['[rw]{2}',    NULL,           NULL,           '[rw]{2}',      NULL,           '[rw]{2}']  -- droits de g_asgard_rec
+                    ARRAY[1,                2,                      3,                  4,                  5,                  6], -- numéro de variante
+                    ARRAY[NULL,             NULL,                   NULL,               NULL,               NULL,               NULL], -- droits du producteur du schéma de départ
+                    ARRAY['SELECT,UPDATE',  'SELECT,UPDATE,USAGE',  'SELECT,UPDATE',    'SELECT,UPDATE',    'SELECT,UPDATE',    'SELECT,UPDATE,USAGE'], -- droits du producteur du schéma d'arrivée
+                    ARRAY[NULL,             NULL,                   NULL,               'SELECT,USAGE',     NULL,               NULL], -- droits de l'éditeur du schéma de départ
+                    ARRAY['SELECT,USAGE',   'SELECT,USAGE',         'SELECT,USAGE',     NULL,               'SELECT,USAGE',     'SELECT,USAGE'], -- droits de l'éditeur du schéma d'arrivée
+                    ARRAY[NULL,             NULL,                   NULL,               'SELECT,USAGE',     NULL,               NULL], -- droits du lecteur du schéma de départ
+                    ARRAY['SELECT,USAGE',   'SELECT',               'SELECT,USAGE',     NULL,               'SELECT',           'SELECT'], -- droits du lecteur du schéma d'arrivée
+                    ARRAY['SELECT,UPDATE',  NULL,                   NULL,               'SELECT,UPDATE',    NULL,               'SELECT,UPDATE']  -- droits de g_asgard_rec
                     ) AS t (n, dpro_o, dpro_c, dedi_o, dedi_c, dlec_o, dlec_c, drec)
                 ORDER BY n
             )
     LOOP
-        RAISE NOTICE '-- variante % ----------------', variante.n::text ;
         PERFORM z_asgard.asgard_initialise_schema(o) ;
         
         SELECT producteur, editeur, lecteur
@@ -9572,160 +9525,146 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'tours_de_garde', 'table', c, variante.n) ;
         
         
-        SELECT array_to_string(relacl, ',')
+        SELECT relacl
             INTO STRICT acl_idi
             FROM pg_class
             WHERE relnamespace::regnamespace::text = quote_ident(c)
                 AND relname = 'journal_du_mur_idi_seq' ;
         
-        SELECT array_to_string(relacl, ',')
+        SELECT relacl
             INTO STRICT acl_ids
             FROM pg_class
             WHERE relnamespace::regnamespace::text = quote_ident(c)
                 AND relname = 'tours_de_garde_ids_seq' ;
   
         -- serial
-        IF variante.dpro_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_o IS NOT NULL AND NOT acl_ids ~ ('^' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dpro_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dpro_o IS NULL AND NOT quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_o IS NOT NULL AND quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_o),
+            format('échec assertion #1 pour la variante %s', variante.n) ;
+
+        ASSERT variante.dpro_c IS NULL AND NOT quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_c IS NOT NULL AND quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_c),
+            format('échec assertion #2 pour la variante %s', variante.n) ;
         
-        IF variante.dpro_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dpro_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_o IS NULL AND NOT quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_o IS NOT NULL AND quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_o),
+            format('échec assertion #3 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_o IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dedi_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_c IS NULL AND NOT quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_c IS NOT NULL AND quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_c),
+            format('échec assertion #4 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dedi_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_o IS NULL AND NOT quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_o IS NOT NULL AND quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_o),
+            format('échec assertion #5 pour la variante %s', variante.n) ;
         
-        IF variante.dlec_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_o IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dlec_o' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.dlec_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dlec_c' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.drec IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec')::regrole) || '[=]')
-            OR variante.drec IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec')::regrole)
-                            || '[=]' || variante.drec
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC drec' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_c IS NULL AND NOT quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_c IS NOT NULL AND quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_c),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
+
+        ASSERT variante.drec IS NULL AND NOT quote_ident('g_asgard_rec')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.drec IS NOT NULL AND quote_ident('g_asgard_rec')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.drec),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
         
         
         -- identity
-        IF variante.dpro_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_o IS NOT NULL AND NOT acl_idi ~ ('^' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dpro_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dpro_o IS NULL AND NOT quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_o IS NOT NULL AND quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_o),
+            format('échec assertion #1 pour la variante %s', variante.n) ;
+
+        ASSERT variante.dpro_c IS NULL AND NOT quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_c IS NOT NULL AND quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_c),
+            format('échec assertion #2 pour la variante %s', variante.n) ;
         
-        IF variante.dpro_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dpro_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_o IS NULL AND NOT quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_o IS NOT NULL AND quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_o),
+            format('échec assertion #3 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_o IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dedi_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_c IS NULL AND NOT quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_c IS NOT NULL AND quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_c),
+            format('échec assertion #4 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dedi_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_o IS NULL AND NOT quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_o IS NOT NULL AND quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_o),
+            format('échec assertion #5 pour la variante %s', variante.n) ;
         
-        IF variante.dlec_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_o IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dlec_o' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.dlec_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dlec_c' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.drec IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec')::regrole) || '[=]')
-            OR variante.drec IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard_rec')::regrole)
-                            || '[=]' || variante.drec
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC drec' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_c IS NULL AND NOT quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_c IS NOT NULL AND quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_c),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
+
+        ASSERT variante.drec IS NULL AND NOT quote_ident('g_asgard_rec')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.drec IS NOT NULL AND quote_ident('g_asgard_rec')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.drec),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
         
         t := c ;
         c := o ;
@@ -9745,9 +9684,9 @@ BEGIN
     DROP ROLE g_asgard_pro2 ;
     DROP ROLE g_asgard_rec ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -9756,7 +9695,7 @@ EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t055() IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
 
@@ -9768,8 +9707,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t055b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean := True ;
    variante record ;
    o_roles record ;
    c_roles record ;
@@ -9778,8 +9715,8 @@ DECLARE
    t text ;
    e_mssg text ;
    e_detl text ;
-   acl_idi text ;
-   acl_ids text ;
+   acl_idi aclitem[] ;
+   acl_ids aclitem[] ;
 BEGIN
 
     CREATE ROLE "g_asgard REC!!!" ;
@@ -9810,14 +9747,14 @@ BEGIN
     FOR variante IN (
             SELECT *
                 FROM unnest(
-                    ARRAY[1,            2,              3,              4,              5,              6], -- numéro de variante
-                    ARRAY[NULL,         NULL,           NULL,           NULL,           NULL,           NULL], -- droits du producteur du schéma de départ
-                    ARRAY['[rw]{2}',   '[rwU]{3}',     '[rw]{2}',       '[rw]{2}',      '[rw]{2}',      '[rwU]{3}'], -- droits du producteur du schéma d'arrivée
-                    ARRAY[NULL,         NULL,           NULL,           '[rU]{2}',      NULL,           NULL], -- droits de l'éditeur du schéma de départ
-                    ARRAY['[rU]{2}',   '[rU]{2}',       '[rU]{2}',      NULL,           '[rU]{2}',      '[rU]{2}'], -- droits de l'éditeur du schéma d'arrivée
-                    ARRAY[NULL,         NULL,           NULL,           '[rU]{2}',      NULL,           NULL], -- droits du lecteur du schéma de départ
-                    ARRAY['[rU]{2}',    'r',            '[rU]{2}',      NULL,           'r',            'r'], -- droits du lecteur du schéma d'arrivée
-                    ARRAY['[rw]{2}',    NULL,           NULL,           '[rw]{2}',      NULL,           '[rw]{2}']  -- droits de "g_asgard REC!!!"
+                    ARRAY[1,                2,                      3,                  4,                  5,                  6], -- numéro de variante
+                    ARRAY[NULL,             NULL,                   NULL,               NULL,               NULL,               NULL], -- droits du producteur du schéma de départ
+                    ARRAY['SELECT,UPDATE',  'SELECT,UPDATE,USAGE',  'SELECT,UPDATE',    'SELECT,UPDATE',    'SELECT,UPDATE',    'SELECT,UPDATE,USAGE'], -- droits du producteur du schéma d'arrivée
+                    ARRAY[NULL,             NULL,                   NULL,               'SELECT,USAGE',     NULL,               NULL], -- droits de l'éditeur du schéma de départ
+                    ARRAY['SELECT,USAGE',   'SELECT,USAGE',         'SELECT,USAGE',     NULL,               'SELECT,USAGE',     'SELECT,USAGE'], -- droits de l'éditeur du schéma d'arrivée
+                    ARRAY[NULL,             NULL,                   NULL,               'SELECT,USAGE',     NULL,               NULL], -- droits du lecteur du schéma de départ
+                    ARRAY['SELECT,USAGE',   'SELECT',               'SELECT,USAGE',     NULL,               'SELECT',           'SELECT'], -- droits du lecteur du schéma d'arrivée
+                    ARRAY['SELECT,UPDATE',  NULL,                   NULL,               'SELECT,UPDATE',    NULL,               'SELECT,UPDATE']  -- droits de g_asgard_rec
                     ) AS t (n, dpro_o, dpro_c, dedi_o, dedi_c, dlec_o, dlec_c, drec)
                 ORDER BY n
             )
@@ -9848,160 +9785,146 @@ BEGIN
         PERFORM z_asgard.asgard_deplace_obj(o, 'tours-de-garde', 'table', c, variante.n) ;
         
         
-        SELECT array_to_string(relacl, ',')
+        SELECT relacl
             INTO STRICT acl_idi
             FROM pg_class
             WHERE relnamespace::regnamespace::text = quote_ident(c)
                 AND relname = 'Journal du mur_i*di_seq' ;
         
-        SELECT array_to_string(relacl, ',')
+        SELECT relacl
             INTO STRICT acl_ids
             FROM pg_class
             WHERE relnamespace::regnamespace::text = quote_ident(c)
                 AND relname = 'tours-de-garde_IDS_seq' ;
   
         -- serial
-        IF variante.dpro_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_o IS NOT NULL AND NOT acl_ids ~ ('^' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dpro_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dpro_o IS NULL AND NOT quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_o IS NOT NULL AND quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_o),
+            format('échec assertion #1 pour la variante %s', variante.n) ;
+
+        ASSERT variante.dpro_c IS NULL AND NOT quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_c IS NOT NULL AND quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_c),
+            format('échec assertion #2 pour la variante %s', variante.n) ;
         
-        IF variante.dpro_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dpro_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_o IS NULL AND NOT quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_o IS NOT NULL AND quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_o),
+            format('échec assertion #3 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_o IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dedi_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_c IS NULL AND NOT quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_c IS NOT NULL AND quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_c),
+            format('échec assertion #4 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dedi_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_o IS NULL AND NOT quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_o IS NOT NULL AND quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_o),
+            format('échec assertion #5 pour la variante %s', variante.n) ;
         
-        IF variante.dlec_o IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_o IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dlec_o' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.dlec_c IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_c IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC dlec_c' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.drec IS NULL AND acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard REC!!!')::regrole) || '[=]')
-            OR variante.drec IS NOT NULL AND NOT acl_ids ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard REC!!!')::regrole)
-                            || '[=]' || variante.drec
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_ids = %', acl_ids ;
-            RAISE NOTICE 'ECHEC drec' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_c IS NULL AND NOT quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_c IS NOT NULL AND quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_c),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
+
+        ASSERT variante.drec IS NULL AND NOT quote_ident('g_asgard REC!!!')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.drec IS NOT NULL AND quote_ident('g_asgard REC!!!')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_ids) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.drec),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
         
         
         -- identity
-        IF variante.dpro_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_o IS NOT NULL AND NOT acl_idi ~ ('^' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dpro_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dpro_o IS NULL AND NOT quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_o IS NOT NULL AND quote_ident(o_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_o),
+            format('échec assertion #1 pour la variante %s', variante.n) ;
+
+        ASSERT variante.dpro_c IS NULL AND NOT quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dpro_c IS NOT NULL AND quote_ident(c_roles.producteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dpro_c),
+            format('échec assertion #2 pour la variante %s', variante.n) ;
         
-        IF variante.dpro_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole) || '[=]')
-            OR variante.dpro_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole)
-                            || '[=]' || variante.dpro_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dpro_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_o IS NULL AND NOT quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_o IS NOT NULL AND quote_ident(o_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_o),
+            format('échec assertion #3 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_o IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dedi_o' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dedi_c IS NULL AND NOT quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dedi_c IS NOT NULL AND quote_ident(c_roles.editeur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dedi_c),
+            format('échec assertion #4 pour la variante %s', variante.n) ;
         
-        IF variante.dedi_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole) || '[=]')
-            OR variante.dedi_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.editeur)::regrole)
-                            || '[=]' || variante.dedi_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dedi_c' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_o IS NULL AND NOT quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_o IS NOT NULL AND quote_ident(o_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_o),
+            format('échec assertion #5 pour la variante %s', variante.n) ;
         
-        IF variante.dlec_o IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_o IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(o_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_o
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dlec_o' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.dlec_c IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole) || '[=]')
-            OR variante.dlec_c IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.lecteur)::regrole)
-                            || '[=]' || variante.dlec_c
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC dlec_c' ;
-            r := False ;
-        END IF ;
-        
-        IF variante.drec IS NULL AND acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard REC!!!')::regrole) || '[=]')
-            OR variante.drec IS NOT NULL AND NOT acl_idi ~ ('^(.+[,])?' || z_asgard.asgard_role_trans_acl(quote_ident('g_asgard REC!!!')::regrole)
-                            || '[=]' || variante.drec
-                            || '/' || z_asgard.asgard_role_trans_acl(quote_ident(c_roles.producteur)::regrole))
-        THEN
-            RAISE NOTICE 'acl_idi = %', acl_idi ;
-            RAISE NOTICE 'ECHEC drec' ;
-            r := False ;
-        END IF ;
+        ASSERT variante.dlec_c IS NULL AND NOT quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.dlec_c IS NOT NULL AND quote_ident(c_roles.lecteur)::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.dlec_c),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
+
+        ASSERT variante.drec IS NULL AND NOT quote_ident('g_asgard REC!!!')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable))
+            OR variante.drec IS NOT NULL AND quote_ident('g_asgard REC!!!')::regrole
+                IN (SELECT grantee FROM aclexplode(acl_idi) AS acl (grantor, grantee, privilege, grantable)
+                    WHERE grantor = quote_ident(c_roles.producteur)::regrole
+                    GROUP BY grantee
+                    HAVING string_agg(privilege, ',' ORDER BY privilege) = variante.drec),
+            format('échec assertion #6 pour la variante %s', variante.n) ;
         
         t := c ;
         c := o ;
@@ -10021,9 +9944,9 @@ BEGIN
     DROP ROLE "g_asgard--pro2" ;
     DROP ROLE "g_asgard REC!!!" ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -10032,7 +9955,7 @@ EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t055b() IS 'ASGARD recette. TEST : (asgard_deplace_obj) gestion des séquences associées.' ;
 
@@ -10044,9 +9967,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t056()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    o_role oid ;
+   o_role_bis oid ;
    o_nsp oid ;
    e_mssg text ;
    e_detl text ;
@@ -10055,6 +9977,7 @@ BEGIN
     CREATE ROLE g_asgard_rec ;
     CREATE ROLE g_asgard_rec_bis ;
     o_role = 'g_asgard_rec'::regrole::oid ;
+    o_role_bis = 'g_asgard_rec_bis'::regrole::oid ;
     
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec ;
     o_nsp = 'c_bibliotheque'::regnamespace::oid ;
@@ -10069,24 +9992,18 @@ BEGIN
         CREATE COLLATION c_bibliotheque.biblicoll FROM pg_catalog.default ;
     END IF ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_collation
-        WHERE collnamespace = o_nsp AND collowner = o_role ;
-        
-    r := b ;
-    RAISE NOTICE '56-1 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #1' ;
     
     -- #2
     CREATE CONVERSION c_bibliotheque.biblicon FOR 'WIN' TO 'UTF8' FROM win_to_utf8 ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_conversion
-        WHERE connamespace = o_nsp AND conowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-2 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #2' ;
     
     -- #3
     CREATE FUNCTION c_bibliotheque.normalise(text)
@@ -10095,108 +10012,145 @@ BEGIN
         LANGUAGE SQL ;    
     CREATE OPERATOR c_bibliotheque.@ (PROCEDURE = c_bibliotheque.normalise(text), RIGHTARG = text) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_operator
-        WHERE oprnamespace = o_nsp AND oprowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-3 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #3' ;
     
     -- #4
     CREATE TEXT SEARCH CONFIGURATION c_bibliotheque.recherche_config (COPY = french) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_config
-        WHERE cfgnamespace = o_nsp AND cfgowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-4 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #4' ;
     
     -- #5
     CREATE TEXT SEARCH DICTIONARY c_bibliotheque.recherche_dico (TEMPLATE = snowball, LANGUAGE = french) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_dict
-        WHERE dictnamespace = o_nsp AND dictowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-5 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #5' ;
     
     -- #6
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        CREATE TABLE c_bibliotheque.dependant_columns (chiffre int, chiffre_txt text) ;
+        EXECUTE 'CREATE STATISTICS c_bibliotheque.stat_dependant_columns
+            (dependencies) ON chiffre, chiffre_txt
+            FROM c_bibliotheque.dependant_columns' ;
         
-    r := r AND b ;
-    RAISE NOTICE '56-6 > %', r::text ;
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #6' ;       
+    END IF ;
+    
+    -- #7 & 8
+    -- avec création implicite de la famille d'opérateurs
+    CREATE OPERATOR CLASS c_bibliotheque.trans_opc
+        FOR TYPE int USING gist AS
+            OPERATOR 1 = ;
+        
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #7' ;
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+        ), 'échec assertion #8' ;
+    
+    -- #9
+    -- création explicite de la famille d'opérateurs
+    CREATE OPERATOR FAMILY c_bibliotheque.trans_opf USING gist ;
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #9' ;
+    
+    -- #10
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #10' ;
     
     ------ ré-synchronisation auto en cas de modification ------
     
-    -- #7
+    -- #11
     ALTER COLLATION c_bibliotheque.biblicoll OWNER TO g_asgard_rec_bis ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_collation
-        WHERE collnamespace = o_nsp AND collowner = o_role ;
-        
-    r := b ;
-    RAISE NOTICE '56-7 > %', r::text ;
-    
-    -- #8
-    ALTER CONVERSION c_bibliotheque.biblicon OWNER TO g_asgard_rec_bis ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_conversion
-        WHERE connamespace = o_nsp AND conowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-8 > %', r::text ;
-    
-    -- #9
-    ALTER OPERATOR c_bibliotheque.@ (NONE, text) OWNER TO g_asgard_rec_bis ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_operator
-        WHERE oprnamespace = o_nsp AND oprowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-9 > %', r::text ;
-    
-    -- #10
-    ALTER TEXT SEARCH CONFIGURATION c_bibliotheque.recherche_config OWNER TO g_asgard_rec_bis ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_config
-        WHERE cfgnamespace = o_nsp AND cfgowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-10 > %', r::text ;
-    
-    -- #11
-    ALTER TEXT SEARCH DICTIONARY c_bibliotheque.recherche_dico OWNER TO g_asgard_rec_bis ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_dict
-        WHERE dictnamespace = o_nsp AND dictowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-11 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #11' ;
     
     -- #12
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-12 > %', r::text ;
+    ALTER CONVERSION c_bibliotheque.biblicon OWNER TO g_asgard_rec_bis ;
+    
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #12' ;
+    
+    -- #13
+    ALTER OPERATOR c_bibliotheque.@ (NONE, text) OWNER TO g_asgard_rec_bis ;
+    
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #13' ;
+    
+    -- #14
+    ALTER TEXT SEARCH CONFIGURATION c_bibliotheque.recherche_config OWNER TO g_asgard_rec_bis ;
+    
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #14' ;
+    
+    -- #15
+    ALTER TEXT SEARCH DICTIONARY c_bibliotheque.recherche_dico OWNER TO g_asgard_rec_bis ;
+    
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #15' ;
+    
+    -- #16
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER STATISTICS c_bibliotheque.stat_dependant_columns
+            OWNER TO g_asgard_rec_bis ;' ;
+            
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #16' ;
+    END IF ;
+    
+    -- #17
+    ALTER OPERATOR CLASS c_bibliotheque.trans_opc USING gist OWNER TO g_asgard_rec_bis ; 
+    
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #17' ;
+    
+    -- #18
+    ALTER OPERATOR FAMILY c_bibliotheque.trans_opf USING gist OWNER TO g_asgard_rec_bis ; 
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #18' ;
+    
+    -- #19
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #19' ;
    
     
     ------ synchronisation avec asgard_initialise_schema ------
@@ -10207,51 +10161,190 @@ BEGIN
     ALTER OPERATOR c_bibliotheque.@ (NONE, text) OWNER TO g_asgard_rec_bis ;
     ALTER TEXT SEARCH CONFIGURATION c_bibliotheque.recherche_config OWNER TO g_asgard_rec_bis ;
     ALTER TEXT SEARCH DICTIONARY c_bibliotheque.recherche_dico OWNER TO g_asgard_rec_bis ;
+    ALTER OPERATOR CLASS c_bibliotheque.trans_opc USING gist OWNER TO g_asgard_rec_bis ;
+    ALTER OPERATOR FAMILY c_bibliotheque.trans_opf USING gist OWNER TO g_asgard_rec_bis ; 
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER STATISTICS c_bibliotheque.stat_dependant_columns
+            OWNER TO g_asgard_rec_bis ;' ;
+    END IF ;
     
     ALTER EVENT TRIGGER asgard_on_alter_objet ENABLE ;
     
-    -- #13
-    SELECT count(*) = 5
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-13 > %', r::text ;
+    -- #20
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 7
+        + (current_setting('server_version_num')::int >= 100000)::int,
+        'échec assertion #20' ;
     
+    ASSERT o_role_bis IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #20-1' ;
+    ASSERT o_role_bis IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #20-2' ;
+    ASSERT o_role_bis IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #20-3' ;
+    ASSERT o_role_bis IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #20-4' ;
+    ASSERT o_role_bis IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #20-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role_bis IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #20-6' ;
+    END IF ;
+    ASSERT o_role_bis IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #20-7' ;
+    ASSERT o_role_bis IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #20-8' ;
+
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-    -- #14
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-14 > %', r::text ;
+    -- #21
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #21' ;
+    
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #21-1' ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #21-2' ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #21-3' ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #21-4' ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #21-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #21-6' ;
+    END IF ;
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #21-7' ;
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #21-8' ;
     
     ------ modification du propriétaire du schéma par un ALTER SCHEMA ------
     ALTER SCHEMA c_bibliotheque OWNER TO g_asgard_rec_bis ;
     
-    -- #15
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-15 > %', r::text ;
+    -- #22
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #22' ;
+    
+    ASSERT o_role_bis IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #22-1' ;
+    ASSERT o_role_bis IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #22-2' ;
+    ASSERT o_role_bis IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #22-3' ;
+    ASSERT o_role_bis IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #22-4' ;
+    ASSERT o_role_bis IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #22-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role_bis IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #22-6' ;
+    END IF ;
+    ASSERT o_role_bis IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #22-7' ;
+    ASSERT o_role_bis IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #22-8' ;
     
     ------ modification du producteur du schéma par un UPDATE ------
     UPDATE z_asgard.gestion_schema_usr
         SET producteur = 'g_asgard_rec'
         WHERE nom_schema = 'c_bibliotheque' ;
     
-    -- #16
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-16 > %', r::text ;
-
+    -- #23
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #23' ;
+    
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #23-1' ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #23-2' ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #23-3' ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #23-4' ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #23-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #23-6' ;
+    END IF ;
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #23-7' ;
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans_opf'
+        ), 'échec assertion #23-8' ;
 
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
@@ -10259,9 +10352,9 @@ BEGIN
     DROP ROLE g_asgard_rec ;
     DROP ROLE g_asgard_rec_bis ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -10270,31 +10363,31 @@ EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t056() IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
 
 
--- FUNCTION: z_asgard_recette.t056b()
+-- Function: z_asgard_recette.t056b()
 
 CREATE OR REPLACE FUNCTION z_asgard_recette.t056b()
     RETURNS boolean
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    o_role oid ;
+   o_role_bis oid ;
    o_nsp oid ;
    e_mssg text ;
    e_detl text ;
 BEGIN
 
-    CREATE ROLE "g_asgard_REC" ;
+    CREATE ROLE """g_asgard_REC""" ;
     CREATE ROLE "g_asgard REC*" ;
-    o_role = '"g_asgard_REC"'::regrole::oid ;
+    o_role = '"""g_asgard_REC"""'::regrole::oid ;
+    o_role_bis = '"g_asgard REC*"'::regrole::oid ;
     
-    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_REC" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION """g_asgard_REC""" ;
     o_nsp = '"c_Bibliothèque"'::regnamespace::oid ;
     
     ------ synchronisation à la création ------
@@ -10307,24 +10400,18 @@ BEGIN
         CREATE COLLATION "c_Bibliothèque"."BIBLIcoll" FROM pg_catalog.default ;
     END IF ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_collation
-        WHERE collnamespace = o_nsp AND collowner = o_role ;
-        
-    r := b ;
-    RAISE NOTICE '56b-1 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #1' ;
     
     -- #2
     CREATE CONVERSION "c_Bibliothèque"."BIBLI CO^N" FOR 'WIN' TO 'UTF8' FROM win_to_utf8 ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_conversion
-        WHERE connamespace = o_nsp AND conowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-2 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #2' ;
     
     -- #3
     CREATE FUNCTION "c_Bibliothèque".normalise(text)
@@ -10333,108 +10420,145 @@ BEGIN
         LANGUAGE SQL ;    
     CREATE OPERATOR "c_Bibliothèque".@ (PROCEDURE = "c_Bibliothèque".normalise(text), RIGHTARG = text) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_operator
-        WHERE oprnamespace = o_nsp AND oprowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-3 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #3' ;
     
     -- #4
     CREATE TEXT SEARCH CONFIGURATION "c_Bibliothèque"."? config" (COPY = french) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_config
-        WHERE cfgnamespace = o_nsp AND cfgowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-4 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #4' ;
     
     -- #5
     CREATE TEXT SEARCH DICTIONARY "c_Bibliothèque"."? dico" (TEMPLATE = snowball, LANGUAGE = french) ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_dict
-        WHERE dictnamespace = o_nsp AND dictowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-5 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #5' ;
     
     -- #6
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        CREATE TABLE "c_Bibliothèque".dependant_columns (chiffre int, chiffre_txt text) ;
+        EXECUTE 'CREATE STATISTICS "c_Bibliothèque"."Stat ""dependant_columns"""
+            (dependencies) ON chiffre, chiffre_txt
+            FROM "c_Bibliothèque".dependant_columns' ;
         
-    r := r AND b ;
-    RAISE NOTICE '56b-6 > %', r::text ;
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #6' ;       
+    END IF ;
+    
+    -- #7 & 8
+    -- avec création implicite de la famille d'opérateurs
+    CREATE OPERATOR CLASS "c_Bibliothèque"."trans=opc"
+        FOR TYPE int USING gist AS
+            OPERATOR 1 = ;
+        
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #7' ;
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+        ), 'échec assertion #8' ;
+    
+    -- #9
+    -- création explicite de la famille d'opérateurs
+    CREATE OPERATOR FAMILY "c_Bibliothèque"."trans=opf" USING gist ;
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #9' ;
+    
+    -- #10
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #10' ;
     
     ------ ré-synchronisation auto en cas de modification ------
     
-    -- #7
+    -- #11
     ALTER COLLATION "c_Bibliothèque"."BIBLIcoll" OWNER TO "g_asgard REC*" ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_collation
-        WHERE collnamespace = o_nsp AND collowner = o_role ;
-        
-    r := b ;
-    RAISE NOTICE '56b-7 > %', r::text ;
-    
-    -- #8
-    ALTER CONVERSION "c_Bibliothèque"."BIBLI CO^N" OWNER TO "g_asgard REC*" ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_conversion
-        WHERE connamespace = o_nsp AND conowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-8 > %', r::text ;
-    
-    -- #9
-    ALTER OPERATOR "c_Bibliothèque".@ (NONE, text) OWNER TO "g_asgard REC*" ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_operator
-        WHERE oprnamespace = o_nsp AND oprowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-9 > %', r::text ;
-    
-    -- #10
-    ALTER TEXT SEARCH CONFIGURATION "c_Bibliothèque"."? config" OWNER TO "g_asgard REC*" ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_config
-        WHERE cfgnamespace = o_nsp AND cfgowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-10 > %', r::text ;
-    
-    -- #11
-    ALTER TEXT SEARCH DICTIONARY "c_Bibliothèque"."? dico" OWNER TO "g_asgard REC*" ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_ts_dict
-        WHERE dictnamespace = o_nsp AND dictowner = o_role ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-11 > %', r::text ;
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #11' ;
     
     -- #12
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-12 > %', r::text ;
+    ALTER CONVERSION "c_Bibliothèque"."BIBLI CO^N" OWNER TO "g_asgard REC*" ;
+    
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #12' ;
+    
+    -- #13
+    ALTER OPERATOR "c_Bibliothèque".@ (NONE, text) OWNER TO "g_asgard REC*" ;
+    
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #13' ;
+    
+    -- #14
+    ALTER TEXT SEARCH CONFIGURATION "c_Bibliothèque"."? config" OWNER TO "g_asgard REC*" ;
+    
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #14' ;
+    
+    -- #15
+    ALTER TEXT SEARCH DICTIONARY "c_Bibliothèque"."? dico" OWNER TO "g_asgard REC*" ;
+    
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #15' ;
+    
+    -- #16
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER STATISTICS "c_Bibliothèque"."Stat ""dependant_columns"""
+            OWNER TO "g_asgard REC*"' ;
+            
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #16' ;
+    END IF ;
+    
+    -- #17
+    ALTER OPERATOR CLASS "c_Bibliothèque"."trans=opc" USING gist OWNER TO "g_asgard REC*" ; 
+    
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #17' ;
+    
+    -- #18
+    ALTER OPERATOR FAMILY "c_Bibliothèque"."trans=opf" USING gist OWNER TO "g_asgard REC*" ; 
+    
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #18' ;
+    
+    -- #19
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #19' ;
    
     
     ------ synchronisation avec asgard_initialise_schema ------
@@ -10445,61 +10569,200 @@ BEGIN
     ALTER OPERATOR "c_Bibliothèque".@ (NONE, text) OWNER TO "g_asgard REC*" ;
     ALTER TEXT SEARCH CONFIGURATION "c_Bibliothèque"."? config" OWNER TO "g_asgard REC*" ;
     ALTER TEXT SEARCH DICTIONARY "c_Bibliothèque"."? dico" OWNER TO "g_asgard REC*" ;
+    ALTER OPERATOR CLASS "c_Bibliothèque"."trans=opc" USING gist OWNER TO "g_asgard REC*" ; 
+    ALTER OPERATOR FAMILY "c_Bibliothèque"."trans=opf" USING gist OWNER TO "g_asgard REC*" ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'ALTER STATISTICS "c_Bibliothèque"."Stat ""dependant_columns"""
+            OWNER TO "g_asgard REC*"' ;
+    END IF ;
     
     ALTER EVENT TRIGGER asgard_on_alter_objet ENABLE ;
     
-    -- #13
-    SELECT count(*) = 5
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-13 > %', r::text ;
-    
+    -- #20
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 7
+        + (current_setting('server_version_num')::int >= 100000)::int,
+        'échec assertion #20' ;
+
+    ASSERT o_role_bis IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #20-1' ;
+    ASSERT o_role_bis IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #20-2' ;
+    ASSERT o_role_bis IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #20-3' ;
+    ASSERT o_role_bis IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #20-4' ;
+    ASSERT o_role_bis IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #20-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role_bis IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #20-6' ;
+    END IF ;
+    ASSERT o_role_bis IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #20-7' ;
+    ASSERT o_role_bis IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #20-8' ;
+
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
     
-    -- #14
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56b-14 > %', r::text ;
+    -- #21
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #21' ;
+    
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #21-1' ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #21-2' ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #21-3' ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #21-4' ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #21-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #21-6' ;
+    END IF ;
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #21-7' ;
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #21-8' ;
     
     ------ modification du propriétaire du schéma par un ALTER SCHEMA ------
     ALTER SCHEMA "c_Bibliothèque" OWNER TO "g_asgard REC*" ;
     
-    -- #15
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-15 > %', r::text ;
+    -- #22
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #22' ;
+    
+    ASSERT o_role_bis IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #22-1' ;
+    ASSERT o_role_bis IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #22-2' ;
+    ASSERT o_role_bis IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #22-3' ;
+    ASSERT o_role_bis IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #22-4' ;
+    ASSERT o_role_bis IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #22-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role_bis IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #22-6' ;
+    END IF ;
+    ASSERT o_role_bis IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #22-7' ;
+    ASSERT o_role_bis IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #22-8' ;
     
     ------ modification du producteur du schéma par un UPDATE ------
     UPDATE z_asgard.gestion_schema_usr
-        SET producteur = 'g_asgard_REC'
+        SET producteur = '"g_asgard_REC"'
         WHERE nom_schema = 'c_Bibliothèque' ;
     
-    -- #16
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard_admin.asgard_diagnostic() ;
-        
-    r := r AND b ;
-    RAISE NOTICE '56-16 > %', r::text ;
+    -- #23
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion #23' ;
 
+    ASSERT o_role IN (
+        SELECT collowner FROM pg_collation
+            WHERE collnamespace = o_nsp
+        ), 'échec assertion #23-1' ;
+    ASSERT o_role IN (
+        SELECT conowner FROM pg_conversion
+            WHERE connamespace = o_nsp
+        ), 'échec assertion #23-2' ;
+    ASSERT o_role IN (
+        SELECT oprowner FROM pg_operator
+            WHERE oprnamespace = o_nsp
+        ), 'échec assertion #23-3' ;
+    ASSERT o_role IN (
+        SELECT cfgowner FROM pg_ts_config
+            WHERE cfgnamespace = o_nsp
+        ), 'échec assertion #23-4' ;
+    ASSERT o_role IN (
+        SELECT dictowner FROM pg_ts_dict
+            WHERE dictnamespace = o_nsp
+        ), 'échec assertion #23-5' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT o_role IN (
+            SELECT stxowner FROM pg_statistic_ext
+                WHERE stxnamespace = o_nsp
+            ), 'échec assertion #23-6' ;
+    END IF ;
+    ASSERT o_role IN (
+        SELECT opcowner FROM pg_opclass
+            WHERE opcnamespace = o_nsp
+        ), 'échec assertion #23-7' ;
+    ASSERT o_role IN (
+        SELECT opfowner FROM pg_opfamily
+            WHERE opfnamespace = o_nsp
+                AND opfname = 'trans=opf'
+        ), 'échec assertion #23-8' ;
 
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     
-    DROP ROLE "g_asgard_REC" ;
+    DROP ROLE """g_asgard_REC""" ;
     DROP ROLE "g_asgard REC*" ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -10508,7 +10771,7 @@ EXCEPTION WHEN OTHERS THEN
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t056b() IS 'ASGARD recette. TEST : synchronisation des propriétaires des objets sans ACL.' ;
 
@@ -16568,4 +16831,1964 @@ $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t089b() IS 'ASGARD recette. TEST : Prise en charge des commandes sur tous les types de routines.' ;
 
+
+-- FUNCTION: z_asgard_recette.t090()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t090()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.4' ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #1' ;
+    
+    ALTER EXTENSION asgard UPDATE ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #2' ;
+        
+    SET ROLE g_admin ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #3' ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t090() IS 'ASGARD recette. TEST : Préservation du référencement des schémas lors des montées de version.' ;
+
+
+-- FUNCTION: z_asgard_recette.t090b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t090b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    DROP EXTENSION asgard ;
+    CREATE EXTENSION asgard VERSION '1.2.4' ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION g_admin ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #1' ;
+    
+    ALTER EXTENSION asgard UPDATE ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #2' ;
+
+    SET ROLE g_admin ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE creation),
+        'échec assertion #3' ;
+
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$;
+
+COMMENT ON FUNCTION z_asgard_recette.t090b() IS 'ASGARD recette. TEST : Préservation du référencement des schémas lors des montées de version.' ;
+
+
+-- FUNCTION: z_asgard_recette.t091()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t091()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   table_oid oid ;
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE """Producteur A""" ;
+    CREATE SCHEMA "Ma ""Bibliothèque""" AUTHORIZATION """Producteur A""" ;
+    
+    table_oid := '"Ma ""Bibliothèque"""'::regnamespace::oid ;
+    
+    ASSERT 'Ma "Bibliothèque"' IN (
+        SELECT nom_schema
+            FROM z_asgard.gestion_schema_usr
+            WHERE producteur = '"Producteur A"'
+        ), 'échec assertion #1' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = '"Producteur B"',
+            editeur = '"Editeur"',
+            lecteur = '"Lecteur"'
+        WHERE nom_schema = 'Ma "Bibliothèque"' ;
+
+    CREATE TABLE "Ma ""Bibliothèque""".table_test () ;
+    
+    ASSERT z_asgard.asgard_is_relation_owner('Ma "Bibliothèque"', 'table_test',
+        '"Producteur B"'), 'échec assertion #2' ;
+    ASSERT has_table_privilege('"Editeur"', '"Ma ""Bibliothèque""".table_test'::regclass,
+        'INSERT'), 'échec assertion #3' ;
+    ASSERT has_table_privilege('"Lecteur"', '"Ma ""Bibliothèque""".table_test'::regclass,
+        'SELECT'), 'échec assertion #4' ;
+
+    ALTER SCHEMA "Ma ""Bibliothèque""" OWNER TO """Producteur A""" ;
+    
+    ASSERT z_asgard.asgard_is_relation_owner('Ma "Bibliothèque"', 'table_test',
+        '"Producteur A"'), 'échec assertion #5' ;
+
+    ASSERT 'Ma "Bibliothèque"' IN (
+        SELECT nom_schema
+            FROM z_asgard.gestion_schema_usr
+            WHERE producteur = '"Producteur A"'
+        ), 'échec assertion #6' ;
+
+    ALTER SCHEMA "Ma ""Bibliothèque""" RENAME TO "C'est MA ""Bibliothèque""" ;
+    
+    ASSERT 'C''est MA "Bibliothèque"' IN (
+        SELECT nom_schema
+            FROM z_asgard.gestion_schema_usr
+            WHERE producteur = '"Producteur A"'
+        ), 'échec assertion #7' ;
+
+    ASSERT table_oid = '"C''est MA ""Bibliothèque"""'::regnamespace::oid,
+        'échec assertion #8' ;
+
+    DROP SCHEMA "C'est MA ""Bibliothèque""" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE """Producteur A""" ;
+    DROP ROLE """Producteur B""" ;
+    DROP ROLE """Editeur""" ;
+    DROP ROLE """Lecteur""" ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t091() IS 'ASGARD recette. TEST : Guillemets dans les identifiants de schémas et rôles.' ;
+
+
+-- FUNCTION: z_asgard_recette.t092()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t092()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE SCHEMA c_librairie ;
+
+    CREATE TYPE c_bibliotheque.intervalle AS (d int, f int) ;
+    
+    CREATE FUNCTION c_bibliotheque.cherche_intervalle_sfunc(c_bibliotheque.intervalle, int)
+        RETURNS c_bibliotheque.intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    CREATE FUNCTION c_librairie.cherche_intervalle_sfunc(c_bibliotheque.intervalle, int)
+        RETURNS c_bibliotheque.intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    -- arguments différents
+    CREATE FUNCTION c_librairie.cherche_intervalle_sfunc_bis(c_bibliotheque.intervalle, int, int)
+        RETURNS c_bibliotheque.intervalle
+        AS $$ SELECT LEAST($1.d, $2, $3), GREATEST($1.f, $2, $3) $$
+        LANGUAGE SQL ;
+
+    CREATE SEQUENCE c_bibliotheque.compteur ;
+    CREATE SEQUENCE c_librairie.compteur ;
+    -- séquence témoin : ne sera pas déplacée, donc ne devrait pas
+    -- empêcher le déplacement de la table
+
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE c_bibliotheque.journal_du_mur (
+            idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            ids serial,
+            id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+        EXECUTE 'CREATE TABLE c_librairie.journal_du_mur_bis (
+            idi int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            ids serial,
+            id int DEFAULT nextval(''c_bibliotheque.compteur''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+    ELSE
+        CREATE TABLE c_bibliotheque.journal_du_mur (
+            ids serial PRIMARY KEY,
+            id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+        CREATE TABLE c_librairie.journal_du_mur_bis (
+            ids serial PRIMARY KEY,
+            id int DEFAULT nextval('c_bibliotheque.compteur'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+    END IF ;
+
+    CREATE INDEX journal_du_mur_auteur_idx ON c_bibliotheque.journal_du_mur
+        USING btree (auteur) ;
+    CREATE INDEX journal_du_mur_auteur_idx ON c_librairie.journal_du_mur_bis
+        USING btree (auteur) ;
+
+    -- fonction
+    BEGIN
+        -- avec espaces et diminutifs dans la liste des types
+        -- d'arguments de la fonction, ce qui est supposé passer
+        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+            'cherche_intervalle_sfunc(c_bibliotheque.intervalle, int)',
+            'function', 'c_librairie') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        RAISE NOTICE '%', e_mssg ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 1-b' ;
+    END ;
+    
+    ALTER FUNCTION c_bibliotheque.cherche_intervalle_sfunc(c_bibliotheque.intervalle, int)
+        RENAME TO cherche_intervalle_sfunc_bis ;
+    PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+        'cherche_intervalle_sfunc_bis(c_bibliotheque.intervalle, int)',
+        'function', 'c_librairie') ;
+    
+    -- index libre
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+            'journal_du_mur', 'table', 'c_librairie') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO10[.].*journal_du_mur_auteur_idx', 'échec assertion 2-b' ;
+    END ;
+    
+    ALTER INDEX c_librairie.journal_du_mur_auteur_idx
+        RENAME TO journal_du_mur_auteur_bis_idx ;
+    
+    -- index de contrainte
+    ALTER INDEX c_librairie.journal_du_mur_bis_pkey
+        RENAME TO journal_du_mur_pkey ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+            'journal_du_mur', 'table', 'c_librairie') ;
+        ASSERT False, 'échec assertion 3-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO9[.].*journal_du_mur_pkey', 'échec assertion 3-b' ;
+    END ;
+    
+    ALTER INDEX c_librairie.journal_du_mur_pkey
+        RENAME TO journal_du_mur_bis_pkey ;
+    
+    -- séquence serial
+    ALTER INDEX c_librairie.journal_du_mur_bis_ids_seq
+        RENAME TO journal_du_mur_ids_seq ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+            'journal_du_mur', 'table', 'c_librairie') ;
+        ASSERT False, 'échec assertion 4-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO11[.].*journal_du_mur_ids_seq', 'échec assertion 4-b' ;
+    END ;
+    
+    ALTER INDEX c_librairie.journal_du_mur_ids_seq
+        RENAME TO journal_du_mur_bis_ids_seq ;
+    
+    -- séquence identity
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ALTER INDEX c_librairie.journal_du_mur_bis_idi_seq
+            RENAME TO journal_du_mur_idi_seq ;
+        
+        BEGIN
+            PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+                'journal_du_mur', 'table', 'c_librairie') ;
+            ASSERT False, 'échec assertion 5-a' ;
+        EXCEPTION WHEN OTHERS THEN 
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+            ASSERT e_mssg ~ '^FDO11[.].*journal_du_mur_idi_seq', 'échec assertion 5-b' ;
+        END ;
+
+        ALTER INDEX c_librairie.journal_du_mur_idi_seq
+            RENAME TO journal_du_mur_bis_idi_seq ;
+    END IF ;
+    
+    -- table
+    ALTER TABLE c_librairie.journal_du_mur_bis
+        RENAME TO journal_du_mur ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+            'journal_du_mur', 'table', 'c_librairie') ;
+        ASSERT False, 'échec assertion 6-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 6-b' ;
+    END ;
+    
+    ALTER TABLE c_librairie.journal_du_mur
+        RENAME TO journal_du_mur_bis ;
+    
+    PERFORM z_asgard.asgard_deplace_obj('c_bibliotheque', 
+        'journal_du_mur', 'table', 'c_librairie') ;
+    
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'journal_du_mur'
+        AND relnamespace = 'c_librairie'::regnamespace),
+        'échec assertion 7-a' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'journal_du_mur'
+        AND relnamespace = 'c_librairie'::regnamespace),
+        'échec assertion 7-b' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'journal_du_mur_auteur_idx'
+        AND relnamespace = 'c_librairie'::regnamespace),
+        'échec assertion 7-c' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT EXISTS (SELECT relname FROM pg_class
+            WHERE relname = 'journal_du_mur_idi_seq'
+            AND relnamespace = 'c_librairie'::regnamespace),
+            'échec assertion 7-d' ;
+    END IF ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'journal_du_mur_ids_seq'
+        AND relnamespace = 'c_librairie'::regnamespace),
+        'échec assertion 7-e' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'journal_du_mur_pkey'
+        AND relnamespace = 'c_librairie'::regnamespace),
+        'échec assertion 7-f' ;
+    
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA c_librairie CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t092() IS 'ASGARD recette. TEST : (asgard_deplace_obj) Quand l''objet existe déjà dans le schéma cible.' ;
+
+
+-- FUNCTION: z_asgard_recette.t092b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t092b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE SCHEMA "c_LIB $rairie" ;
+
+    CREATE TYPE "c_Bibliothèque".intervalle AS (d int, f int) ;
+    
+    CREATE FUNCTION "c_Bibliothèque"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    CREATE FUNCTION "c_LIB $rairie"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2), GREATEST($1.f, $2) $$
+        LANGUAGE SQL ;
+    -- arguments différents
+    CREATE FUNCTION "c_LIB $rairie"."CHERCHE intervalle_sfunc B!S"("c_Bibliothèque".intervalle, int, int)
+        RETURNS "c_Bibliothèque".intervalle
+        AS $$ SELECT LEAST($1.d, $2, $3), GREATEST($1.f, $2, $3) $$
+        LANGUAGE SQL ;
+
+    CREATE SEQUENCE "c_Bibliothèque"."""compteur""" ;
+    CREATE SEQUENCE "c_LIB $rairie"."""compteur""" ;
+    -- séquence témoin : ne sera pas déplacée, donc ne devrait pas
+    -- empêcher le déplacement de la table
+
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        EXECUTE 'CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
+            "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            "ID$" serial,
+            id int DEFAULT nextval(''"c_Bibliothèque"."""compteur"""''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+        EXECUTE 'CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
+            "IDI" int PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+            "ID$" serial,
+            id int DEFAULT nextval(''"c_Bibliothèque"."""compteur"""''::regclass),
+            jour date, entree text, auteur text
+            )' ;
+    ELSE
+        CREATE TABLE "c_Bibliothèque"."JournalDuMur" (
+            "ID$" serial PRIMARY KEY,
+            id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+        CREATE TABLE "c_LIB $rairie"."JournalDuMur B!s" (
+            "ID$" serial PRIMARY KEY,
+            id int DEFAULT nextval('"c_Bibliothèque"."""compteur"""'::regclass),
+            jour date, entree text, auteur text
+            ) ;
+    END IF ;
+
+    CREATE INDEX "JournalDuMur_auteur_idx" ON "c_Bibliothèque"."JournalDuMur"
+        USING btree (auteur) ;
+    CREATE INDEX "JournalDuMur_auteur_idx" ON "c_LIB $rairie"."JournalDuMur B!s"
+        USING btree (auteur) ;
+
+    -- fonction
+    BEGIN
+        -- avec espaces et diminutifs dans la liste des types
+        -- d'arguments de la fonction, ce qui est supposé passer
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            '"CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)',
+            'function', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        RAISE NOTICE '%', e_mssg ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 1-b' ;
+    END ;
+    
+    ALTER FUNCTION "c_Bibliothèque"."CHERCHE intervalle_sfunc"("c_Bibliothèque".intervalle, int)
+        RENAME TO "CHERCHE intervalle_sfunc B!S" ;
+    PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+        '"CHERCHE intervalle_sfunc B!S"("c_Bibliothèque".intervalle, int)',
+        'function', 'c_LIB $rairie') ;
+    
+    -- index libre
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO10[.].*JournalDuMur_auteur_idx', 'échec assertion 2-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_auteur_idx"
+        RENAME TO "JournalDuMur_auteur_bis_idx" ;
+    
+    -- index de contrainte
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_pkey"
+        RENAME TO "JournalDuMur_pkey" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 3-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO9[.].*JournalDuMur_pkey', 'échec assertion 3-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_pkey"
+        RENAME TO "JournalDuMur B!s_pkey" ;
+    
+    -- séquence serial
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_ID$_seq"
+        RENAME TO "JournalDuMur_ID$_seq" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 4-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_ID[$]_seq', 'échec assertion 4-b' ;
+    END ;
+    
+    ALTER INDEX "c_LIB $rairie"."JournalDuMur_ID$_seq"
+        RENAME TO "JournalDuMur B!s_ID$_seq" ;
+    
+    -- séquence identity
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ALTER INDEX "c_LIB $rairie"."JournalDuMur B!s_IDI_seq"
+            RENAME TO "JournalDuMur_IDI_seq" ;
+        
+        BEGIN
+            PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+                'JournalDuMur', 'table', 'c_LIB $rairie') ;
+            ASSERT False, 'échec assertion 5-a' ;
+        EXCEPTION WHEN OTHERS THEN 
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+            ASSERT e_mssg ~ '^FDO11[.].*JournalDuMur_IDI_seq', 'échec assertion 5-b' ;
+        END ;
+
+        ALTER INDEX "c_LIB $rairie"."JournalDuMur_IDI_seq"
+            RENAME TO "JournalDuMur B!s_IDI_seq" ;
+    END IF ;
+    
+    -- table
+    ALTER TABLE "c_LIB $rairie"."JournalDuMur B!s"
+        RENAME TO "JournalDuMur" ;
+    
+    BEGIN
+        PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+            'JournalDuMur', 'table', 'c_LIB $rairie') ;
+        ASSERT False, 'échec assertion 6-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^FDO8[.]', 'échec assertion 6-b' ;
+    END ;
+    
+    ALTER TABLE "c_LIB $rairie"."JournalDuMur"
+        RENAME TO "JournalDuMur B!s" ;
+    
+    PERFORM z_asgard.asgard_deplace_obj('c_Bibliothèque', 
+        'JournalDuMur', 'table', 'c_LIB $rairie') ;
+    
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-a' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-b' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_auteur_idx'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-c' ;
+    IF current_setting('server_version_num')::int >= 100000
+    THEN
+        ASSERT EXISTS (SELECT relname FROM pg_class
+            WHERE relname = 'JournalDuMur_IDI_seq'
+            AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+            'échec assertion 7-d' ;
+    END IF ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_ID$_seq'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-e' ;
+    ASSERT EXISTS (SELECT relname FROM pg_class
+        WHERE relname = 'JournalDuMur_pkey'
+        AND relnamespace = '"c_LIB $rairie"'::regnamespace),
+        'échec assertion 7-f' ;
+    
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_LIB $rairie" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t092b() IS 'ASGARD recette. TEST : (asgard_deplace_obj) Quand l''objet existe déjà dans le schéma cible.' ;
+
+
+-- FUNCTION: z_asgard_recette.t093()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t093()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_owner ;
+    CREATE SCHEMA e_blabla AUTHORIZATION g_asgard_owner ;
+    CREATE TABLE e_blabla.some_table () ;
+    ASSERT (SELECT creation FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'e_blabla'),
+        'échec assertion 1' ;
+
+    DROP OWNED BY g_asgard_owner CASCADE ;
+    ASSERT NOT (SELECT creation FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'e_blabla'),
+        'échec assertion 2' ; 
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_owner ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t093() IS 'ASGARD recette. TEST : Répercution des commandes DROP OWNED sur la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t094()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t094()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_admin_delegue ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_connexion ;
+    GRANT g_asgard_admin_delegue TO g_asgard_connexion ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO %I', current_database(), 'g_asgard_admin_delegue') ;
+
+    -- tentative de création de schéma via la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE g_asgard_producteur ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_librairie', True, 'g_asgard_producteur') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    -- tentative d'ajout d'un schéma inactif dans la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE g_asgard_producteur ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_librairie', False, 'g_asgard_producteur') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 2-b' ;
+    END ;
+
+    ------ Manipulations par un rôle habilité à créer des schémas ------
+    SET ROLE g_asgard_connexion ;
+
+    -- création d'un schéma par un rôle qui en a le droit
+    -- - commande directe :
+    CREATE SCHEMA x_secret AUTHORIZATION g_asgard_admin_delegue ;
+    -- - via la table de gestion :
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_librairy', True, 'g_asgard_admin_delegue') ;
+    -- modification par commande directe :
+    ALTER SCHEMA c_librairy RENAME TO c_librairie ;
+    -- modification par la table de gestion :
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma jolie librairie'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT FOUND, 'échec assertion 3' ;
+    -- suppression :
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT FOUND, 'échec assertion 4' ;
+
+    ------ Manipulations par un rôle non habilité ------
+    SET ROLE g_asgard_producteur ;
+
+    -- vérification qu'un rôle ne voit pas les schémas dont
+    -- il n'est pas producteur dans gestion_schema_usr
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'x_secret') = 0, 'échec assertion 5' ;
+
+    -- ... et ça ne fait évidemment rien quand il tente de modifier
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'blabla'
+        WHERE nom_schema = 'x_secret' ;
+    ASSERT NOT FOUND, 'échec assertion 6' ;
+
+    -- ... mais dans gestion_schema_read_only, il voit le schéma
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only
+        WHERE nom_schema = 'x_secret') = 1, 'échec assertion 7' ;
+    
+    ------ Manipulations par le producteur du schéma ------
+    -- via la table de gestion
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma grande bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT FOUND, 'échec assertion 8' ;
+
+    -- pas de test de modification du schéma par
+    -- commande directe ou indirecte - les ALTER SCHEMA requièrent
+    -- le privilège CREATE sur la base    
+
+    -- création d'un objet dans le schéma
+    CREATE TABLE c_bibliotheque.journal_du_mur (jour date PRIMARY KEY, entree text) ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA x_secret ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), 'g_asgard_admin_delegue') ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_connexion ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t094() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
+
+-- FUNCTION: z_asgard_recette.t094b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t094b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_ADMIN_délégué" ;
+    CREATE ROLE "g_asgard_PROducteur" ;
+    CREATE ROLE "g_asgard.connexion" ;
+    GRANT "g_asgard_ADMIN_délégué" TO "g_asgard.connexion" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_PROducteur" ;
+
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO %I', current_database(), 'g_asgard_ADMIN_délégué') ;
+
+    -- tentative de création de schéma via la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE "g_asgard_PROducteur" ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_"Librairie"', True, 'g_asgard_PROducteur') ;
+        ASSERT False, 'échec assertion 1-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    -- tentative d'ajout d'un schéma inactif dans la table de gestion
+    -- par un rôle qui n'est pas habilité à créer des schémas
+    BEGIN
+        SET ROLE "g_asgard_PROducteur" ;
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+            VALUES ('c_"Librairie"', False, 'g_asgard_PROducteur') ;
+        ASSERT False, 'échec assertion 2-a' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 2-b' ;
+    END ;
+
+    ------ Manipulations par un rôle habilité à créer des schémas ------
+    SET ROLE "g_asgard.connexion" ;
+
+    -- création d'un schéma par un rôle qui en a le droit
+    -- - commande directe :
+    CREATE SCHEMA "X=secret" AUTHORIZATION "g_asgard_ADMIN_délégué" ;
+    -- - via la table de gestion :
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_$Librairy$', True, 'g_asgard_ADMIN_délégué') ;
+    -- modification par commande directe :
+    ALTER SCHEMA "c_$Librairy$" RENAME TO "c_""Librairie""" ;
+    -- modification par la table de gestion :
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma jolie librairie'
+        WHERE nom_schema = 'c_"Librairie"' ;
+    ASSERT FOUND, 'échec assertion 3' ;
+    -- suppression :
+    DROP SCHEMA "c_""Librairie""" ;
+    DELETE FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'c_"Librairie"' ;
+    ASSERT FOUND, 'échec assertion 4' ;
+
+    ------ Manipulations par un rôle non habilité ------
+    SET ROLE "g_asgard_PROducteur" ;
+
+    -- vérification qu'un rôle ne voit pas les schémas dont
+    -- il n'est pas producteur dans gestion_schema_usr
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
+        WHERE nom_schema = 'X=secret') = 0, 'échec assertion 5' ;
+
+    -- ... et ça ne fait évidemment rien quand il tente de modifier
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'blabla'
+        WHERE nom_schema = 'X=secret' ;
+    ASSERT NOT FOUND, 'échec assertion 6' ;
+
+    -- ... mais dans gestion_schema_read_only, il voit le schéma
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only
+        WHERE nom_schema = 'X=secret') = 1, 'échec assertion 7' ;
+    
+    ------ Manipulations par le producteur du schéma ------
+    -- via la table de gestion
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Ma grande bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT FOUND, 'échec assertion 8' ;
+
+    -- pas de test de modification du schéma par
+    -- commande directe ou indirecte - les ALTER SCHEMA requièrent
+    -- le privilège CREATE sur la base    
+
+    -- création d'un objet dans le schéma
+    CREATE TABLE "c_Bibliothèque"."journal du mur" (jour date PRIMARY KEY, entree text) ;
+
+    RESET ROLE ;
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "X=secret" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), 'g_asgard_ADMIN_délégué') ;
+    DROP ROLE "g_asgard_ADMIN_délégué" ;
+    DROP ROLE "g_asgard_PROducteur" ;
+    DROP ROLE "g_asgard.connexion" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t094b() IS 'ASGARD recette. TEST : Capacité d''action des producteurs et administrateurs délégués.' ;
+
+
+-- FUNCTION: z_asgard_recette.t095()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t095()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE mister_asgard_x ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Bibliothèque' ;
+
+    SET ROLE mister_asgard_x ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only) = 1,
+        'échec assertion 1' ;
+    ASSERT (
+        SELECT niv1 FROM z_asgard.gestion_schema_read_only
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'Bibliothèque',
+        'échec assertion 2' ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr) = 0,
+        'échec assertion 3' ;
+    
+    UPDATE z_asgard.gestion_schema_usr
+        SET niv1 = 'Archives' ;
+    ASSERT (
+        SELECT niv1 FROM z_asgard.gestion_schema_read_only
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'Bibliothèque',
+        'échec assertion 4' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_read_only) = 1,
+        'échec assertion 5' ;
+    
+    BEGIN
+        INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation)
+            VALUES ('c_librairie', False) ;
+        ASSERT False, 'échec assertion 6' ;
+    EXCEPTION WHEN OTHERS THEN 
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        ASSERT e_mssg ~ '^TB1[.]', 'échec assertion 1-b' ;
+    END ;
+
+    RESET ROLE ;
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE mister_asgard_x ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t095() IS 'ASGARD recette. TEST : Un utilisateur lambda ne peut rien faire avec la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t096()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t096()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ) = 'c', 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t096() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma avec préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t096b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t096b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ) = 'c', 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t096b() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma avec préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t097()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t097()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'bibliotheque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'bibliotheque' ;
+
+    DROP SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA bibliotheque ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ) IS NULL, 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'bibliotheque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t097() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma sans préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t097b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t097b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 1-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 1-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) = 'd', 'échec assertion 2-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 2-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 3-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 3-b' ;
+    
+    UPDATE z_asgard.gestion_schema_usr SET creation = True WHERE nom_schema = 'Bibliothèque' ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 4-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'Bibliothèque' ;
+
+    DROP SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 5-a' ;
+    ASSERT NOT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 5-b' ;
+
+    CREATE SCHEMA "Bibliothèque" ;
+    ASSERT (
+        SELECT bloc FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ) IS NULL, 'échec assertion 6-a' ;
+    ASSERT (
+        SELECT creation FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'Bibliothèque'
+        ), 'échec assertion 6-b' ;
+
+    DROP SCHEMA "Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t097b() IS 'ASGARD recette. TEST : Un schéma mis à la corbeille et supprimé n''est pas recréé dans la corbeille (schéma sans préfixe).' ;
+
+
+-- FUNCTION: z_asgard_recette.t098()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t098()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_producteur ;
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_bibliotheque' ;
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_producteur ;
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RESET ROLE ;
+    DROP ROLE g_asgard_producteur ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t098() IS 'ASGARD recette. TEST : Un producteur peut mettre à la corbeille et supprimer son schéma.' ;
+
+
+-- FUNCTION: z_asgard_recette.t098b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t098b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g ASGARD producteur" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g ASGARD producteur" ;
+
+    SET ROLE "g ASGARD producteur" ;
+    UPDATE z_asgard.gestion_schema_usr SET bloc = 'd' WHERE nom_schema = 'c_Bibliothèque' ;
+    UPDATE z_asgard.gestion_schema_usr SET creation = False WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g ASGARD producteur" ;
+
+    SET ROLE "g ASGARD producteur" ;
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RESET ROLE ;
+    DROP ROLE "g ASGARD producteur" ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t098b() IS 'ASGARD recette. TEST : Un producteur peut mettre à la corbeille et supprimer son schéma.' ;
+
+
+-- FUNCTION: z_asgard_recette.t099()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t099()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_ghost ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_bibliotheque', true, 'g_asgard_producteur') ;
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_librairie', true, 'g_asgard_producteur') ;
+
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-a' ;
+    ASSERT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+
+    SET ROLE g_asgard_producteur ;
+    DROP SCHEMA c_librairie ;
+
+    SET ROLE g_asgard_ghost ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    SET ROLE g_asgard_producteur ;
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-a' ;
+    ASSERT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT NOT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 3' ;
+    
+    SET ROLE g_admin ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT NOT 'c_librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 4' ;
+
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_ghost ;
+    RESET ROLE ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t099() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur du schéma pour l''effacer de la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t099b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t099b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE "g_asgard producteur" ;
+    CREATE ROLE "g_asgard_GHOST" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_Bibliothèque', true, 'g_asgard producteur') ;
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c $Librairie', true, 'g_asgard producteur') ;
+
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-a' ;
+    ASSERT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 1-b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+
+    SET ROLE "g_asgard producteur" ;
+    DROP SCHEMA "c $Librairie" ;
+
+    SET ROLE "g_asgard_GHOST" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    SET ROLE "g_asgard producteur" ;
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-a' ;
+    ASSERT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 2-b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT NOT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 3' ;
+    
+    SET ROLE g_admin ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    ASSERT NOT 'c $Librairie' IN (SELECT nom_schema FROM z_asgard.gestion_schema_usr),
+        'échec assertion 4' ;
+
+    DROP ROLE "g_asgard producteur" ;
+    DROP ROLE "g_asgard_GHOST" ;
+    RESET ROLE ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t099b() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur du schéma pour l''effacer de la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t100()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t100()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_ghost ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur)
+        VALUES ('c_bibliotheque', 'g_asgard_producteur') ;
+
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 1' ;
+
+    SET ROLE g_asgard_ghost ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_librairie' ;
+    
+    SET ROLE g_asgard_producteur ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 2' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_librairie'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT NOT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-a' ;
+    ASSERT 'c_librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_consult',
+            editeur = 'n_existe_pas'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT 'g_consult' IN (
+        SELECT lecteur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_librairie'
+    ), 'échec assertion 4-a' ;
+    ASSERT 'n_existe_pas' IN (
+        SELECT editeur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_librairie'
+    ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT NOT 'c_librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 5' ;
+
+    SET ROLE g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_bibliotheque'
+        WHERE nom_schema = 'c_librairie' ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 6' ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_ghost ;
+
+    RESET ROLE ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t100() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur d''un schéma inactif pour modifier ses informations dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t100b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t100b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    SET ROLE g_admin ;
+    CREATE ROLE "g_asgard producteur" ;
+    CREATE ROLE "g_asgard_GHOST" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur)
+        VALUES ('c_Bibliothèque', 'g_asgard producteur') ;
+
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 1' ;
+
+    SET ROLE "g_asgard_GHOST" ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c $librairie' ;
+    
+    SET ROLE "g_asgard producteur" ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr WHERE not creation
+    ), 'échec assertion 2' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c $librairie'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT NOT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-a' ;
+    ASSERT 'c $librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_consult',
+            editeur = 'N''existe pas'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT 'g_consult' IN (
+        SELECT lecteur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c $librairie'
+    ), 'échec assertion 4-a' ;
+    ASSERT 'N''existe pas' IN (
+        SELECT editeur FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c $librairie'
+    ), 'échec assertion 4-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT NOT 'c $librairie' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 5' ;
+
+    SET ROLE g_admin ;
+    UPDATE z_asgard.gestion_schema_usr
+        SET nom_schema = 'c_Bibliothèque'
+        WHERE nom_schema = 'c $librairie' ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 6' ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard producteur" ;
+    DROP ROLE "g_asgard_GHOST" ;
+
+    RESET ROLE ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t100b() IS 'ASGARD recette. TEST : Il faut être membre de g_admin ou du producteur d''un schéma inactif pour modifier ses informations dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t101()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t101()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_prod_edi ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_prod_edi ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'USAGE'),
+        'échec assertion 1-a' ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 1-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin',
+            editeur = 'g_asgard_prod_edi'
+        WHERE nom_schema = 'c_bibliotheque' ;
+    ASSERT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'USAGE'),
+        'échec assertion 2-a' ;
+    ASSERT NOT has_schema_privilege('g_asgard_prod_edi', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 2-b' ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion 3' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_prod_edi ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t101() IS 'ASGARD recette. TEST : Quand un producteur devient éditeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t101b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t101b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_PROD#edi" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_PROD#edi" ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion 1-a' ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 1-b' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_admin',
+            editeur = 'g_asgard_PROD#edi'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+    ASSERT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'USAGE'),
+        'échec assertion 2-a' ;
+    ASSERT NOT has_schema_privilege('g_asgard_PROD#edi', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 2-b' ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.asgard_diagnostic()) = 0,
+        'échec assertion 3' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_PROD#edi" ;
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t101b() IS 'ASGARD recette. TEST : Quand un producteur devient éditeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t102()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t102()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_delegue ;
+    CREATE ROLE g_asgard_other ;
+    GRANT g_asgard_other TO g_asgard_delegue ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO g_asgard_delegue',
+        current_database()
+    ) ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_delegue ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('c_bibliotheque') ;
+    ASSERT NOT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 1' ;
+
+    CREATE TABLE c_bibliotheque.journal_du_mur (jour date PRIMARY KEY, entree text) ;
+    ALTER TABLE c_bibliotheque.journal_du_mur OWNER TO g_asgard_other ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_bibliotheque', 'journal_du_mur', 'g_asgard_other'
+    ), 'échec assertion 2' ;
+
+    SET ROLE g_asgard_delegue ;
+    PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3' ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_bibliotheque', 'journal_du_mur', 'g_asgard_delegue'
+    ),  'échec assertion 4' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    RESET ROLE ;
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM g_asgard_delegue',
+        current_database()
+    ) ;
+    DROP ROLE g_asgard_delegue ;
+    DROP ROLE g_asgard_other ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t102() IS 'ASGARD recette. TEST : Référencement d''un schéma par un administrateur délégué.' ;
+
+
+-- FUNCTION: z_asgard_recette.t102b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t102b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_Délégué" ;
+    CREATE ROLE "g_asgard OTHER" ;
+    GRANT "g_asgard OTHER" TO "g_asgard_Délégué" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO "g_asgard_Délégué"',
+        current_database()
+    ) ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_Délégué" ;
+    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('c_Bibliothèque') ;
+    ASSERT NOT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 1' ;
+
+    CREATE TABLE "c_Bibliothèque"."journal du mur" (jour date PRIMARY KEY, entree text) ;
+    ALTER TABLE "c_Bibliothèque"."journal du mur" OWNER TO "g_asgard OTHER" ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_Bibliothèque', 'journal du mur', 'g_asgard OTHER'
+    ), 'échec assertion 2' ;
+
+    SET ROLE "g_asgard_Délégué" ;
+    PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
+    ASSERT 'c_Bibliothèque' IN (
+        SELECT nom_schema FROM z_asgard.gestion_schema_usr
+    ), 'échec assertion 3' ;
+    ASSERT z_asgard.asgard_is_relation_owner(
+        'c_Bibliothèque', 'journal du mur', 'g_asgard_Délégué'
+    ),  'échec assertion 4' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    RESET ROLE ;
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM "g_asgard_Délégué"',
+        current_database()
+    ) ;
+    DROP ROLE "g_asgard_Délégué" ;
+    DROP ROLE "g_asgard OTHER" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t102b() IS 'ASGARD recette. TEST : Référencement d''un schéma par un administrateur délégué.' ;
 
