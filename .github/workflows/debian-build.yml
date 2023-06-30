@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v3    
       - name: Deb building
         run: |
-          DEB_FILE=$(bash ./debian/deb_build.sh $PKG_NAME ${{ inputs.asgard_version }} $DEB_REV)
+          DEB_FILE=$(bash ./debian/build.sh $PKG_NAME ${{ inputs.asgard_version }} $DEB_REV)
           echo "Paquet construit : $DEB_FILE"
       - name: Artifact upload
         uses: actions/upload-artifact@v3
