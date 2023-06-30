@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+#--------------------------------------------------------------------
+# Suppression des fichiers d'Asgard du répertoire des
+# extensions de Postgresql
+#
+# Désinstaller une version supprimera aussi les fichiers des
+# versions antérieures.
+#--------------------------------------------------------------------
+
+# Nom du paquet Debian
+PKG_NAME=#PKG_NAME#
+
+# Itération sur l'ensenmble des versions de PostgreSQL gérées
+for version in 10 11 12 13 14 15; do
+  # L'emplacement des extensions est dépendant de la version de Postgresql
+  PG_EXT_DIR=/usr/share/postgresql/$version/extension
+  if [ -d $PG_EXT_DIR ]; then
+    rm -f $PG_EXT_DIR/$PKG_NAME.control
+    rm -f $PG_EXT_DIR/$PKG_NAME--*.sql
+  fi
+done

@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+#--------------------------------------------------------------------
+# Installation des fichiers d'Asgard dans le répertoire des
+# extensions de PostgreSQL
+#--------------------------------------------------------------------
+
+# Nom du paquet Debian
+PKG_NAME=#PKG_NAME#
+# Numéro de version Asgard
+PKG_VERSION=#PKG_VERSION#
+
+# Itération sur l'ensenmble des versions de PostgreSQL gérées
+for version in 10 11 12 13 14 15; do
+  # L'emplacement des extensions est dépendant de la version de PostgreSQL
+  PG_EXT_DIR=/usr/share/postgresql/$version/extension
+  if [ -d $PG_EXT_DIR ]; then
+    ln -sf  /usr/share/$PKG_NAME/$PKG_VERSION/$PKG_NAME.control $PG_EXT_DIR
+    ln -sf  /usr/share/$PKG_NAME/$PKG_VERSION/$PKG_NAME--*.sql $PG_EXT_DIR
+  fi
+done

@@ -1,0 +1,12 @@
+asgard (1.4.0) stable; urgency=high
+
+  * Suppression de contraintes qui rendaient nécessaires des actions de l'administrateur pour permettre à des rôles d'exécuter certaines actions sans apporter de bénéfice fonctionnel.
+
+  * Finalisation de la prise en charge de tous les objets de PostgreSQL 9.5 à 15 (objet statistique étendu, classe d'opérateurs, famille d’opérateurs).
+
+  * Les rôles membres du producteur d'un schéma inactif peuvent désormais effacer ce dernier de la table de gestion d'Asgard, à l'instar du rôle producteur lui-même.
+
+  * Correction d'anomalies et améliorations mineures.
+  Pour plus de détails : https://snum.scenari-community.org/Asgard/Documentation/co/SEC_1-4.html
+
+ -- Leslie Lemaire (MTECT-MTE-SEMer/SG/DNUM/UNI/DRC) <drc.uni.dnum.sg@developpement-durable.gouv.fr>  Thu, 29 Jun 2023 15:00:00 +0200

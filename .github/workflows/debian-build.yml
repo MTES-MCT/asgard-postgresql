@@ -1,0 +1,28 @@
+name: Asgard Debian packaging
+run-name: Construction d'un paquet pour Asgard v${{ inputs.asgard_version }} par @${{ github.actor }}
+on:
+  workflow_dispatch:
+    inputs:
+      asgard_version:
+        description: Numéro de version d'Asgard (ex 1.4.0)
+        required: true
+        type: string
+env:
+  PKG_NAME: asgard
+  DEB_REV: 0
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v3    
+      - name: Deb building
+        run: |
+          DEB_FILE=$(bash ./debian/deb_build.sh $PKG_NAME ${{ inputs.asgard_version }} $DEB_REV)
+          echo "Paquet construit : $DEB_FILE"
+      - name: Artifact upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: asgard-deb
+          path: *.deb
