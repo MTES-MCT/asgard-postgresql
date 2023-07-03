@@ -17,7 +17,7 @@ Documentation de la suite ASGARD (extension PostgreSQL ASGARD et plugins QGIS As
 
 ## Licence
 
-L'extension PostgreSQL ASGARD est un logiciel libre publié sous licence CeCILL-B.
+L'extension PostgreSQL ASGARD est un logiciel libre publié sous licence [CeCILL-B](https://spdx.org/licenses/CECILL-B.html).
 
 Cf. [LICENCE.txt](https://github.com/MTES-MCT/asgard-postgresql/blob/master/LICENCE.txt).
 
@@ -25,7 +25,7 @@ La documentation de la suite ASGARD, incluant ses illustrations (répertoire `do
 
 ## Crédits
 
-© République Française, 2020-2022.
+© République Française, 2020-2023.
 
 ### Éditeur
 
@@ -33,9 +33,9 @@ Direction du numérique du Ministère de la transition écologique et de la coh�
 
 ### Contributeurs
 
-Leslie Lemaire (SNUM/UNI/DRC) et Alain Ferraton (SNUM/MSP/DS/GSG).
+Leslie Lemaire (DNUM/UNI/DRC) et Alain Ferraton (DNUM/MSP/DS/GSG).
 
 ## Contact
 
-Via les [issues du dépôt GitHub](https://github.com/MTES-MCT/asgard-postgresql/issues) ou par mél à drc.uni.snum.sg@developpement-durable.gouv.fr.
+Via les [issues du dépôt GitHub](https://github.com/MTES-MCT/asgard-postgresql/issues) ou par mél à drc.uni.dnum.sg@developpement-durable.gouv.fr.
 
