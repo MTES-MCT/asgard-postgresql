@@ -42,9 +42,10 @@ cp $PROJECT_DIR/README.md $DEB_DOC_DIR
 gzip -n --best $DEB_DOC_DIR/README.md
 
 # Les fichiers Postgresql
+# y compris les scripts de mise à jour des versions antérieures
 DEB_LIB=$DEB_FULLNAME/usr/share/$PKG_NAME/$PKG_VERSION
 mkdir -p $DEB_LIB
-cp $PROJECT_DIR/asgard--*.sql $PROJECT_DIR/asgard.control $DEB_LIB
+cp -f $PROJECT_DIR/archives/asgard--*--*.sql $PROJECT_DIR/asgard--*.sql $PROJECT_DIR/asgard.control $DEB_LIB
 
 # Ajustement des permissions
 find $DEB_FULLNAME -type f -exec chmod 644 {} \;
