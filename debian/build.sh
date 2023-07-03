@@ -26,11 +26,12 @@ DEB_FULLNAME=${PKG_NAME}_${PKG_VERSION}-${DEB_REV}_${DEB_ARCH}
 # Dossier de base et DEBIAN
 mkdir $DEB_FULLNAME
 cp -a $PROJECT_DIR/debian/DEBIAN $DEB_FULLNAME
-# Mise à jour de la version et du nom du paquet dans les fichiers control et postinst
+# Mise à jour de la version et du nom du paquet dans les fichiers control, postinst et postrm
 sed -i s/#PKG_VERSION#/$PKG_VERSION/ $DEB_FULLNAME/DEBIAN/control
 sed -i s/#PKG_VERSION#/$PKG_VERSION/ $DEB_FULLNAME/DEBIAN/postinst
 sed -i s/#PKG_NAME#/$PKG_NAME/ $DEB_FULLNAME/DEBIAN/control
 sed -i s/#PKG_NAME#/$PKG_NAME/ $DEB_FULLNAME/DEBIAN/postinst
+sed -i s/#PKG_NAME#/$PKG_NAME/ $DEB_FULLNAME/DEBIAN/postrm
   
 # La documentation
 DEB_DOC_DIR=$DEB_FULLNAME/usr/share/doc/$PKG_NAME
