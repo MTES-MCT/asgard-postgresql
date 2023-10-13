@@ -5,11 +5,13 @@ ASGARD. Système de gestion des droits pour PostgreSQL.
 
 ASGARD est une extension du système de gestion de bases de données PostgreSQL. Elle propose un cadre méthodologique et des outils pour faciliter la gestion des droits sur les bases PostgreSQL.
 
-ASGARD a été conçue et développée dans le cadre du groupe de travail PostGIS réunissant des services du pôle ministériel de la transition écologique, de la cohésion des territoires et de la mer, ainsi que du ministère de l'agriculture et de l'alimentation.
+ASGARD a été conçue et développée dans le cadre du groupe de travail PostGIS réunissant des services du pôle ministériel de la transition écologique, de la cohésion des territoires, de la transition énergétique et de la mer, ainsi que du ministère de l'agriculture et de l'alimentation.
 
 ## Compatibilité
 
-PostgreSQL 9.5 et PostgreSQL 10 ou supérieur. Toutes les versions d'ASGARD sont testées sur les versions de PostgreSQL officiellement supportées au moment de leur déploiement, ainsi que la version 9.5. La version 1.4.0 d'ASGARD est par exemple la première dont la compatibilité avec PostgreSQL 15 a été évaluée.
+PostgreSQL 9.5 et PostgreSQL 10 à 15. Toutes les versions d'ASGARD sont testées sur les versions de PostgreSQL officiellement supportées au moment de leur déploiement, ainsi que les versions 9.5 et 10. La version 1.4.0 d'ASGARD est par exemple la première dont la compatibilité avec PostgreSQL 15 a été évaluée. La prise en charge de PostgreSQL 9.5 et 10 est susceptible d'être abandonnée à brève échéance.
+
+Asgard n'est actuellement pas compatible avec PostgreSQL 16 - cf. [issue #12](https://github.com/MTES-MCT/asgard-postgresql/issues/12).
 
 ## Installation et utilisation
 
