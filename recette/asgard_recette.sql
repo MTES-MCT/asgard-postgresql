@@ -12422,7 +12422,6 @@ BEGIN
     ALTER ROLE g_admin_ext_temp RENAME TO g_admin_ext ;
     ALTER ROLE g_consult_temp RENAME TO g_consult ;
     ALTER ROLE "consult.defaut_temp" RENAME TO "consult.defaut" ;
-    ALTER ROLE "consult.defaut" PASSWORD 'consult.defaut' ;
     
     CREATE EXTENSION asgard ;
 
@@ -18792,3 +18791,2102 @@ $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t102b() IS 'ASGARD recette. TEST : Référencement d''un schéma par un administrateur délégué.' ;
 
+
+-- FUNCTION: z_asgard_recette.t103()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t103()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_archiviste ;
+    CREATE ROLE g_asgard_assistant ;
+    CREATE ROLE g_asgard_passant ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_archiviste ;
+    CREATE SCHEMA c_librairie AUTHORIZATION g_asgard_archiviste ;
+    CREATE SCHEMA c_square_public_lecteur ;
+    CREATE SCHEMA c_square_public_editeur ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur) VALUES
+        ('c_labo', False, 'g_asgard_directeur', 'g_asgard_chercheur', 'g_asgard_passant') ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET editeur = 'g_asgard_assistant',
+            lecteur = 'g_asgard_passant'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_after,
+        DISABLE TRIGGER asgard_visibilite_admin_after ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET lecteur = 'public'
+        WHERE nom_schema = 'c_square_public_lecteur' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET editeur = 'public'
+        WHERE nom_schema = 'c_square_public_editeur' ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET oid_schema = lpad('',  length(nom_schema) - 5, '6')::int,
+            oid_producteur = 666,
+            oid_editeur = 6666,
+            oid_lecteur = 66666,
+            creation = NOT creation
+        WHERE nom_schema IN ('c_bibliotheque', 'c_librairie', 'c_labo') ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET producteur = '666'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET editeur = '6666'
+        WHERE nom_schema = 'c_librairie' ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_after,
+        ENABLE TRIGGER asgard_visibilite_admin_after ;
+
+    SET ROLE g_admin ;
+    PERFORM z_asgard_admin.asgard_nettoyage_oids() ;
+    RESET ROLE ;
+
+
+    -- 1
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'c_bibliotheque'::regnamespace::oid, 'échec assertion 1a' ;
+
+    ASSERT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 1b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_assistant', 'échec assertion 1c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_assistant'::regrole::oid, 'échec assertion 1d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_passant', 'échec assertion 1e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_passant'::regrole::oid, 'échec assertion 1f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_archiviste', 'échec assertion 1g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_archiviste'::regrole::oid, 'échec assertion 1h' ;
+
+
+    -- 2
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) = 'c_librairie'::regnamespace::oid, 'échec assertion 2a' ;
+
+    ASSERT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ), 'échec assertion 2b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 2c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 2d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 2e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 2f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_archiviste', 'échec assertion 2g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_archiviste'::regrole::oid, 'échec assertion 2h' ;
+
+
+    -- 3
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) IS NULL, 'échec assertion 3a' ;
+
+    ASSERT NOT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ), 'échec assertion 3b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) = 'g_asgard_chercheur', 'échec assertion 3c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) IS NULL, 'échec assertion 3d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) = 'g_asgard_passant', 'échec assertion 3e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) IS NULL, 'échec assertion 3f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) = 'g_asgard_directeur', 'échec assertion 3g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_labo'
+    ) IS NULL, 'échec assertion 3h' ;
+
+
+    -- 4
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_square_public_lecteur'
+    ) = 'public', 'échec assertion 4a' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_square_public_lecteur'
+    ) = 0, 'échec assertion 4b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_square_public_editeur'
+    ) = 'public', 'échec assertion 4c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_square_public_editeur'
+    ) = 0, 'échec assertion 4d' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DROP SCHEMA c_librairie ;
+    DROP SCHEMA c_square_public_lecteur ;
+    DROP SCHEMA c_square_public_editeur ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_archiviste ;
+    DROP ROLE g_asgard_assistant ;
+    DROP ROLE g_asgard_passant ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t103() IS 'ASGARD recette. TEST : Correction d''incohérences dans la table de gestion avec asgard_nettoyage_oids.' ;
+
+
+-- FUNCTION: z_asgard_recette.t103b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t103b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_ARCHIVISTE" ;
+    CREATE ROLE "g_asgard assistant" ;
+    CREATE ROLE "g_asgard*passant" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_ARCHIVISTE" ;
+    CREATE SCHEMA "c Librairie" AUTHORIZATION "g_asgard_ARCHIVISTE" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur) VALUES
+        ('c_Labo???', False, 'g_asgard directeur', 'g_asgard chercheur', 'g_asgard*passant') ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET editeur = 'g_asgard assistant',
+            lecteur = 'g_asgard*passant'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_after,
+        DISABLE TRIGGER asgard_visibilite_admin_after ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET oid_schema = lpad('',  length(nom_schema) - 5, '6')::int,
+            oid_producteur = 666,
+            oid_editeur = 6666,
+            oid_lecteur = 66666,
+            creation = NOT creation
+        WHERE nom_schema IN ('c_Bibliothèque', 'c Librairie', 'c_Labo???') ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET producteur = '666'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    UPDATE z_asgard_admin.gestion_schema 
+        SET editeur = '6666'
+        WHERE nom_schema = 'c Librairie' ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_after,
+        ENABLE TRIGGER asgard_visibilite_admin_after ;
+
+    SET ROLE g_admin ;
+    PERFORM z_asgard_admin.asgard_nettoyage_oids() ;
+    RESET ROLE ;
+
+
+    -- 1
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"c_Bibliothèque"'::regnamespace::oid, 'échec assertion 1a' ;
+
+    ASSERT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ), 'échec assertion 1b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_asgard assistant', 'échec assertion 1c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard assistant"'::regrole::oid, 'échec assertion 1d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_asgard*passant', 'échec assertion 1e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard*passant"'::regrole::oid, 'échec assertion 1f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_asgard_ARCHIVISTE', 'échec assertion 1g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard_ARCHIVISTE"'::regrole::oid, 'échec assertion 1h' ;
+
+
+    -- 2
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) = '"c Librairie"'::regnamespace::oid, 'échec assertion 2a' ;
+
+    ASSERT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ), 'échec assertion 2b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) IS NULL, 'échec assertion 2c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) IS NULL, 'échec assertion 2d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) IS NULL, 'échec assertion 2e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) IS NULL, 'échec assertion 2f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) = 'g_asgard_ARCHIVISTE', 'échec assertion 2g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) = '"g_asgard_ARCHIVISTE"'::regrole::oid, 'échec assertion 2h' ;
+
+
+    -- 3
+    ASSERT (
+        SELECT oid_schema FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) IS NULL, 'échec assertion 3a' ;
+
+    ASSERT NOT (
+        SELECT creation FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ), 'échec assertion 3b' ;
+
+    ASSERT (
+        SELECT editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) = 'g_asgard chercheur', 'échec assertion 3c' ;
+
+    ASSERT (
+        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) IS NULL, 'échec assertion 3d' ;
+
+    ASSERT (
+        SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) = 'g_asgard*passant', 'échec assertion 3e' ;
+
+    ASSERT (
+        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) IS NULL, 'échec assertion 3f' ;
+
+    ASSERT (
+        SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) = 'g_asgard directeur', 'échec assertion 3g' ;
+
+    ASSERT (
+        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Labo???'
+    ) IS NULL, 'échec assertion 3h' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DROP SCHEMA "c Librairie" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_ARCHIVISTE" ;
+    DROP ROLE "g_asgard assistant" ;
+    DROP ROLE "g_asgard*passant" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t103b() IS 'ASGARD recette. TEST : Correction d''incohérences dans la table de gestion avec asgard_nettoyage_oids.' ;
+
+
+-- FUNCTION: z_asgard_recette.t104()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t104()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_super SUPERUSER ;
+    CREATE ROLE g_asgard_login LOGIN ;
+    CREATE ROLE g_asgard_lecteur_a ;
+    CREATE ROLE g_asgard_lecteur_b ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.livre_a () ;
+    CREATE TABLE c_bibliotheque.livre_b () ;
+    CREATE TABLE c_bibliotheque.livre_c () ;
+    CREATE TABLE c_bibliotheque.livre_d () ;
+    
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL,
+        'échec assertion 1' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_b TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_c TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL,
+        'échec assertion 2' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_a',
+        'échec assertion 3' ;
+
+    REVOKE SELECT ON ALL TABLES IN SCHEMA c_bibliotheque FROM g_asgard_lecteur_a ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL,
+        'échec assertion 4' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_b ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_b TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL,
+        'échec assertion 5' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_c TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 6' ;
+
+    CREATE TABLE c_bibliotheque.livre_e () ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 7' ;
+
+    CREATE TABLE c_bibliotheque.livre_f () ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL,
+        'échec assertion 8' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_d TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 9' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_b TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_c TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_f TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_a',
+        'échec assertion 10' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre_f TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 11' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_super ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA c_bibliotheque TO g_asgard_super ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 12' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque', autorise_superuser := True) 
+        = 'g_asgard_super', 'échec assertion 13' ;
+
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_super ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_login ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA c_bibliotheque TO g_asgard_login ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 14' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque', autorise_login := True) 
+        = 'g_asgard_login', 'échec assertion 15' ;
+
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_login ;
+
+    REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_asgard_producteur ;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA c_bibliotheque FROM g_asgard_producteur ;
+
+    -- même s'il remplit toutes les autres conditions, le producteur n'est jamais
+    -- un lecteur potentiel
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_b',
+        'échec assertion 16' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO public ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA c_bibliotheque TO public ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'public',
+        'échec assertion 17' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque', autorise_public := False) 
+        = 'g_asgard_lecteur_b', 'échec assertion 18' ;
+
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_b ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'public', 
+        'échec assertion 19' ;
+
+    GRANT INSERT ON TABLE c_bibliotheque.livre_a TO public ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') = 'g_asgard_lecteur_a', 
+        'échec assertion 20' ;
+
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL, 
+        'échec assertion 21' ;
+
+    REVOKE UPDATE ON TABLE c_bibliotheque.livre_a FROM g_asgard_lecteur_a ;
+    GRANT DELETE ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL, 
+        'échec assertion 22' ;
+
+    REVOKE DELETE ON TABLE c_bibliotheque.livre_a FROM g_asgard_lecteur_a ;
+    GRANT TRUNCATE ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_bibliotheque') IS NULL, 
+        'échec assertion 23' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_super ;
+    DROP ROLE g_asgard_login ;
+    DROP ROLE g_asgard_lecteur_a ;
+    DROP ROLE g_asgard_lecteur_b ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t104() IS 'ASGARD recette. TEST : Recherche du meilleur "lecteur" avec asasgard_cherche_lecteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t104b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t104b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_Asgard Producteur" ;
+    CREATE ROLE "g_Asgard*Super" SUPERUSER ;
+    CREATE ROLE "g_Asgard!Login" LOGIN ;
+    CREATE ROLE "g_Asgard Lecteur A" ;
+    CREATE ROLE "g_Asgard Lecteur B" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Livre A" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre B" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre C" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre D" () ;
+    
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL,
+        'échec assertion 1' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Lecteur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL,
+        'échec assertion 2' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur A',
+        'échec assertion 3' ;
+
+    REVOKE SELECT ON ALL TABLES IN SCHEMA "c_Bibliothèque" FROM "g_Asgard Lecteur A" ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL,
+        'échec assertion 4' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur B" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL,
+        'échec assertion 5' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 6' ;
+
+    CREATE TABLE "c_Bibliothèque"."Livre E" () ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 7' ;
+
+    CREATE TABLE "c_Bibliothèque"."Livre F" () ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL,
+        'échec assertion 8' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre D" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 9' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Lecteur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Lecteur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre F" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur A',
+        'échec assertion 10' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre F" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 11' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard*Super" ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO "g_Asgard*Super" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 12' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque', autorise_superuser := True) 
+        = 'g_Asgard*Super', 'échec assertion 13' ;
+
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard*Super" ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard!Login" ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO "g_Asgard!Login" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 14' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque', autorise_login := True) 
+        = 'g_Asgard!Login', 'échec assertion 15' ;
+
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard!Login" ;
+
+    REVOKE CREATE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard Producteur" ;
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA "c_Bibliothèque" FROM "g_Asgard Producteur" ;
+
+    -- même s'il remplit toutes les autres conditions, le producteur n'est jamais
+    -- un lecteur potentiel
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur B',
+        'échec assertion 16' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO public ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO public ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'public',
+        'échec assertion 17' ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque', autorise_public := False) 
+        = 'g_Asgard Lecteur B', 'échec assertion 18' ;
+
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur B" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'public', 
+        'échec assertion 19' ;
+
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Livre A" TO public ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') = 'g_Asgard Lecteur A', 
+        'échec assertion 20' ;
+
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL, 
+        'échec assertion 21' ;
+
+    REVOKE UPDATE ON TABLE "c_Bibliothèque"."Livre A" FROM "g_Asgard Lecteur A" ;
+    GRANT DELETE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL, 
+        'échec assertion 22' ;
+
+    REVOKE DELETE ON TABLE "c_Bibliothèque"."Livre A" FROM "g_Asgard Lecteur A" ;
+    GRANT TRUNCATE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur A" ;
+
+    ASSERT z_asgard.asgard_cherche_lecteur('c_Bibliothèque') IS NULL, 
+        'échec assertion 23' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_Asgard Producteur" ;
+    DROP ROLE "g_Asgard*Super" ;
+    DROP ROLE "g_Asgard!Login" ;
+    DROP ROLE "g_Asgard Lecteur A" ;
+    DROP ROLE "g_Asgard Lecteur B" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t104b() IS 'ASGARD recette. TEST : Recherche du meilleur "lecteur" avec asasgard_cherche_lecteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t105()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t105()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_super SUPERUSER ;
+    CREATE ROLE g_asgard_login LOGIN ;
+    CREATE ROLE g_asgard_editeur_a ;
+    CREATE ROLE g_asgard_editeur_b ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.livre_a () ;
+    CREATE TABLE c_bibliotheque.livre_b () ;
+    CREATE TABLE c_bibliotheque.livre_c () ;
+    CREATE TABLE c_bibliotheque.livre_d () ;
+    
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') IS NULL,
+        'échec assertion 1' ;
+
+    GRANT INSERT ON TABLE c_bibliotheque.livre_a TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_b TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_c TO g_asgard_editeur_a ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') IS NULL,
+        'échec assertion 2' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_editeur_a ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_a',
+        'échec assertion 3' ;
+
+    REVOKE INSERT, UPDATE ON ALL TABLES IN SCHEMA c_bibliotheque FROM g_asgard_editeur_a ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_editeur_b ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA c_bibliotheque TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') IS NULL,
+        'échec assertion 4' ;
+
+    GRANT INSERT ON TABLE c_bibliotheque.livre_a TO g_asgard_editeur_b ;
+    GRANT INSERT ON TABLE c_bibliotheque.livre_b TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') IS NULL,
+        'échec assertion 5' ;
+
+    GRANT INSERT ON TABLE c_bibliotheque.livre_c TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 6' ;
+
+    CREATE TABLE c_bibliotheque.livre_e () ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 7' ;
+
+    CREATE TABLE c_bibliotheque.livre_f () ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') IS NULL,
+        'échec assertion 8' ;
+
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_d TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 9' ;
+
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_a TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_b TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_c TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_f TO g_asgard_editeur_a ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_a',
+        'échec assertion 10' ;
+
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_f TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 11' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_super ;
+    GRANT UPDATE ON ALL TABLES IN SCHEMA c_bibliotheque TO g_asgard_super ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 12' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque', autorise_superuser := True) 
+        = 'g_asgard_super', 'échec assertion 13' ;
+
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_super ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_login ;
+    GRANT INSERT ON ALL TABLES IN SCHEMA c_bibliotheque TO g_asgard_login ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 14' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque', autorise_login := True) 
+        = 'g_asgard_login', 'échec assertion 15' ;
+
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_login ;
+
+    REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_asgard_producteur ;
+
+    -- même s'il remplit toutes les autres conditions, le producteur n'est jamais
+    -- un lecteur potentiel
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'g_asgard_editeur_b',
+        'échec assertion 16' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO public ;
+    GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA c_bibliotheque TO public ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'public',
+        'échec assertion 17' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque', autorise_public := False) 
+        = 'g_asgard_editeur_b', 'échec assertion 18' ;
+
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_editeur_b ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_bibliotheque') = 'public', 
+        'échec assertion 19' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_super ;
+    DROP ROLE g_asgard_login ;
+    DROP ROLE g_asgard_editeur_a ;
+    DROP ROLE g_asgard_editeur_b ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t105() IS 'ASGARD recette. TEST : Recherche du meilleur "éditeur" avec asasgard_cherche_editeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t105b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t105b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_Asgard Producteur" ;
+    CREATE ROLE "g_Asgard Super" SUPERUSER ;
+    CREATE ROLE "g_Asgard Login" LOGIN ;
+    CREATE ROLE "g_Asgard Editeur n°1" ;
+    CREATE ROLE "g_Asgard Editeur n°2" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Livre A" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre B" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre C" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre D" () ;
+    
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') IS NULL,
+        'échec assertion 1' ;
+
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Editeur n°1" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Editeur n°1" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Editeur n°1" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') IS NULL,
+        'échec assertion 2' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Editeur n°1" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°1',
+        'échec assertion 3' ;
+
+    REVOKE INSERT, UPDATE ON ALL TABLES IN SCHEMA "c_Bibliothèque" FROM "g_Asgard Editeur n°1" ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Editeur n°2" ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') IS NULL,
+        'échec assertion 4' ;
+
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Editeur n°2" ;
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') IS NULL,
+        'échec assertion 5' ;
+
+    GRANT INSERT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 6' ;
+
+    CREATE TABLE "c_Bibliothèque"."Livre E" () ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 7' ;
+
+    CREATE TABLE "c_Bibliothèque"."Livre F" () ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') IS NULL,
+        'échec assertion 8' ;
+
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre D" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 9' ;
+
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Editeur n°1" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre B" TO "g_Asgard Editeur n°1" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Editeur n°1" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre F" TO "g_Asgard Editeur n°1" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°1',
+        'échec assertion 10' ;
+
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre F" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 11' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Super" ;
+    GRANT UPDATE ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO "g_Asgard Super" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 12' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque', autorise_superuser := True) 
+        = 'g_Asgard Super', 'échec assertion 13' ;
+
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard Super" ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Login" ;
+    GRANT INSERT ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO "g_Asgard Login" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 14' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque', autorise_login := True) 
+        = 'g_Asgard Login', 'échec assertion 15' ;
+
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard Login" ;
+
+    REVOKE CREATE ON SCHEMA "c_Bibliothèque" FROM "g_Asgard Producteur" ;
+
+    -- même s'il remplit toutes les autres conditions, le producteur n'est jamais
+    -- un lecteur potentiel
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'g_Asgard Editeur n°2',
+        'échec assertion 16' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO public ;
+    GRANT INSERT, UPDATE ON ALL TABLES IN SCHEMA "c_Bibliothèque" TO public ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'public',
+        'échec assertion 17' ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque', autorise_public := False) 
+        = 'g_Asgard Editeur n°2', 'échec assertion 18' ;
+
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Editeur n°2" ;
+
+    ASSERT z_asgard.asgard_cherche_editeur('c_Bibliothèque') = 'public', 
+        'échec assertion 19' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_Asgard Producteur" ;
+    DROP ROLE "g_Asgard Super" ;
+    DROP ROLE "g_Asgard Login" ;
+    DROP ROLE "g_Asgard Editeur n°1" ;
+    DROP ROLE "g_Asgard Editeur n°2" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t105b() IS 'ASGARD recette. TEST : Recherche du meilleur "éditeur" avec asasgard_cherche_editeur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t106()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t106()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_old_producteur ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_lecteur ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_old_producteur ;
+
+    ASSERT 'c_bibliotheque' IN (SELECT nom_schema FROM z_asgard_admin.gestion_schema),
+        'échec assertion 1' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_lecteur'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    REVOKE CREATE ON SCHEMA c_bibliotheque FROM g_asgard_old_producteur ;
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_lecteur ;
+
+    INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur, lecteur)
+        VALUES ('c_bibliotheque', True, 'g_asgard_producteur', 'g_asgard_lecteur') ;
+
+    ASSERT (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque' AND creation
+    ) = 'g_asgard_producteur', 'échec assertion 2' ;
+
+    ASSERT (SELECT nspowner FROM pg_namespace WHERE nspname = 'c_bibliotheque') 
+        = quote_ident('g_asgard_producteur')::regrole, 'échec assertion 3' ;
+
+    -- les droits personnalisés sont préservés
+    ASSERT NOT has_schema_privilege('g_asgard_producteur', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 4' ;
+    ASSERT has_schema_privilege('g_asgard_lecteur', 'c_bibliotheque', 'CREATE'),
+        'échec assertion 5' ;
+
+    BEGIN
+
+        INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+            VALUES ('c_bibliotheque', False, 'g_asgard_producteur') ;
+
+    EXCEPTION WHEN OTHERS THEN
+
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 6' ;
+
+    END ;
+
+    INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+        VALUES ('c_librairie', False, 'g_asgard_producteur') ;
+
+    BEGIN
+
+        INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+            VALUES ('c_librairie', True, 'g_asgard_producteur') ;
+
+    EXCEPTION WHEN OTHERS THEN
+
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 7' ;
+
+    END ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_old_producteur ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_lecteur ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t106() IS 'ASGARD recette. TEST : Tentative d''ajout à la table de gestion d''enregistrements pré-existants.' ;
+
+
+-- FUNCTION: z_asgard_recette.t106b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t106b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_OLD_producteur" ;
+    CREATE ROLE "g_Asgard Producteur" ;
+    CREATE ROLE "g_Asgard*Lecteur" ;
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_OLD_producteur" ;
+
+    ASSERT 'c_Bibliothèque' IN (SELECT nom_schema FROM z_asgard_admin.gestion_schema),
+        'échec assertion 1' ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_Asgard*Lecteur'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    REVOKE CREATE ON SCHEMA "c_Bibliothèque" FROM "g_asgard_OLD_producteur" ;
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard*Lecteur" ;
+
+    INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur, lecteur)
+        VALUES ('c_Bibliothèque', True, 'g_Asgard Producteur', 'g_Asgard*Lecteur') ;
+
+    ASSERT (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque' AND creation
+    ) = 'g_Asgard Producteur', 'échec assertion 2' ;
+
+    ASSERT (SELECT nspowner FROM pg_namespace WHERE nspname = 'c_Bibliothèque') 
+        = quote_ident('g_Asgard Producteur')::regrole, 'échec assertion 3' ;
+
+    -- les droits personnalisés sont préservés
+    ASSERT NOT has_schema_privilege('g_Asgard Producteur', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 4' ;
+    ASSERT has_schema_privilege('g_Asgard*Lecteur', 'c_Bibliothèque', 'CREATE'),
+        'échec assertion 5' ;
+
+    BEGIN
+
+        INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+            VALUES ('c_Bibliothèque', False, 'g_Asgard Producteur') ;
+
+    EXCEPTION WHEN OTHERS THEN
+
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 6' ;
+
+    END ;
+
+    INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+        VALUES ('c_librairie', False, 'g_Asgard Producteur') ;
+
+    BEGIN
+
+        INSERT INTO z_asgard_admin.gestion_schema (nom_schema, creation, producteur)
+            VALUES ('c_librairie', True, 'g_Asgard Producteur') ;
+
+    EXCEPTION WHEN OTHERS THEN
+
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 7' ;
+
+    END ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard_OLD_producteur" ;
+    DROP ROLE "g_Asgard Producteur" ;
+    DROP ROLE "g_Asgard*Lecteur" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t106b() IS 'ASGARD recette. TEST : Tentative d''ajout à la table de gestion d''enregistrements pré-existants.' ;
+
+
+-- FUNCTION: z_asgard_recette.t107()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t107()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   acl_schemas text ;
+   acl_livres text ;
+BEGIN
+
+    SET ROLE g_admin ;
+
+    CREATE ROLE g_asgard_editeur_a ;
+    CREATE ROLE g_asgard_editeur_b ;
+    CREATE ROLE g_asgard_lecteur_a ;
+    CREATE ROLE g_asgard_lecteur_b ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur) 
+        VALUES ('c_schema_inactif', False, 'g_asgard_producteur') ;
+
+    CREATE SCHEMA c_bibliotheque ;
+    CREATE TABLE c_bibliotheque.livre_a () ;
+    CREATE TABLE c_bibliotheque.livre_b () ;
+    CREATE TABLE c_bibliotheque.livre_c () ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_lecteur_b',
+            editeur = 'g_asgard_editeur_b'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_editeur_a ;
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_a TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_c TO g_asgard_editeur_a ;
+    REVOKE INSERT, UPDATE, DELETE ON TABLE c_bibliotheque.livre_a FROM g_asgard_editeur_b ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_c TO g_asgard_lecteur_a ;
+    REVOKE SELECT ON TABLE c_bibliotheque.livre_a FROM g_asgard_lecteur_b ;
+
+    CREATE SCHEMA c_librairie ;
+    CREATE TABLE c_librairie.livre_a () ;
+    CREATE TABLE c_librairie.livre_b () ;
+    CREATE TABLE c_librairie.livre_c () ;
+
+    GRANT USAGE ON SCHEMA c_librairie TO g_asgard_editeur_a ;
+    GRANT USAGE ON SCHEMA c_librairie TO g_asgard_lecteur_a ;
+    GRANT USAGE ON SCHEMA c_librairie TO public ;
+    GRANT UPDATE ON TABLE c_librairie.livre_a TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_librairie.livre_b TO g_asgard_editeur_a ;
+    GRANT SELECT ON TABLE c_librairie.livre_a TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_librairie.livre_b TO g_asgard_lecteur_a ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA c_librairie TO public ;
+
+    SELECT 
+        string_agg(
+            format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+            '\n' ORDER BY relnamespace::regnamespace::text, relname
+        ) INTO acl_livres
+        FROM pg_class 
+        WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie') ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_bibliotheque', 'c_librairie') ;
+
+    -- un seul schéma, en préservant les valeurs déjà renseignées
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs('c_bibliotheque') ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_b', 'échec assertion 1' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_b'::regrole, 'échec assertion 1b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_b', 'échec assertion 2' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_b'::regrole, 'échec assertion 2b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 3' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 3b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 4' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 4b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_schemas, 'échec assertion 5' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_livres, 'échec assertion 6' ;
+
+    -- un seul schéma, en ne préservant pas les valeurs déjà renseignées
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        'c_bibliotheque', preserve := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_a', 'échec assertion 7' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 7b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_a', 'échec assertion 8' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_a'::regrole, 'échec assertion 8b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 9' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 9b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 10' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) IS NULL, 'échec assertion 10b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_schemas, 'échec assertion 11' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_livres, 'échec assertion 12' ;
+
+    -- tous les schémas, avec preserve, en passant un paramètre aux fonctions de recherche
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_asgard_lecteur_b',
+            editeur = NULL
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_editeur_a ;
+    GRANT USAGE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_a TO g_asgard_editeur_a ;
+    GRANT UPDATE ON TABLE c_bibliotheque.livre_c TO g_asgard_editeur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_a TO g_asgard_lecteur_a ;
+    GRANT SELECT ON TABLE c_bibliotheque.livre_c TO g_asgard_lecteur_a ;
+    REVOKE SELECT ON TABLE c_bibliotheque.livre_a FROM g_asgard_lecteur_b ;
+
+    SELECT 
+        string_agg(
+            format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+            '\n' ORDER BY relnamespace::regnamespace::text, relname
+        ) INTO acl_livres
+        FROM pg_class 
+        WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie') ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_bibliotheque', 'c_librairie') ;
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        autorise_public := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_a', 'échec assertion 13' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 13b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_b', 'échec assertion 14' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_lecteur_b'::regrole, 'échec assertion 14b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_editeur_a', 'échec assertion 15' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 15b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_lecteur_a', 'échec assertion 16' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_lecteur_a'::regrole, 'échec assertion 16b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_schemas, 'échec assertion 17' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_livres, 'échec assertion 18' ;
+
+    -- sans preserve, cas de l'effacement d'un rôle
+
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_a ;
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_lecteur_b ;
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_editeur_a ;
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_editeur_b ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_bibliotheque', 'c_librairie') ;
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        preserve := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) IS NULL, 'échec assertion 19' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) IS NULL, 'échec assertion 19b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) IS NULL, 'échec assertion 20' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ) IS NULL, 'échec assertion 20b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_editeur_a', 'échec assertion 21' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 21b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 'public', 'échec assertion 22' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_librairie'
+    ) = 0, 'échec assertion 22b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_schemas, 'échec assertion 23' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('c_bibliotheque', 'c_librairie')
+    ) = acl_livres, 'échec assertion 24' ;
+
+    RESET ROLE ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA c_librairie CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_editeur_a ;
+    DROP ROLE g_asgard_editeur_b ;
+    DROP ROLE g_asgard_lecteur_a ;
+    DROP ROLE g_asgard_lecteur_b ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t107() IS 'ASGARD recette. TEST : Test de la fonction "asgard_restaure_editeurs_lecteurs".' ;
+
+
+-- FUNCTION: z_asgard_recette.t107b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t107b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   acl_schemas text ;
+   acl_livres text ;
+BEGIN
+
+    SET ROLE g_admin ;
+
+    CREATE ROLE "g_Asgard éditeur A" ;
+    CREATE ROLE "g_Asgard éditeur B" ;
+    CREATE ROLE "g_Asgard Lecteur*A" ;
+    CREATE ROLE "g_Asgard Lecteur*B" ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+    CREATE TABLE "c_Bibliothèque"."Livre A" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre B" () ;
+    CREATE TABLE "c_Bibliothèque"."Livre C" () ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur) 
+        VALUES ('c_schéma Inactif', False, 'g_Asgard Producteur') ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_Asgard Lecteur*B',
+            editeur = 'g_Asgard éditeur B'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard éditeur A" ;
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur*A" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard éditeur A" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard éditeur A" ;
+    REVOKE INSERT, UPDATE, DELETE ON TABLE "c_Bibliothèque"."Livre A" FROM "g_Asgard éditeur B" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur*A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Lecteur*A" ;
+    REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre A" FROM "g_Asgard Lecteur*B" ;
+
+    CREATE SCHEMA "c_Librairie" ;
+    CREATE TABLE "c_Librairie"."Livre A" () ;
+    CREATE TABLE "c_Librairie"."Livre B" () ;
+    CREATE TABLE "c_Librairie"."Livre C" () ;
+
+    GRANT USAGE ON SCHEMA "c_Librairie" TO "g_Asgard éditeur A" ;
+    GRANT USAGE ON SCHEMA "c_Librairie" TO "g_Asgard Lecteur*A" ;
+    GRANT USAGE ON SCHEMA "c_Librairie" TO public ;
+    GRANT UPDATE ON TABLE "c_Librairie"."Livre A" TO "g_Asgard éditeur A" ;
+    GRANT UPDATE ON TABLE "c_Librairie"."Livre B" TO "g_Asgard éditeur A" ;
+    GRANT SELECT ON TABLE "c_Librairie"."Livre A" TO "g_Asgard Lecteur*A" ;
+    GRANT SELECT ON TABLE "c_Librairie"."Livre B" TO "g_Asgard Lecteur*A" ;
+    GRANT SELECT ON ALL TABLES IN SCHEMA "c_Librairie" TO public ;
+
+    SELECT 
+        string_agg(
+            format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+            '\n' ORDER BY relnamespace::regnamespace::text, relname
+        ) INTO acl_livres
+        FROM pg_class 
+        WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"') ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_Bibliothèque', 'c_Librairie') ;
+
+    -- un seul schéma, en préservant les valeurs déjà renseignées
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs('c_Bibliothèque') ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard éditeur B', 'échec assertion 1' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard éditeur B"'::regrole, 'échec assertion 1b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard Lecteur*B', 'échec assertion 2' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard Lecteur*B"'::regrole, 'échec assertion 2b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 3' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 3b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 4' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 4b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_Bibliothèque', 'c_Librairie')
+    ) = acl_schemas, 'échec assertion 5' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"')
+    ) = acl_livres, 'échec assertion 6' ;
+
+    -- un seul schéma, en ne préservant pas les valeurs déjà renseignées
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        'c_Bibliothèque', preserve := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard éditeur A', 'échec assertion 7' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 7b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard Lecteur*A', 'échec assertion 8' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard Lecteur*A"'::regrole, 'échec assertion 8b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 9' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 9b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 10' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) IS NULL, 'échec assertion 10b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_Bibliothèque', 'c_Librairie')
+    ) = acl_schemas, 'échec assertion 11' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"')
+    ) = acl_livres, 'échec assertion 12' ;
+
+    -- tous les schémas, avec preserve, en passant un paramètre aux fonctions de recherche
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET lecteur = 'g_Asgard Lecteur*B',
+            editeur = NULL
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard éditeur A" ;
+    GRANT USAGE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur*A" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard éditeur A" ;
+    GRANT UPDATE ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard éditeur A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre A" TO "g_Asgard Lecteur*A" ;
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre C" TO "g_Asgard Lecteur*A" ;
+    REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre A" FROM "g_Asgard Lecteur*B" ;
+
+    SELECT 
+        string_agg(
+            format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+            '\n' ORDER BY relnamespace::regnamespace::text, relname
+        ) INTO acl_livres
+        FROM pg_class 
+        WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"') ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_Bibliothèque', 'c_Librairie') ;
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        autorise_public := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard éditeur A', 'échec assertion 13' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 13b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = 'g_Asgard Lecteur*B', 'échec assertion 14' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_Asgard Lecteur*B"'::regrole, 'échec assertion 14b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = 'g_Asgard éditeur A', 'échec assertion 15' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 15b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = 'g_Asgard Lecteur*A', 'échec assertion 16' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = '"g_Asgard Lecteur*A"'::regrole, 'échec assertion 16b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_Bibliothèque', 'c_Librairie')
+    ) = acl_schemas, 'échec assertion 17' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"')
+    ) = acl_livres, 'échec assertion 18' ;
+
+    -- sans preserve, cas de l'effacement d'un rôle
+
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur*A" ;
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard Lecteur*B" ;
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard éditeur A" ;
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_Asgard éditeur B" ;
+
+    SELECT 
+        string_agg(
+            format('%I : %s', nspname, nspacl), 
+            '\n' ORDER BY nspname
+        ) INTO acl_schemas
+        FROM pg_namespace 
+        WHERE nspname IN ('c_Bibliothèque', 'c_Librairie') ;
+
+    PERFORM z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        preserve := False
+    ) ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) IS NULL, 'échec assertion 19' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) IS NULL, 'échec assertion 19b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) IS NULL, 'échec assertion 20' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ) IS NULL, 'échec assertion 20b' ;
+
+    ASSERT (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = 'g_Asgard éditeur A', 'échec assertion 21' ;
+
+    ASSERT (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 21b' ;
+
+    ASSERT (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = 'public', 'échec assertion 22' ;
+
+    ASSERT (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Librairie'
+    ) = 0, 'échec assertion 22b' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%I : %s', nspname, nspacl), 
+                '\n' ORDER BY nspname
+            )
+            FROM pg_namespace 
+            WHERE nspname IN ('c_Bibliothèque', 'c_Librairie')
+    ) = acl_schemas, 'échec assertion 23' ;
+
+    ASSERT (
+        SELECT 
+            string_agg(
+                format('%s.%I : %s', relnamespace::regnamespace, relname, relacl), 
+                '\n' ORDER BY relnamespace::regnamespace::text, relname
+            )
+            FROM pg_class 
+            WHERE relkind = 'r' AND relnamespace::regnamespace IN ('"c_Bibliothèque"', '"c_Librairie"')
+    ) = acl_livres, 'échec assertion 24' ;
+
+    RESET ROLE ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_Librairie" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_Asgard éditeur A" ;
+    DROP ROLE "g_Asgard éditeur B" ;
+    DROP ROLE "g_Asgard Lecteur*A" ;
+    DROP ROLE "g_Asgard Lecteur*B" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t107b() IS 'ASGARD recette. TEST : Test de la fonction "asgard_restaure_editeurs_lecteurs".' ;

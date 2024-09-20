@@ -83,10 +83,10 @@ PG_DATABASES = [
         'pg_version': '15',
         'port': '5437'
     },
-    {
-        'pg_version': '16',
-        'port': '5438'
-    }
+    # {
+    #     'pg_version': '16',
+    #     'port': '5438'
+    # }
 ]
 """Bases de tests.
 

@@ -3,11 +3,10 @@
 --
 -- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.4.1
 --
--- Copyright République Française, 2020-2023.
+-- Copyright République Française, 2020-2024.
 -- Secrétariat général du Ministère de la Transition écologique et
--- de la Cohésion des territoires, du Ministère de la Transition
--- énergétique et du Secrétariat d'Etat à la Mer.
--- Direction du numérique.
+-- de la Cohésion des territoires.
+-- Direction du Numérique.
 --
 -- contributeurs : Leslie Lemaire (DNUM/UNI/DRC) et Alain Ferraton
 -- (DNUM/MSP/DS/GSG).
@@ -189,7 +188,7 @@ BEGIN
     
         CREATE ROLE "consult.defaut" WITH
             LOGIN  
-            PASSWORD 'consult.defaut'
+            PASSWORD 'AccèsDonnéesPubliques'
             NOSUPERUSER
             INHERIT
             NOCREATEDB
@@ -292,7 +291,15 @@ CREATE TABLE z_asgard_admin.gestion_schema
     CONSTRAINT gestion_schema_oid_roles_check CHECK ((oid_lecteur IS NULL OR NOT oid_lecteur = oid_producteur)
                                                     AND (oid_editeur IS NULL OR NOT oid_editeur = oid_producteur)
                                                     AND (oid_lecteur IS NULL OR oid_editeur IS NULL OR NOT oid_lecteur = oid_editeur)),
-    CONSTRAINT gestion_schema_ctrl_check CHECK (ctrl IS NULL OR array_length(ctrl, 1) >= 2 AND ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'MANUEL', 'EXIT', 'END'))
+    CONSTRAINT gestion_schema_ctrl_check CHECK (ctrl IS NULL OR array_length(ctrl, 1) >= 2 AND ctrl[1] IN ('CREATE', 'RENAME', 'OWNER', 'DROP', 'SELF', 'MANUEL', 'EXIT', 'END')),
+    CONSTRAINT gestion_schema_no_system_schema CHECK (
+        NOT nom_schema ~ ANY(
+            ARRAY[
+                '^pg_toast', '^pg_temp', '^pg_catalog$', '^public$', 
+                '^information_schema$', '^topology$'
+            ]
+        )
+    )
 )
 WITH (
     OIDS = FALSE
@@ -1395,7 +1402,7 @@ COMMENT ON EVENT TRIGGER asgard_on_alter_objet IS 'ASGARD. Déclencheur sur év�
    4.4 - TRANSFORMATION GRANT EN REVOKE
    4.5 - INITIALISATION DE GESTION_SCHEMA
    4.6 - DEREFERENCEMENT D'UN SCHEMA
-   4.7 - NETTOYAGE DES RÔLES
+   4.7 - NETTOYAGE DE LA TABLE DE GESTION
    4.8 - REINITIALISATION DES PRIVILEGES SUR UN SCHEMA
    4.9 - REINITIALISATION DES PRIVILEGES SUR UN OBJET
    4.10 - DEPLACEMENT D'OBJET
@@ -1406,7 +1413,8 @@ COMMENT ON EVENT TRIGGER asgard_on_alter_objet IS 'ASGARD. Déclencheur sur év�
    4.15 - TRANSFORMATION D'UN NOM DE RÔLE POUR COMPARAISON AVEC LES CHAMPS ACL
    4.16 - DIAGNOSTIC DES DROITS NON STANDARDS
    4.17 - EXTRACTION DE NOMS D'OBJETS A PARTIR D'IDENTIFIANTS
-   4.18 - EXPLICITATION DES CODES DE PRIVILÈGES */
+   4.18 - EXPLICITATION DES CODES DE PRIVILÈGES
+   4.19 - RECHERCHE DE LECTEURS ET EDITEURS */
 
 ------ 4.1 - LISTES DES DROITS SUR LES OBJETS D'UN SCHEMA ------
 
@@ -2333,8 +2341,145 @@ ALTER FUNCTION z_asgard_admin.asgard_sortie_gestion_schema(text)
 COMMENT ON FUNCTION z_asgard_admin.asgard_sortie_gestion_schema(text) IS 'ASGARD. Fonction qui déréférence un schéma existant de la table de gestion.' ;
 
 
+------ 4.7 - NETTOYAGE DE LA TABLE DE GESTION ------
 
------- 4.7 - NETTOYAGE DES RÔLES ------
+-- Function: z_asgard_admin.asgard_nettoyage_oids()
+
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_nettoyage_oids()
+    RETURNS text
+    LANGUAGE plpgsql
+    AS $_$
+/* Recalcule les OIDs des schémas et rôles référencés dans la table de gestion en fonction de leurs noms.
+
+    Partant du nom de schéma renseigné dans le champ "nom_schema",
+    cette fonction corrige les valeurs des champs suivants d'autant que
+    de besoin : 
+    * "creation" est mis à True si le schéma existe dans la base,
+      à False sinon.
+    * "oid_schema" est mis à NULL si le schéma n'existe pas, sinon
+      sa valeur est actualisée pour correspondre à l'OID du schéma
+      de nom "nom_schema".
+    * "oid_producteur" est mis à NULL si le schéma n'existe pas,
+      sinon sa valeur est actualisée pour correspondre à l'OID du
+      rôle propriétaire du schéma de nom "nom_schema".
+    * Si le schéma existe, "producteur" est actualisé pour
+      correspondre au nom du rôle propriétaire du schéma.
+    * "oid_editeur" et "oid_lecteur" sont mis à NULL si le schéma
+      n'existe pas. Sinon, et si "editeur" et "lecteur" respectivement
+      sont renseignés, ils sont mis à jour avec les OID de ces rôles
+      s'ils existent. Si lesdits rôles n'existent pas, les champs
+      "oid_editeur" et "editeur" ou "oid_lecteur" et "lecteur" sont
+      mis à NULL.
+
+    Cette fonction est en quelque sorte l'inverse de z_asgard.asgard_nettoyage_roles(),
+    qui met à jour les noms des rôles en fonction des OID référencés 
+    dans la table gestion.
+
+    Returns
+    -------
+    text
+        '__ NETTOYAGE REUSSI.'
+
+*/
+DECLARE
+    rec record ;
+    e_mssg text ;
+    e_detl text ;
+    e_hint text ;
+BEGIN
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_after ;
+
+    FOR rec IN (
+        SELECT 
+            gestion_schema.nom_schema,
+            pg_namespace.oid AS oid_schema,
+            pg_namespace.oid IS NOT NULL AS creation,
+
+            CASE WHEN pg_namespace.oid IS NOT NULL
+            THEN
+                rolowner.rolname 
+            ELSE
+                gestion_schema.producteur
+            END AS producteur,
+
+            pg_namespace.nspowner AS oid_producteur,
+
+            CASE WHEN pg_namespace.oid IS NULL 
+                OR gestion_schema.editeur = 'public' 
+                OR rolediteur.oid IS NOT NULL
+            THEN
+                gestion_schema.editeur
+            END AS editeur,
+
+            CASE WHEN pg_namespace.oid IS NOT NULL AND gestion_schema.editeur = 'public'
+            THEN
+                0
+            WHEN pg_namespace.oid IS NOT NULL
+            THEN
+                rolediteur.oid
+            END AS oid_editeur,
+
+            CASE WHEN pg_namespace.oid IS NULL
+                OR gestion_schema.lecteur = 'public'
+                OR rollecteur.oid IS NOT NULL
+            THEN
+                gestion_schema.lecteur
+            END AS lecteur,
+
+            CASE WHEN pg_namespace.oid IS NOT NULL AND gestion_schema.lecteur = 'public'
+            THEN
+                0
+            WHEN pg_namespace.oid IS NOT NULL
+            THEN
+                rollecteur.oid
+            END AS oid_lecteur
+            
+            FROM z_asgard_admin.gestion_schema
+                LEFT JOIN pg_catalog.pg_namespace ON pg_namespace.nspname = gestion_schema.nom_schema
+                LEFT JOIN pg_catalog.pg_roles AS rolowner ON rolowner.oid = pg_namespace.nspowner
+                LEFT JOIN pg_catalog.pg_roles AS rolediteur ON rolediteur.rolname = gestion_schema.editeur
+                LEFT JOIN pg_catalog.pg_roles AS rollecteur ON rollecteur.rolname = gestion_schema.lecteur
+    )
+    LOOP
+
+        UPDATE z_asgard_admin.gestion_schema
+            SET creation = rec.creation,
+                oid_schema = rec.oid_schema,
+                producteur = rec.producteur,
+                oid_producteur = rec.oid_producteur,
+                editeur = rec.editeur,
+                oid_editeur = rec.oid_editeur,
+                lecteur = rec.lecteur,
+                oid_lecteur = rec.oid_lecteur
+            WHERE gestion_schema.nom_schema = rec.nom_schema ;
+
+    END LOOP ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_after ;
+
+    RETURN '__ NETTOYAGE REUSSI.' ;
+
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_hint = PG_EXCEPTION_HINT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE EXCEPTION 'FNO0 > %', e_mssg
+        USING DETAIL = e_detl,
+            HINT = e_hint ;
+
+END
+$_$;
+
+ALTER FUNCTION z_asgard_admin.asgard_nettoyage_oids()
+    OWNER TO g_admin ;
+
+COMMENT ON FUNCTION z_asgard_admin.asgard_nettoyage_oids() IS 'ASGARD. Recalcule les OIDs des schémas et rôles référencés dans la table de gestion en fonction de leurs noms.' ;
+
 
 -- Function: z_asgard.asgard_nettoyage_roles()
 
@@ -5031,6 +5176,422 @@ ALTER FUNCTION z_asgard.asgard_expend_privileges(text)
 COMMENT ON FUNCTION z_asgard.asgard_expend_privileges(text) IS 'ASGARD. Fonction qui explicite les privilèges correspondant aux codes données en argument.' ;
 
 
+------ 4.19 - RECHERCHE DE LECTEURS ET EDITEURS ------
+
+-- Function: z_asgard.asgard_cherche_lecteur(text)
+
+CREATE OR REPLACE FUNCTION z_asgard.asgard_cherche_lecteur(
+        nom_schema text,
+        autorise_public boolean DEFAULT True,
+        autorise_login boolean DEFAULT False,
+        autorise_superuser boolean DEFAULT False
+    ) 
+    RETURNS text 
+    LANGUAGE SQL
+    RETURNS NULL ON NULL INPUT
+    AS $BODY$
+/* Au vu des privilèges établis, cherche le rôle le plus susceptible d''être
+   qualifié de "lecteur" du schéma.
+
+    Cette fonction renvoie, s'il existe, le rôle qui remplit les
+    conditions suivantes : 
+    * Ce n'est pas le propriétaire du schéma.
+    * Ce n'est pas un rôle de connexion (pas d'attribut LOGIN), sauf
+      si "autorise_login" vaut True.
+    * Ce n'est pas un super-utilisateur (pas d'attribut SUPERUSER), sauf
+      si "autorise_superuser" vaut True.
+    * Il dispose du privilège USAGE sur le schéma.
+    * Il ne dispose pas du privilège CREATE sur le schéma.
+    * Il dispose du privilège SELECT sur strictement plus de la moitié des
+      tables, tables partitionnées, vues, vues matérialisées et tables 
+      étrangères du schéma.
+    * Il ne dispose des privilèges UPDATE, INSERT, DELETE ou TRUNCATE
+      sur aucune des tables, tables partitionnées, vues, vues matérialisées 
+      et tables étrangères du schéma.
+    
+    Si plusieurs rôles remplissent ces conditions, la fonction renvoie celui
+    qui dispose du privilège SELECT sur le plus grand nombre de tables
+    ou objets assimilés. En cas d'égalité, le rôle renvoyé sera le premier
+    dans l'ordre alphabétique.
+
+    Le pseudo-rôle "public" est pris en compte, sauf si "autorise_public"
+    vaut False.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Nom du schéma.
+    autorise_public : boolean, default True
+        Le pseudo-rôle "public" est-il inclus dans la recherche ?
+    autorise_login : boolean, default False
+        Les rôles de connexion (attribut LOGIN) sont-ils inclus dans la
+        recherche ?
+    autorise_superuser : boolean, default False
+        Les super-utilisateurs (attribut SUPERUSER) sont-ils inclus dans la
+        recherche ?
+    
+    Returns
+    -------
+    text
+        Le nom du rôle pouvant être qualifié de lecteur du schéma, ou NULL
+        si aucun rôle ne remplit les conditions.
+
+*/
+    WITH relations AS (
+        SELECT relname, relacl, relowner
+            FROM pg_catalog.pg_class
+            WHERE pg_class.relnamespace = quote_ident(nom_schema)::regnamespace
+                AND relkind IN ('r', 'v', 'm', 'f', 'p')
+    ),
+    total AS (
+        SELECT floor(count(*) / 2)::int AS half FROM pg_catalog.pg_class
+            WHERE pg_class.relnamespace = quote_ident(nom_schema)::regnamespace
+                AND relkind IN ('r', 'v', 'm', 'f', 'p')
+    ),
+    relprivileges AS (
+        SELECT
+            acl.grantee,
+            count(DISTINCT relations.relname) FILTER (WHERE acl.privilege = 'SELECT') AS count_select,
+            count(DISTINCT relations.relname) FILTER (WHERE acl.privilege IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')) AS count_modify
+            FROM relations, aclexplode(relacl) AS acl (grantor, grantee, privilege, grantable)
+            GROUP BY grantee
+    ),
+    nspprivileges AS (
+        SELECT
+            acl.grantee,
+            count(DISTINCT pg_namespace.nspname) FILTER (WHERE acl.privilege = 'USAGE') AS count_usage,
+            count(DISTINCT pg_namespace.nspname) FILTER (WHERE acl.privilege = 'CREATE') AS count_create
+            FROM pg_catalog.pg_namespace, aclexplode(nspacl) AS acl (grantor, grantee, privilege, grantable)
+            WHERE pg_namespace.nspname = nom_schema AND NOT acl.grantee = pg_namespace.nspowner
+            GROUP BY grantee
+    )
+    SELECT
+        CASE WHEN nspprivileges.grantee = 0 
+        THEN 
+            'public' 
+        ELSE 
+            pg_roles.rolname::text
+        END AS rolname
+        FROM nspprivileges 
+            INNER JOIN relprivileges USING (grantee)
+            INNER JOIN total ON total.half < relprivileges.count_select
+            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspprivileges.grantee
+                AND (autorise_login OR NOT pg_roles.rolcanlogin)
+                AND (autorise_superuser OR NOT pg_roles.rolsuper)
+        WHERE 
+            relprivileges.count_modify = 0 
+            AND nspprivileges.count_usage = 1 
+            AND nspprivileges.count_create = 0
+            AND (nspprivileges.grantee = 0 AND autorise_public OR pg_roles.rolname IS NOT NULL)
+        ORDER BY relprivileges.count_select DESC, coalesce(pg_roles.rolname, 'public')
+        LIMIT 1 ;
+    $BODY$ ;
+
+COMMENT ON FUNCTION z_asgard.asgard_cherche_lecteur(text, boolean, boolean, boolean)  IS 'ASGARD. Au vu des privilèges établis, cherche le rôle le plus susceptible d''être qualifié de "lecteur" du schéma.' ;
+
+
+-- Function: z_asgard.asgard_cherche_editeur(text)
+
+CREATE OR REPLACE FUNCTION z_asgard.asgard_cherche_editeur(
+        nom_schema text,
+        autorise_public boolean DEFAULT True,
+        autorise_login boolean DEFAULT False,
+        autorise_superuser boolean DEFAULT False
+    ) 
+    RETURNS text 
+    LANGUAGE SQL
+    RETURNS NULL ON NULL INPUT
+    AS $BODY$
+/* Au vu des privilèges établis, cherche le rôle le plus susceptible d''être
+   qualifié d'"éditeur" du schéma.
+
+    Cette fonction renvoie, s'il existe, le rôle qui remplit les
+    conditions suivantes : 
+    * Ce n'est pas le propriétaire du schéma.
+    * Ce n'est pas un rôle de connexion (pas d'attribut LOGIN), sauf
+      si "autorise_login" vaut True.
+    * Ce n'est pas un super-utilisateur (pas d'attribut SUPERUSER), sauf
+      si "autorise_superuser" vaut True.
+    * Il dispose du privilège USAGE sur le schéma.
+    * Il ne dispose pas du privilège CREATE sur le schéma.
+    * Il dispose des privilèges INSERT et/ou UPDATE sur strictement plus
+      de la moitié des tables, tables partitionnées, vues, vues matérialisées 
+      et tables étrangères du schéma.
+    
+    Si plusieurs rôles remplissent ces conditions, la fonction renvoie celui
+    qui dispose des privilèges INSERT et/ou UPDATE sur le plus grand nombre 
+    de tables ou objets assimilés. En cas d'égalité, le rôle renvoyé sera le
+    premier dans l'ordre alphabétique.
+
+    Le pseudo-rôle "public" est pris en compte, sauf si "autorise_public"
+    vaut False.
+
+    Parameters
+    ----------
+    nom_schema : text
+        Nom du schéma.
+    autorise_public : boolean, default True
+        Le pseudo-rôle "public" est-il inclus dans la recherche ?
+    autorise_login : boolean, default False
+        Les rôles de connexion (attribut LOGIN) sont-ils inclus dans la
+        recherche ?
+    autorise_superuser : boolean, default False
+        Les super-utilisateurs (attribut SUPERUSER) sont-ils inclus dans la
+        recherche ?
+    
+    Returns
+    -------
+    text
+        Le nom du rôle pouvant être qualifié d'éditeur du schéma, ou NULL
+        si aucun rôle ne remplit les conditions.
+
+*/
+    WITH relations AS (
+        SELECT relname, relacl, relowner
+            FROM pg_catalog.pg_class
+            WHERE pg_class.relnamespace = quote_ident(nom_schema)::regnamespace
+                AND relkind IN ('r', 'v', 'm', 'f', 'p')
+    ),
+    total AS (
+        SELECT floor(count(*) / 2)::int AS half FROM pg_catalog.pg_class
+            WHERE pg_class.relnamespace = quote_ident(nom_schema)::regnamespace
+                AND relkind IN ('r', 'v', 'm', 'f', 'p')
+    ),
+    relprivileges AS (
+        SELECT
+            acl.grantee,
+            count(DISTINCT relations.relname) FILTER (WHERE acl.privilege IN ('INSERT', 'UPDATE')) AS count_edit
+            FROM relations, aclexplode(relacl) AS acl (grantor, grantee, privilege, grantable)
+            GROUP BY grantee
+    ),
+    nspprivileges AS (
+        SELECT
+            acl.grantee,
+            count(DISTINCT pg_namespace.nspname) FILTER (WHERE acl.privilege = 'USAGE') AS count_usage,
+            count(DISTINCT pg_namespace.nspname) FILTER (WHERE acl.privilege = 'CREATE') AS count_create
+            FROM pg_catalog.pg_namespace, aclexplode(nspacl) AS acl (grantor, grantee, privilege, grantable)
+            WHERE pg_namespace.nspname = nom_schema AND NOT acl.grantee = pg_namespace.nspowner
+            GROUP BY grantee
+    )
+    SELECT
+        CASE WHEN nspprivileges.grantee = 0 
+        THEN 
+            'public' 
+        ELSE 
+            pg_roles.rolname::text
+        END AS rolname
+        FROM nspprivileges 
+            INNER JOIN relprivileges USING (grantee)
+            INNER JOIN total ON total.half < relprivileges.count_edit
+            LEFT JOIN pg_catalog.pg_roles ON pg_roles.oid = nspprivileges.grantee
+                AND (autorise_login OR NOT pg_roles.rolcanlogin)
+                AND (autorise_superuser OR NOT pg_roles.rolsuper)
+        WHERE nspprivileges.count_usage = 1 
+            AND nspprivileges.count_create = 0
+            AND (nspprivileges.grantee = 0 AND autorise_public OR pg_roles.rolname IS NOT NULL)
+        ORDER BY relprivileges.count_edit DESC, coalesce(pg_roles.rolname, 'public')
+        LIMIT 1 ;
+    $BODY$ ;
+
+COMMENT ON FUNCTION z_asgard.asgard_cherche_editeur(text, boolean, boolean, boolean)  IS 'ASGARD. Au vu des privilèges établis, cherche le rôle le plus susceptible d''être qualifié d''"éditeur" du schéma.' ;
+
+
+-- Function: z_asgard_admin.asgard_restaure_editeurs_lecteurs(text, boolean, boolean, boolean, boolean)
+
+CREATE OR REPLACE FUNCTION z_asgard_admin.asgard_restaure_editeurs_lecteurs(
+        nom_schema text DEFAULT NULL,
+        preserve boolean DEFAULT True,
+        autorise_public boolean DEFAULT True,
+        autorise_login boolean DEFAULT False,
+        autorise_superuser boolean DEFAULT False
+    )
+    RETURNS text
+    LANGUAGE plpgsql
+    AS $_$
+/* Recalcule les éditeurs et lecteurs renseignés dans la table de gestion en fonction des droits effectifs.
+
+    Cette fonction s'appuie sur "z_asgard"."asgard_cherche_editeur" et 
+    "z_asgard"."asgard_cherche_lecteur" pour recalculer les lecteurs et éditeurs
+    de la table de gestion en fonction des privilèges effectifs sur les
+    objets de la base. Au contraire d'un simple UPDATE des champs "editeur" et 
+    "lecteur" de la table, qui confère une fonction au rôle spécifié et
+    pourra donc avoir pour effet de modifier les privilèges dont il dispose selon
+    ceux qui sont prévus pour ladite fonction (et, le cas échéant, de retirer lesdits
+    privilèges au rôle qui occupait auparavant la fonction), 
+    "asgard_restaure_editeurs_lecteurs" n'altère en aucune façon les droits de la base.
+
+    Parameters
+    ----------
+    nom_schema : text, optional
+        Si renseigné, les champs "lecteur" et "editeur" ne seront recalculés
+        que pour le rôle considéré. Sinon, ils seront mis à jour pour tous les
+        schémas actifs de la table.
+    preserve : boolean, default True
+        Si True, la fonction ne modifiera pas les lecteurs et éditeurs 
+        déjà renseignés dans la table de gestion. Elle en ajoutera
+        simplement là où il n'y en avait pas, sous réserve que les fonctions de
+        recherche aient renvoyé un résultat. À noter que si "preserve" vaut False,
+        la fonction aura aussi pour effet d'effacer les éditeurs et lecteurs
+        sans en renseigner de nouveaux quand les fonctions de recherche
+        n'identifient pas de rôles satisfaisant aux conditions.
+    autorise_public : boolean, default False
+        Passé en argument aux fonctions "asgard_cherche_editeur"
+        et "asgard_cherche_lecteur". Cf. définition de ces fonctions pour plus 
+        de détails.
+    autorise_login : boolean, default False
+        Passé en argument aux fonctions "asgard_cherche_editeur"
+        et "asgard_cherche_lecteur". Cf. définition de ces fonctions pour plus 
+        de détails.
+    autorise_superuser : boolean, default False
+        Passé en argument aux fonctions "asgard_cherche_editeur"
+        et "asgard_cherche_lecteur". Cf. définition de ces fonctions pour plus 
+        de détails.
+
+    Returns
+    -------
+    text
+        '__ RESTAURATION DES LECTEURS ET EDITEURS REUSSIE.'
+
+*/
+DECLARE
+    rec record ;
+    e_mssg text ;
+    e_detl text ;
+    e_hint text ;
+BEGIN
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        DISABLE TRIGGER asgard_on_modify_gestion_schema_after ;
+
+    FOR rec IN (
+        SELECT 
+            gestion_schema.nom_schema,
+            gestion_schema.editeur AS old_editeur,
+            z_asgard.asgard_cherche_editeur(
+                nom_schema := gestion_schema.nom_schema,
+                autorise_public := asgard_restaure_editeurs_lecteurs.autorise_public,
+                autorise_login := asgard_restaure_editeurs_lecteurs.autorise_login,
+                autorise_superuser := asgard_restaure_editeurs_lecteurs.autorise_superuser
+            ) AS new_editeur,
+            gestion_schema.lecteur AS old_lecteur,
+            z_asgard.asgard_cherche_lecteur(
+                nom_schema := gestion_schema.nom_schema,
+                autorise_public := asgard_restaure_editeurs_lecteurs.autorise_public,
+                autorise_login := asgard_restaure_editeurs_lecteurs.autorise_login,
+                autorise_superuser := asgard_restaure_editeurs_lecteurs.autorise_superuser
+            ) AS new_lecteur
+            FROM z_asgard_admin.gestion_schema
+            WHERE creation AND 
+                (
+                    asgard_restaure_editeurs_lecteurs.nom_schema IS NULL 
+                    OR gestion_schema.nom_schema = asgard_restaure_editeurs_lecteurs.nom_schema
+                )
+    )
+    LOOP
+
+        -- éditeur
+        IF (rec.old_editeur IS NULL OR NOT asgard_restaure_editeurs_lecteurs.preserve) 
+            AND coalesce(rec.old_editeur, '') != coalesce(rec.new_editeur, '')
+        THEN
+
+            IF rec.new_editeur = 'public'
+            THEN
+
+                UPDATE z_asgard_admin.gestion_schema
+                    SET editeur = 'public',
+                        oid_editeur = 0
+                    WHERE gestion_schema.nom_schema = rec.nom_schema ;
+            
+            ELSIF rec.new_editeur IS NULL
+            THEN 
+
+                 UPDATE z_asgard_admin.gestion_schema
+                    SET editeur = NULL,
+                        oid_editeur = NULL
+                        WHERE gestion_schema.nom_schema = rec.nom_schema ;
+            
+            ELSE
+
+                UPDATE z_asgard_admin.gestion_schema
+                    SET editeur = rec.new_editeur,
+                        oid_editeur = quote_ident(rec.new_editeur)::regrole::oid
+                    WHERE gestion_schema.nom_schema = rec.nom_schema ;
+            
+            END IF ;        
+
+            RAISE NOTICE '%', format(
+                'Restauration de l''éditeur du schéma "%s" dans la table de gestion. Avant : %s ; après : %s.',
+                rec.nom_schema,
+                coalesce(rec.old_editeur, 'NULL'),
+                coalesce(rec.new_editeur, 'NULL')
+            ) ;
+        
+        END IF ;
+
+        -- lecteur
+        IF (rec.old_lecteur IS NULL OR NOT asgard_restaure_editeurs_lecteurs.preserve) 
+            AND coalesce(rec.old_lecteur, '') != coalesce(rec.new_lecteur, '')
+        THEN
+
+            IF rec.new_lecteur = 'public'
+            THEN
+
+                UPDATE z_asgard_admin.gestion_schema
+                    SET lecteur = 'public',
+                        oid_lecteur = 0
+                    WHERE gestion_schema.nom_schema = rec.nom_schema ;
+
+            ELSIF rec.new_lecteur IS NULL
+            THEN 
+
+                 UPDATE z_asgard_admin.gestion_schema
+                    SET lecteur = NULL,
+                        oid_lecteur = NULL
+                        WHERE gestion_schema.nom_schema = rec.nom_schema ;
+            
+            ELSE
+
+                UPDATE z_asgard_admin.gestion_schema
+                    SET lecteur = rec.new_lecteur,
+                        oid_lecteur = quote_ident(rec.new_lecteur)::regrole::oid
+                    WHERE gestion_schema.nom_schema = rec.nom_schema ;
+            
+            END IF ;        
+
+            RAISE NOTICE '%', format(
+                'Restauration du lecteur du schéma "%s" dans la table de gestion. Avant : %s ; après : %s.',
+                rec.nom_schema,
+                coalesce(rec.old_lecteur, 'NULL'),
+                coalesce(rec.new_lecteur, 'NULL')
+            ) ;
+        
+        END IF ;
+
+    END LOOP ;
+
+    ALTER TABLE z_asgard_admin.gestion_schema
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_before,
+        ENABLE TRIGGER asgard_on_modify_gestion_schema_after ;
+
+    RETURN '__ RESTAURATION DES LECTEURS ET EDITEURS REUSSIE.' ;
+
+EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_hint = PG_EXCEPTION_HINT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE EXCEPTION 'FRE0 > %', e_mssg
+        USING DETAIL = e_detl,
+            HINT = e_hint ;
+
+END
+$_$;
+
+ALTER FUNCTION z_asgard_admin.asgard_restaure_editeurs_lecteurs(text, boolean, boolean, boolean, boolean)
+    OWNER TO g_admin ;
+
+COMMENT ON FUNCTION z_asgard_admin.asgard_restaure_editeurs_lecteurs(text, boolean, boolean, boolean, boolean) IS 'ASGARD. Recalcule les éditeurs et lecteurs renseignés dans la table de gestion en fonction des droits effectifs.' ;
+
 
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -5074,6 +5635,24 @@ BEGIN
     THEN
         NEW.creation := coalesce(NEW.creation, False) ;
         NEW.nomenclature := coalesce(NEW.nomenclature, False) ;
+    END IF ;
+
+    ------- SCHEMA DEJA REFERENCE ------
+    -- en cas d'INSERT portant sur un schéma actif déjà référencé
+    -- dans la table de gestion, Asgard tente de déréférencer le
+    -- schéma pour permettre au référencement de se dérouler sans
+    -- erreur
+    IF TG_OP = 'INSERT'
+    THEN
+        IF NEW.creation AND NEW.nom_schema IN (
+                SELECT gestion_schema_usr.nom_schema
+                    FROM z_asgard.gestion_schema_usr
+                    WHERE creation
+            )
+        THEN
+            RAISE NOTICE 'Le schéma % est déjà référencé dans la table de gestion. Tentative de dé-référencement préalable.', NEW.nom_schema ;
+            PERFORM z_asgard_admin.asgard_sortie_gestion_schema(NEW.nom_schema) ;
+        END IF ;
     END IF ;
     
     ------ EFFACEMENT D'UN ENREGISTREMENT ------
@@ -5368,6 +5947,17 @@ BEGIN
         IF NEW.nom_schema IS NULL
         THEN
             RAISE EXCEPTION 'TB8. Saisie incorrecte. Le nom du schéma doit être renseigné (champ nom_schema).' ;
+        END IF ;
+
+        -- pas de schéma système
+        IF NEW.nom_schema ~ ANY(
+            ARRAY[
+                '^pg_toast', '^pg_temp', '^pg_catalog$', '^public$', 
+                '^information_schema$', '^topology$'
+            ]
+        )
+        THEN
+            RAISE EXCEPTION 'TB27. Le référencement des schémas système n''est pas autorisé (schéma %).', NEW.nom_schema ;
         END IF ;
         
         -- unicité de nom_schema

@@ -1,13 +1,13 @@
-asgard (1.4.0) stable; urgency=high
+asgard (1.4.1) stable; urgency=high
 
-  * Suppression de contraintes qui rendaient nécessaires des actions de l'administrateur pour permettre à des rôles d'exécuter certaines actions sans apporter de bénéfice fonctionnel.
+  * Correction d'une anomalie qui pouvait entraîner la perte du contenu de la table de gestion au cours de la restauration de la base.
 
-  * Finalisation de la prise en charge de tous les objets de PostgreSQL 9.5 à 15 (objet statistique étendu, classe d'opérateurs, famille d'opérateurs).
+  * Complexification du mot de passe initial de consult.defaut pour assurer la compatibilité avec passwordcheck.
 
-  * Les rôles membres du producteur d'un schéma inactif peuvent désormais effacer ce dernier de la table de gestion d'Asgard, à l'instar du rôle producteur lui-même.
+  * Renforcement de l'interdiction du référencement des schémas système.
 
-  * Correction d'anomalies et améliorations mineures.
+  * Nouveaux utilitaires de résolution des problèmes.
   
-  Pour plus de détails : <https://snum.scenari-community.org/Asgard/Documentation/co/SEC_1-4.html>
+  Pour plus de détails : <https://snum.scenari-community.org/Asgard/Documentation/co/SEC_1-4-1.html>
 
- -- Leslie Lemaire (MTECT-MTE-SEMer/SG/DNUM/UNI/DRC) <drc.uni.dnum.sg@developpement-durable.gouv.fr>  Wed, 2 Nov 2022 15:34:00 +0100
+ -- Leslie Lemaire (MTECT/SG/DNUM/UNI/DRC) <drc.uni.dnum.sg@developpement-durable.gouv.fr>  Fri, 20 Sep 2024 12:00:00 +0200
