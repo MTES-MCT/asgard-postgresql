@@ -16,13 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Code checkout
-        uses: actions/checkout@v3    
+        uses: actions/checkout@v4  
       - name: Deb building
         run: |
           DEB_FILE=$(bash ./debian/build.sh $PKG_NAME ${{ inputs.asgard_version }} $DEB_REV)
           echo "Paquet construit : $DEB_FILE"
       - name: Artifact upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: asgard-deb
           path: "*.deb"
