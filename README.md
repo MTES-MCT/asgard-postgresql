@@ -5,7 +5,7 @@ ASGARD. Système de gestion des droits pour PostgreSQL.
 
 ASGARD est une extension du système de gestion de bases de données PostgreSQL. Elle propose un cadre méthodologique et des outils pour faciliter la gestion des droits sur les bases PostgreSQL.
 
-ASGARD a été conçue et développée dans le cadre du groupe de travail PostGIS réunissant des services du pôle ministériel de la transition écologique, de la cohésion des territoires, de la transition énergétique et de la mer, ainsi que du ministère de l'agriculture et de l'alimentation.
+ASGARD a été conçue et développée dans le cadre du groupe de travail PostGIS réunissant des services des ministères en charge de l'écologie et de l'agriculture.
 
 ## Compatibilité
 
@@ -27,15 +27,15 @@ La documentation de la suite ASGARD, incluant ses illustrations (répertoire `do
 
 ## Crédits
 
-© République Française, 2020-2023.
+© République Française, 2020-2024.
 
 ### Éditeur
 
-Direction du numérique du Ministère de la transition écologique et de la cohésion des territoires, du Ministère de la transition énergétique et du Secrétariat d'Etat à la mer.
+Ministère de la Transition écologique et de la Cohésion des territoires, direction du Numérique.
 
 ### Contributeurs
 
-Leslie Lemaire (DNUM/UNI/DRC) et Alain Ferraton (DNUM/MSP/DS/GSG).
+Leslie Lemaire (DNUM/UNI/DRC) et, pour la première version, Alain Ferraton (DNUM/MSP/DS/GSG).
 
 ## Contact
 
