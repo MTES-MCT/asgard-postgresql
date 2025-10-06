@@ -1,13 +1,11 @@
-asgard (1.4.1) stable; urgency=high
+asgard (1.5.0) stable; urgency=high
 
-  * Correction d'une anomalie qui pouvait entraîner la perte du contenu de la table de gestion au cours de la restauration de la base.
+  * Mise en compatibilité avec PostgreSQL 16 à 18.
 
-  * Complexification du mot de passe initial de consult.defaut pour assurer la compatibilité avec passwordcheck.
+  * Correction de la fonction z_asgard_admin.asgard_all_login_grant_role, qui ne fonctionnait pas avec des rôles dont le nom n'était pas normalisé.
 
-  * Renforcement de l'interdiction du référencement des schémas système.
-
-  * Nouveaux utilitaires de résolution des problèmes.
+  * Evolution du périmètre des "schémas système" non référençables par Asgard. 
   
-  Pour plus de détails : <https://snum.scenari-community.org/Asgard/Documentation/co/SEC_1-4-1.html>
+  Pour plus de détails : <https://github.com/MTES-MCT/asgard-postgresql/releases/tag/v1.5.0>
 
- -- Leslie Lemaire (MTECT/SG/DNUM/UNI/DRC) <drc.uni.dnum.sg@developpement-durable.gouv.fr>  Fri, 20 Sep 2024 12:00:00 +0200
+ -- Leslie Lemaire (SG/DNUM/UNI/DRC) <drc.uni.dnum.sg@developpement-durable.gouv.fr>  Mon, 06 Oct 2025 12:00:00 +0200

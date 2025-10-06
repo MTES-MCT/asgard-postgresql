@@ -5,6 +5,13 @@ ensemble de bases pré-définies, pour différentes versions de
 PostgreSQL. Les bases et leur accès sont configurés via le
 dictionnaire :py:data:`PG_DATABASES` ci-dessus.
 
+Pré-requis :
+
+* La base de test doit préexister.
+* Un rôle dénommé ``g_admin``, disposant du privilège ``CREATE`` 
+  sur la base courante avec l'option ``GRANT`` et des attributs
+  ``CREATEROLE``, ``CREATEDB`` et ``BYPASSRLS`` doit pré-exister.
+
 Sous Windows, il est nécessaire de lancer les commandes en
 tant qu'administrateur pour permettre la mise à jour des fichiers
 de l'extension dans les répertoires dédiés des serveurs. À défaut
@@ -55,10 +62,10 @@ from recette import __path__ as recette_path
 ASGARD_PATH = Path(recette_path[0]).parent
 
 PG_DATABASES = [
-    {
-        'pg_version': '9.5',
-        'port': '5431'
-    },
+    # {
+    #     'pg_version': '9.5',
+    #     'port': '5431'
+    # },
     {
         'pg_version': '10',
         'port': '5432'
@@ -83,10 +90,18 @@ PG_DATABASES = [
         'pg_version': '15',
         'port': '5437'
     },
-    # {
-    #     'pg_version': '16',
-    #     'port': '5438'
-    # }
+    {
+         'pg_version': '16',
+         'port': '5438'
+    },
+    {
+        'pg_version': '17',
+        'port' : '5439'
+    },
+    {
+        'pg_version': '18',
+        'port' : '5440'
+    }
 ]
 """Bases de tests.
 
@@ -395,8 +410,11 @@ def pg_connection(
     finally:
         conn.close()
 
-def run(pg_versions=None, extension_version=None, do_not_copy=False):
+def run(pg_versions=None, do_not_copy=False):
     """Exécute la recette.
+
+    La version de l'extension qui est testée est toujours celle
+    qui est renseignée dans son fichier .control.
 
     Parameters
     ----------
@@ -404,10 +422,6 @@ def run(pg_versions=None, extension_version=None, do_not_copy=False):
         Numéros des versions pour lesquelles la recette doit être
         lancée. Si non spécifié, la recette est lancée sur toutes
         les bases de test listées par :py:data:`PG_DATABASES`.
-    extension_version : str, optional
-        Le numéro de la version de l'extension à tester. Si non
-        spécifié, c'est la version par défaut du fichier
-        ``asgard.control`` qui est considérée.
     do_not_copy : bool, default False
         Si ``True``, les fichiers de l'extension ne seront pas
         mis à jour avant exécution de la recette.
@@ -421,8 +435,6 @@ def run(pg_versions=None, extension_version=None, do_not_copy=False):
         'extension_name': 'asgard',
         'test_requirements': ['postgres_fdw']
         }
-    if extension_version:
-        kwargs['extension_version'] = extension_version
 
     for pg_connection_info in PgConnectionInfo.databases():
         if pg_versions and not pg_connection_info.pg_version in pg_versions:
@@ -459,5 +471,5 @@ def run(pg_versions=None, extension_version=None, do_not_copy=False):
         else:
             print(f'... {nb_tests} tests, aucune erreur')
 
-if __name__ == '__main__':
-    run()
+# if __name__ == '__main__':
+#     run()

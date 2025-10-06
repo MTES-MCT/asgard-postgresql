@@ -1,13 +1,12 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.4.0
+-- ASGARD - Système de gestion des droits pour PostgreSQL, version 1.5.0
 -- > Script de recette.
 --
--- Copyright République Française, 2020-2022.
--- Secrétariat général du Ministère de la Transition écologique et
--- de la Cohésion des territoires, du Ministère de la Transition
--- énergétique et du Secrétariat d'Etat à la Mer.
--- Direction du numérique.
+-- Copyright République Française, 2020-2025.
+-- Secrétariat général des ministères en charge de l'aménagement du 
+-- territoire et de la transition écologique.
+-- Direction du Numérique.
 --
 -- contributeurs pour la recette : Leslie Lemaire (SNUM/UNI/DRC).
 -- 
@@ -17,6 +16,17 @@
 --
 -- schéma contenant les objets : z_asgard_recette
 --
+-- Les tests sont à exécuter :
+-- - Sur une base vierge où a été préalablement installée l'extension asgard ;
+-- - Avec un super-utilisateur.
+--
+-- Pour exécuter tous les tests :
+-- > SELECT * FROM z_asgard_recette.execute_recette() ;
+-- 
+-- La plupart des tests existent en deux versions, une forme txxx() avec des 
+-- noms d'objets normalisés (où xxx est le numéro du test), et une forme txxxb()
+-- qui réalise les mêmes contrôles, mais avec des noms d'objets ésotériques.
+--
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
@@ -24,19 +34,12 @@
 ------ 9 - RECETTE TECHNIQUE (TESTS UNITAIRES) ------
 -----------------------------------------------------
 /* 9.01 - Préparation et fonction chapeau
-   9.02 - Bibliothèque de tests */
-   
-/* Les tests sont à exécuter :
-- sur une base vierge où ont simplement été installées les
-extensions postgres_fdw et asgard ;
-- avec un super-utilisateur.
-
-SELECT * FROM z_asgard_recette.execute_recette() ;
-
-Tous les tests existent en deux versions, une forme avec noms d'objets
-normalisés et une forme "b" avec noms d'objets ésotériques. */   
+   9.02 - Bibliothèque de tests */ 
    
 /*
+
+Modèle :
+
 -- FUNCTION: z_asgard_recette.t000()
 
 CREATE OR REPLACE FUNCTION z_asgard_recette.t000()
@@ -82,11 +85,21 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.execute_recette()
     RETURNS TABLE (test text, description text)
     LANGUAGE plpgsql
     AS $_$
-/* OBJET : Exécution de la recette : lance successivement toutes
-           les fonctions de tests du schéma z_asgard_recette.
-APPEL : SELECT * FROM z_asgard_recette.execute_recette() ;
-ARGUMENTS : néant.
-SORTIE : table des tests qui ont échoué. */
+/* Exécution de la recette : lance successivement toutes
+   les fonctions de tests du schéma z_asgard_recette.
+
+    Appel :
+    >>> SELECT * FROM z_asgard_recette.execute_recette() ;
+
+    Returns
+    ------- 
+    table
+        Liste des tests qui ont échoué, prenant la forme d'une
+        table à deux champs :
+        - "test" est le nom de la fonction de test.
+        - "description" est son descriptif.
+        
+*/
 DECLARE
     l text[] ;
     test record ;
@@ -94,6 +107,9 @@ DECLARE
 BEGIN
     SET LOCAL client_min_messages = 'ERROR' ;
     -- empêche l'affichage des messages d'ASGARD
+
+    DROP EXTENSION IF EXISTS asgard ;
+    CREATE EXTENSION asgard ;
     
     FOR test IN (
             SELECT oid::regprocedure::text AS nom, proname::text AS ref
@@ -246,8 +262,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t002()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+    e_mssg text ;
+    e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque ;
@@ -255,40 +271,41 @@ BEGIN
     ------ modification du nom ------
     ALTER SCHEMA c_bibliotheque RENAME TO c_librairie ;
     
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_librairie' ;
-        
-    r := b ;
- 
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_bibliotheque' ;
-        
-    r := r AND b ;
-    
-    SELECT count(*) = 1
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_librairie' ;
-        
-    r := r AND b ;
- 
-    SELECT count(*) = 0
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
+    ASSERT (
+        SELECT count(*)
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_librairie'
+    ) = 1, 'échec assertion 1' ;
+
+    ASSERT (
+        SELECT count(*)
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+    ) = 0, 'échec assertion 2' ;
+
+    ASSERT (
+        SELECT count(*)
+            FROM pg_catalog.pg_namespace
+            WHERE nspname = 'c_librairie'
+    ) = 1, 'échec assertion 3' ;
+
+    ASSERT (
+        SELECT count(*)
+            FROM pg_catalog.pg_namespace
+            WHERE nspname = 'c_bibliotheque'
+    ) = 0, 'échec assertion 4' ;
 
     DROP SCHEMA c_librairie ;
-    DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_librairie' ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -362,36 +379,38 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t003()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque ;
   
     ------ modification du propriétaire ------
     ALTER SCHEMA c_bibliotheque OWNER TO g_admin_ext ;
-    
-    SELECT producteur = 'g_admin_ext'
-        INTO STRICT b
-        FROM z_asgard.gestion_schema_usr
-        WHERE nom_schema = 'c_bibliotheque' ;
-        
-    r := b ;
-    
-    SELECT nspowner::regrole::text = 'g_admin_ext'
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ; 
 
+    ASSERT (
+        SELECT producteur
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+     ) = 'g_admin_ext', 'échec assertion 1' ;
+    
+    ASSERT (
+        SELECT nspowner::regrole::text
+            FROM pg_catalog.pg_namespace
+            WHERE nspname = 'c_bibliotheque'
+     ) = 'g_admin_ext', 'échec assertion 2' ;
 
     DROP SCHEMA c_bibliotheque ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -1138,38 +1157,61 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t012()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin_ext ;
-    CREATE TABLE c_bibliotheque.journal_du_mur (id serial PRIMARY KEY, jour date, entree text) ;
+    CREATE TABLE c_bibliotheque.journal_du_mur (
+        id serial PRIMARY KEY, jour date, entree text
+    ) ;
     
     ------ révocation d''un privilège ------
     REVOKE DELETE ON TABLE c_bibliotheque.journal_du_mur FROM g_admin_ext ;
-    
-    SELECT relacl::text ~ ('g_admin_ext=[rwaDxt]{6}' || '[/]' || relowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur' ;
 
-    r := b ;
+    IF current_setting('server_version_num')::int < 170000
+    THEN
+        ASSERT (
+            SELECT relacl::text ~ ('g_admin_ext=[rwaDxt]{6}' || '[/]' || relowner::regrole::text)
+                FROM pg_catalog.pg_class
+                WHERE relname = 'journal_du_mur'
+        ), 'échec assertion 1' ;
+    ELSE
+        ASSERT (
+            SELECT relacl::text ~ ('g_admin_ext=[rwaDxtm]{7}' || '[/]' || relowner::regrole::text)
+                FROM pg_catalog.pg_class
+                WHERE relname = 'journal_du_mur'
+        ), 'échec assertion 1 (PG17+)' ;
+    END IF ;
     
     ALTER SCHEMA c_bibliotheque OWNER TO g_admin ;
 
-    SELECT relacl::text ~ ('g_admin=[rwaDxt]{6}' || '[/]' || relowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int < 170000
+    THEN
+        ASSERT (
+            SELECT relacl::text ~ ('g_admin=[rwaDxt]{6}' || '[/]' || relowner::regrole::text)
+                FROM pg_catalog.pg_class
+                WHERE relname = 'journal_du_mur'
+        ), 'échec assertion 2' ;
+    ELSE
+        ASSERT (
+            SELECT relacl::text ~ ('g_admin=[rwaDxtm]{7}' || '[/]' || relowner::regrole::text)
+                FROM pg_catalog.pg_class
+                WHERE relname = 'journal_du_mur'
+        ), 'échec assertion 2 (PG17+)' ;
+    END IF ;
 
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -1184,34 +1226,52 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t012b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE "Admin EXT" ;
     CREATE ROLE "Admin" ;
 
     CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "Admin EXT" ;
-    CREATE TABLE "c_Bibliothèque"."Journal du mur" (id serial PRIMARY KEY, jour date, entree text) ;
+    CREATE TABLE "c_Bibliothèque"."Journal du mur" (
+        id serial PRIMARY KEY, jour date, entree text
+    ) ;
     
     ------ révocation d''un privilège ------
     REVOKE DELETE ON TABLE "c_Bibliothèque"."Journal du mur" FROM "Admin EXT" ;
-    
-    SELECT array_to_string(relacl, ',') ~ ('"Admin EXT"=[rwaDxt]{6}[/]"Admin EXT"')
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur' ;
 
-    r := b ;
+    IF current_setting('server_version_num')::int < 170000
+    THEN
+        ASSERT (
+            SELECT relacl[1]::text ~ '^"Admin\sEXT"=[rwaDxt]{6}[/]"Admin\sEXT"$'
+                FROM pg_catalog.pg_class
+                WHERE relname = 'Journal du mur'
+        ), 'échec assertion 1' ;
+    ELSE
+        ASSERT (
+            SELECT relacl[1]::text ~ '^"Admin\sEXT"=[rwaDxtm]{7}[/]"Admin\sEXT"$'
+                FROM pg_catalog.pg_class
+                WHERE relname = 'Journal du mur'
+        ), 'échec assertion 1 (PG17+)' ;
+    END IF ;
     
     ALTER SCHEMA "c_Bibliothèque" OWNER TO "Admin" ;
 
-    SELECT array_to_string(relacl, ',') ~ ('Admin=[rwaDxt]{6}[/]Admin')
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'Journal du mur' ;
-        
-    r := r AND b ;
+    IF current_setting('server_version_num')::int < 170000
+    THEN
+        ASSERT (
+            SELECT relacl[1]::text ~ '^Admin=[rwaDxt]{6}[/]Admin$'
+                FROM pg_catalog.pg_class
+                WHERE relname = 'Journal du mur'
+        ), 'échec assertion 2' ;
+    ELSE
+        ASSERT (
+            SELECT relacl[1]::text ~ '^Admin=[rwaDxtm]{7}[/]Admin$'
+                FROM pg_catalog.pg_class
+                WHERE relname = 'Journal du mur'
+        ), 'échec assertion 2 (PG17+)' ;
+    END IF ;
 
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -1219,9 +1279,14 @@ BEGIN
     DROP ROLE "Admin EXT" ;
     DROP ROLE "Admin" ;
     
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -1691,8 +1756,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t017()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque ;
@@ -1708,65 +1773,58 @@ BEGIN
         WHERE nom_schema = 'c_bibliotheque' ;
     
     -- #1
-    SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := b ;
-    RAISE NOTICE '17-1 > %', r::text ; 
+    ASSERT (
+        SELECT nspacl::text ~ ('g_admin_ext=U' || '[/]' || nspowner::regrole::text)
+            FROM pg_catalog.pg_namespace
+            WHERE nspname = 'c_bibliotheque'
+    ), 'échec assertion 1' ;
     
     -- #2
-    SELECT relacl::text ~ ('g_admin_ext=[rwad]{4}' || '[/]' || relowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '17-2 > %', r::text ; 
+    ASSERT (
+        SELECT relacl::text ~ ('g_admin_ext=[rwad]{4}' || '[/]' || relowner::regrole::text)
+            FROM pg_catalog.pg_class
+            WHERE relname = 'journal_du_mur'
+    ), 'échec assertion 2' ;
     
     -- #3
-    SELECT relacl::text ~ ('g_admin_ext=[rU]{2}' || '[/]' || relowner::regrole::text)
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur_id_seq' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '17-3 > %', r::text ; 
+    ASSERT (
+        SELECT relacl::text ~ ('g_admin_ext=[rU]{2}' || '[/]' || relowner::regrole::text)
+            FROM pg_catalog.pg_class
+            WHERE relname = 'journal_du_mur_id_seq'
+    ), 'échec assertion 3' ;
     
     -- #4
-    SELECT NOT nspacl::text ~ 'g_consult'
-        INTO STRICT b
-        FROM pg_catalog.pg_namespace
-        WHERE nspname = 'c_bibliotheque' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '17-4 > %', r::text ; 
+    ASSERT (
+        SELECT NOT nspacl::text ~ 'g_consult'
+            FROM pg_catalog.pg_namespace
+            WHERE nspname = 'c_bibliotheque'
+    ), 'échec assertion 4' ;
     
     -- #5
-    SELECT NOT relacl::text ~ 'g_consult'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '17-5 > %', r::text ; 
+    ASSERT (
+        SELECT NOT relacl::text ~ 'g_consult'
+            FROM pg_catalog.pg_class
+            WHERE relname = 'journal_du_mur'
+    ), 'échec assertion 5' ;
     
     -- #6
-    SELECT NOT relacl::text ~ 'g_consult'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relname = 'journal_du_mur_id_seq' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '17-6 > %', r::text ; 
+    ASSERT (
+        SELECT NOT relacl::text ~ 'g_consult'
+            FROM pg_catalog.pg_class
+            WHERE relname = 'journal_du_mur_id_seq'
+    ), 'échec assertion 6' ;
     
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -3397,8 +3455,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t029()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -3406,25 +3462,40 @@ BEGIN
     CREATE SCHEMA c_bibliotheque ; 
     
     ------ producteur rôle de connexion (erreur) ------
-    UPDATE z_asgard.gestion_schema_usr
-        SET producteur = 'consult.defaut'
-        WHERE nom_schema = 'c_bibliotheque' ;
+    BEGIN
+
+        UPDATE z_asgard.gestion_schema_usr
+            SET producteur = 'consult.defaut'
+            WHERE nom_schema = 'c_bibliotheque' ;
+        
+        ASSERT False, 'échec assertion 1' ;
+    
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                                e_detl = PG_EXCEPTION_DETAIL ;
+        
+        ASSERT e_mssg ~ 'FGP2[.]', 'échec assertion 2' ;
+    
+    END ;
 
     DROP SCHEMA c_bibliotheque ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_bibliotheque' ;
-        
-    RETURN False ;
-    
-EXCEPTION WHEN OTHERS THEN
+
+    RETURN True ;
+
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
-                            
-    RETURN e_mssg ~ 'TA3[.]' OR e_detl ~ 'TA3[.]' OR False ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
 
 END
 $_$;
 
 COMMENT ON FUNCTION z_asgard_recette.t029() IS 'ASGARD recette. TEST : interdiction producteur rôle de connexion.' ;
+
 
 -- FUNCTION: z_asgard_recette.t029b()
 
@@ -3433,8 +3504,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t029b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -3444,22 +3513,36 @@ BEGIN
     CREATE SCHEMA "c_Bibliothèque" ; 
     
     ------ producteur rôle de connexion (erreur) ------
-    UPDATE z_asgard.gestion_schema_usr
-        SET producteur = 'Jon Snow'
-        WHERE nom_schema = 'c_Bibliothèque' ;
+    BEGIN
+
+        UPDATE z_asgard.gestion_schema_usr
+            SET producteur = 'Jon Snow'
+            WHERE nom_schema = 'c_Bibliothèque' ;
+
+        ASSERT False, 'échec assertion 1' ;
+    
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                                e_detl = PG_EXCEPTION_DETAIL ;
+        
+        ASSERT e_mssg ~ 'FGP2[.]', 'échec assertion 2' ;
+    
+    END ;
 
     DROP SCHEMA "c_Bibliothèque" ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
     
     DROP ROLE "Jon Snow" ;
     
-    RETURN False ;
-    
-EXCEPTION WHEN OTHERS THEN
+    RETURN True ;
+
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
-                            
-    RETURN e_mssg ~ 'TA3[.]' OR e_detl ~ 'TA3[.]' OR False ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
 
 END
 $_$;
@@ -4929,7 +5012,6 @@ $_$;
 COMMENT ON FUNCTION z_asgard_recette.t038() IS 'ASGARD recette. TEST : import de la nomenclature.' ;
 
 
-
 -- FUNCTION: z_asgard_recette.t039()
 
 CREATE OR REPLACE FUNCTION z_asgard_recette.t039()
@@ -4941,18 +5023,75 @@ DECLARE
    e_detl text ;
    s record ;
 BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+
+    DROP EXTENSION asgard ;
     
-    ------ hors z_asgard_admin ------
-    PERFORM z_asgard_admin.asgard_initialisation_gestion_schema(ARRAY['z_asgard_admin']) ;
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE SCHEMA c_librairie AUTHORIZATION g_asgard_producteur ;
+
+    CREATE EXTENSION asgard ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.gestion_schema) = 0,
+        'échec assertion 0' ;
+
+    ------ avec des exceptions ------
+    PERFORM z_asgard_admin.asgard_initialisation_gestion_schema(
+        exceptions := ARRAY['c_bibliotheque', 'z_asgard_recette', 'z_asgard']) ;
         
-    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette') = 1, 'échec assertion #1' ;
+    ASSERT (SELECT count(*) FROM z_asgard_admin.gestion_schema) = 1, 
+        'échec assertion 1a' ;
+
+    ASSERT 'c_librairie' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema 
+            WHERE producteur = 'g_asgard_producteur'
+    ), 'échec assertion 1b' ;    
     
     ------ le reste ------    
     PERFORM z_asgard_admin.asgard_initialisation_gestion_schema() ;
-        
-    ASSERT (SELECT count(*) FROM z_asgard.gestion_schema_usr
-        WHERE NOT nom_schema = 'z_asgard_recette') = 2, 'échec assertion #1' ;
+
+    ASSERT NOT 'z_asgard_admin' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema
+    ), 'échec assertion 2a' ;
+
+    ASSERT NOT 'public' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema
+    ), 'échec assertion 2b' ;
+
+    ASSERT NOT 'information_schema' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema
+    ), 'échec assertion 2c' ;
+
+    ASSERT NOT 'pg_catalog' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema
+    ), 'échec assertion 2d' ;
+
+    ASSERT (
+        SELECT count(*) FROM z_asgard_admin.gestion_schema
+            WHERE nom_schema ~ '^pg_'
+    ) = 0, 'échec assertion 2e' ;
+
+    ASSERT (SELECT count(*) FROM z_asgard_admin.gestion_schema) = 4, 
+        'échec assertion 3a' ;
+
+    ASSERT 'c_bibliotheque' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema 
+            WHERE producteur = 'g_asgard_producteur'
+    ), 'échec assertion 3b' ;
+
+    ASSERT 'z_asgard' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema 
+            WHERE producteur = 'g_admin_ext'
+    ), 'échec assertion 3c' ;
+
+    ASSERT 'z_asgard_recette' IN (
+        SELECT nom_schema FROM z_asgard_admin.gestion_schema
+    ), 'échec assertion 3d' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DROP SCHEMA c_librairie ;
+    DROP ROLE g_asgard_producteur ;
 
     FOR s IN (SELECT * FROM z_asgard.gestion_schema_usr)
     LOOP
@@ -5036,8 +5175,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t040()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_admin ;
@@ -5061,46 +5200,59 @@ BEGIN
     ------ référencement avec asgard_initialise_schema ------
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur' ;
+    ASSERT (
+        SELECT relowner::regrole::text
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace
+                AND relname = 'journal_du_mur'
         
-    r := b ;
+    ) = 'g_admin', 'échec assertion 1' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
-        SELECT relowner::regrole::text = 'g_admin'
-            INTO STRICT b
-            FROM pg_catalog.pg_class
-            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis' ;
+
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_catalog.pg_class
+                WHERE relnamespace = 'c_bibliotheque'::regnamespace
+                    AND relname = 'journal_du_mur_bis'
             
-        r := r AND b ;
+        ) = 'g_admin', 'échec assertion 2' ;
+
     END IF ;
-    
-    SELECT relowner::regrole::text = 'g_admin'
-        INTO STRICT b
-        FROM pg_catalog.pg_class
-        WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_id_seq' ;
+
+    ASSERT (
+        SELECT relowner::regrole::text
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'c_bibliotheque'::regnamespace
+                AND relname = 'journal_du_mur_id_seq'
         
-    r := r AND b ;
+    ) = 'g_admin', 'échec assertion 3' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
-        SELECT relowner::regrole::text = 'g_admin'
-            INTO STRICT b
-            FROM pg_catalog.pg_class
-            WHERE relnamespace = 'c_bibliotheque'::regnamespace::oid AND relname = 'journal_du_mur_bis_id_seq' ;
+
+        ASSERT (
+            SELECT relowner::regrole::text
+                FROM pg_catalog.pg_class
+                WHERE relnamespace = 'c_bibliotheque'::regnamespace
+                    AND relname = 'journal_du_mur_bis_id_seq'
             
-        r := r AND b ;
+        ) = 'g_admin', 'échec assertion 4' ;
+
     END IF ;
 
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
         
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -5395,7 +5547,7 @@ BEGIN
     
     SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
             AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
-            AND nspowner = 'rec_nouveau_producteur'::regrole::oid
+            AND nspowner::regrole::text = 'rec_nouveau_producteur'
         INTO STRICT r
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_bibliotheque' ;
@@ -5443,9 +5595,10 @@ BEGIN
     ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
         'échec assertion #2' ;
     
-    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
-        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
-        'échec assertion #3' ;
+    ASSERT '"RECNouveauProducteur"' IN (
+        SELECT nspowner::regrole::text
+            FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'
+        ), 'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5485,7 +5638,7 @@ BEGIN
     
     SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
             AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
-            AND nspowner = 'rec_nouveau_producteur'::regrole::oid
+            AND nspowner::regrole::text = 'rec_nouveau_producteur'
         INTO STRICT r
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_bibliotheque' ;
@@ -5528,9 +5681,10 @@ BEGIN
     ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
         'échec assertion #2' ;
     
-    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
-        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
-        'échec assertion #3' ;
+    ASSERT '"RECNouveauProducteur"' IN (
+        SELECT nspowner::regrole::text
+            FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'
+    ), 'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5575,7 +5729,7 @@ BEGIN
     
     SELECT array_to_string(nspacl, ',') ~ 'rec_nouvel_editeur'
             AND array_to_string(nspacl, ',') ~ 'rec_nouveau_lecteur'
-            AND nspowner = 'rec_nouveau_producteur'::regrole::oid
+            AND nspowner::regrole::text = 'rec_nouveau_producteur'
         INTO STRICT r
         FROM pg_catalog.pg_namespace
         WHERE nspname = 'c_bibliotheque' ;
@@ -5623,9 +5777,11 @@ BEGIN
     ASSERT has_schema_privilege('REC"Nouveau lecteur', 'c_Bibliothèque', 'USAGE'),
         'échec assertion #2' ;
     
-    ASSERT '"RECNouveauProducteur"'::regrole::oid IN (SELECT nspowner
-        FROM pg_catalog.pg_namespace WHERE nspname = 'c_Bibliothèque'),
-        'échec assertion #3' ;
+    ASSERT '"RECNouveauProducteur"' IN (
+        SELECT nspowner::regrole::text
+            FROM pg_catalog.pg_namespace 
+            WHERE nspname = 'c_Bibliothèque'
+    ), 'échec assertion #3' ;
     
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema = 'c_Bibliothèque' ;
@@ -5677,7 +5833,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #1-b' ;
+        ASSERT e_mssg ~ 'FRE3[.]' OR False, 'échec assertion #1-b' ;
     END ;
     
     ------ modification du champ producteur ------
@@ -5692,7 +5848,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #2-b' ;
+        ASSERT e_mssg ~ 'FRE4[.]' OR False, 'échec assertion #2-b' ;
     END ;
     
     ------ modification du champ éditeur ------
@@ -5707,7 +5863,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #3-b' ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #3-b' ;
     END ;
     
     ------ modification du champ lecteur ------
@@ -5722,7 +5878,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False, 'échec assertion #4-b' ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #4-b' ;
     END ;
     
     ------ mise à la corbeille ------
@@ -5742,7 +5898,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False, 'échec assertion #5-b' ;
+        ASSERT e_mssg ~ 'FRE5[.]' OR False, 'échec assertion #5-b' ;
     END ;
     
     ------ restauration du schéma ------
@@ -5763,8 +5919,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
-            OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False, 'échec assertion #6-b' ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #6-b' ;
     END ;
     
     ------ référencement du schéma (par un INSERT) ------
@@ -5778,7 +5933,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False, 'échec assertion #7-b' ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #7-b' ;
     END ;
     
     ------ création d'un schéma par INSERT ------
@@ -5794,7 +5949,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False, 'échec assertion #8-b' ;
+        ASSERT e_mssg ~ 'FRE2[.]' OR False, 'échec assertion #8-b' ;
     END ;
     
     ------ création d'un schéma par bascule de creation ------
@@ -5814,7 +5969,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False, 'échec assertion #9-b' ;
+        ASSERT e_mssg ~ 'FRE2[.]' OR False, 'échec assertion #9-b' ;
     END ;
     
     ------ attributation à postgres d'un schéma existant ------
@@ -5832,7 +5987,7 @@ BEGIN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        ASSERT e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False, 'échec assertion #10-b' ;
+        ASSERT e_mssg ~ 'FRE4[.]' OR False, 'échec assertion #10-b' ;
     END ;
 
     RESET ROLE ;
@@ -5863,8 +6018,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t045b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -5879,13 +6032,13 @@ BEGIN
             SET nom_schema = 'c_Librairie & Co'
             WHERE nom_schema = 'c_Bibliothèque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #1-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE3[.]' OR False, 'échec assertion #1-b' ;
     END ;
     
     ------ modification du champ producteur ------
@@ -5894,13 +6047,13 @@ BEGIN
             SET producteur = 'g_admin'
             WHERE nom_schema = 'c_Bibliothèque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #2-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE4[.]' OR False, 'échec assertion #2-b' ;
     END ;
     
     ------ modification du champ éditeur ------
@@ -5909,13 +6062,13 @@ BEGIN
             SET editeur = 'g_admin'
             WHERE nom_schema = 'c_Bibliothèque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #3-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #3-b' ;
     END ;
     
     ------ modification du champ lecteur ------
@@ -5924,13 +6077,13 @@ BEGIN
             SET lecteur = 'g_admin'
             WHERE nom_schema = 'c_Bibliothèque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #4-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB20[.]' OR e_detl ~ 'TB20[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #4-b' ;
     END ;
     
     ------ mise à la corbeille ------
@@ -5944,13 +6097,13 @@ BEGIN
             SET creation = False
             WHERE nom_schema = 'c_Bibliothèque' ;
             
-        RETURN False ;
+        ASSERT False, 'échec assertion #5-a' ;
         
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB23[.]' OR e_detl ~ 'TB23[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE5[.]' OR False, 'échec assertion #5-b' ;
     END ;
     
     ------ restauration du schéma ------
@@ -5965,14 +6118,13 @@ BEGIN
     BEGIN
         PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #6-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]'
-                   OR e_mssg ~ 'FIS3[.]' OR e_detl ~ 'FIS3[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #6-b' ;
     END ;
     
     ------ référencement du schéma (par un INSERT) ------
@@ -5980,13 +6132,13 @@ BEGIN
         INSERT INTO z_asgard.gestion_schema_usr (nom_schema, producteur, creation)
             VALUES ('c_Bibliothèque', 'postgres', True) ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #7-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB25[.]' OR e_detl ~ 'TB25[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE8[.]' OR False, 'échec assertion #7-b' ;
     END ;
     
     ------ création d'un schéma par INSERT ------
@@ -5996,13 +6148,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS "c_Librairie & Co" ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #8-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB22[.]' OR e_detl ~ 'TB22[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE2[.]' OR False, 'échec assertion #8-b' ;
     END ;
     
     ------ création d'un schéma par bascule de creation ------
@@ -6016,13 +6168,13 @@ BEGIN
             
         DROP SCHEMA IF EXISTS "c_Librairie & Co" ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #9-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB21[.]' OR e_detl ~ 'TB21[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE2[.]' OR False, 'échec assertion #9-b' ;
     END ;
     
     ------ attributation à postgres d'un schéma existant ------
@@ -6034,13 +6186,13 @@ BEGIN
             SET producteur = 'postgres'
             WHERE nom_schema = 'c_*Archives*' ;
     
-        RETURN False ;
+        ASSERT False, 'échec assertion #10-a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := r AND (e_mssg ~ 'TB24[.]' OR e_detl ~ 'TB24[.]' OR False) ;
+        ASSERT e_mssg ~ 'FRE4[.]' OR False, 'échec assertion #10-b' ;
     END ;
 
     RESET ROLE ;
@@ -6048,9 +6200,14 @@ BEGIN
     DROP SCHEMA "c_*Archives*" ;
     DELETE FROM z_asgard.gestion_schema_usr WHERE nom_schema IN ('c_Bibliothèque', 'c_Librairie & Co', 'c_*Archives*') ;
         
-    RETURN coalesce(r, False) ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
 
 END
@@ -6066,8 +6223,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t046()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -6097,236 +6252,218 @@ BEGIN
     BEGIN
     
         PERFORM z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', NULL, True, True, True) ;
-        RETURN False ;
+        ASSERT False, 'échec assertion 1a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
-                                
-        r := (e_mssg ~ 'FRR3[.]' OR e_detl ~ 'FRR3[.]' OR False) ;
-        RAISE NOTICE '46-1 > %', r::text ;
+        
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 1b' ;
+
     END ;
     
     RESET ROLE ;
 
     ------ transfert à g_asgard_rec2 (schémas référencés) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', False, True, True) = ARRAY[current_database()::text]
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-2 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_asgard_rec1', 'g_asgard_rec2', False, True, True
+    ) = ARRAY[current_database()::text], 'échec assertion 2a' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1'
-            AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-2b > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-3 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1'
+                AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+    ) = 0, 'échec assertion 2b' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec1[=][%s]{%s}[/]', 
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 3' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
+                    AND defaclrole = quote_ident('g_admin')::regrole::oid
+                    AND defaclobjtype = 'n'
+                    AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 4' ;
+
+    END IF ;
+
+    ASSERT (
         SELECT
-            count(*) = 1
-            INTO STRICT b 
+            count(*)
             FROM pg_default_acl
             WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=]U[/]')
+    ) = 1, 'échec assertion 5' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
-                AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46-4 > %', r::text ;
-    END IF ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=]U[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-5 > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-6 > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
-            AND defaclobjtype = 'S'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwU]{3}[/]') ;
-                    
-    r := r AND b ;
-    RAISE NOTICE '46-7 > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'f'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]X[/]') ;
-                    
-    r := r AND b ;
-    RAISE NOTICE '46-8 > %', r::text ;
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec2[=][%s]{%s}[/]', 
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 6' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
+                AND defaclobjtype = 'S'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwU]{3}[/]')
+    ) = 1, 'échec assertion 7' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'f'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]X[/]')
+    ) = 1, 'échec assertion 8' ;
     
     ------ transfert à g_asgard_rec2 (hors ASGARD) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec1', 'g_asgard_rec2', True, True, True) IS NULL
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-9 > %', r::text ;
-    
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-9b > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-10 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_asgard_rec1', 'g_asgard_rec2', True, True, True
+    ) IS NULL, 'échec assertion 9a' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec1'
+    ) = 0, 'échec assertion 9b' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec2[=][%s]{%s}[/]', 
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 10' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
+                    AND defaclrole = quote_ident('g_admin')::regrole::oid
+                    AND defaclobjtype = 'n'
+                    AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 11' ;
+
+    END IF ;
+
+    ASSERT (
         SELECT
-            count(*) = 1
-            INTO STRICT b 
+            count(*)
             FROM pg_default_acl
             WHERE defaclnamespace = 0
-                AND defaclrole = quote_ident('g_admin')::regrole::oid
-                AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46-11 > %', r::text ;
-    END IF ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-12 > %', r::text ;
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]')
+    ) = 1, 'échec assertion 12' ;
     
     ------ suppression (schémas référencés) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, False, True, True)  = ARRAY[current_database()::text]
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-13 > %', r::text ;
-    
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2'
-            AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-13b > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-14 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_asgard_rec2', NULL, False, True, True
+    ) = ARRAY[current_database()::text], 'échec assertion 13a' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2'
+                AND defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+    ) = 0, 'échec assertion 13b' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec2[=][%s]{%s}[/]', 
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 14' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
+                    AND defaclrole = quote_ident('g_admin')::regrole::oid
+                    AND defaclobjtype = 'n'
+                    AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 15' ;
+
+    END IF ;
+
+    ASSERT (
         SELECT
-            count(*) = 1
-            INTO STRICT b 
+            count(*)
             FROM pg_default_acl
             WHERE defaclnamespace = 0
-                AND defaclrole = quote_ident('g_admin')::regrole::oid
-                AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46-15 > %', r::text ;
-    END IF ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-16 > %', r::text ;
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec2[=]U[/]')
+    ) = 1, 'échec assertion 16' ;
     
     ------ suppression (tout) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_asgard_rec2', NULL, True, True, True) IS NULL
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46-17 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_asgard_rec2', NULL, True, True, True
+    ) IS NULL, 'échec assertion 17' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2' ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46-18 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_asgard_rec2' 
+    ) = 0, 'échec assertion 18' ;
     
     DROP ROLE g_asgard_rec1 ;
     DROP ROLE g_asgard_rec2 ;
@@ -6335,9 +6472,14 @@ BEGIN
     DROP SCHEMA c_librairie ;
     DELETE FROM z_asgard.gestion_schema_usr ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -6353,8 +6495,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t046b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -6384,237 +6524,219 @@ BEGIN
     BEGIN
     
         PERFORM z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', NULL, True, True, True) ;
-        RETURN False ;
+        ASSERT False, 'échec assertion 1a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := (e_mssg ~ 'FRR3[.]' OR e_detl ~ 'FRR3[.]' OR False) ;
-        RAISE NOTICE '46b-1 > %', r::text ;
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 1b' ;
+
     END ;
     
     RESET ROLE ;
 
     ------ transfert à "g_ASGARD *REC2" (schémas référencés) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', False, True, True)  = ARRAY[current_database()::text]
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-2 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_ASGARD_REC1', 'g_ASGARD *REC2', False, True, True
+    ) = ARRAY[current_database()::text], 'échec assertion 2a' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1'
-            AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-2b > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1'
+                AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+    ) = 0, 'échec assertion 2b' ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-3 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_ASGARD_REC1[=][%s]{%s}[/]', 
+                        z_asgard.asgard_table_owner_privileges_codes(),
+                        length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 3' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
-        SELECT
-            count(*) = 1
-            INTO STRICT b 
-            FROM pg_default_acl
-            WHERE defaclnamespace = 0
-                AND defaclrole = quote_ident('g_admin')::regrole::oid
-                AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46b-4 > %', r::text ;
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
+                    AND defaclrole = quote_ident('g_admin')::regrole::oid
+                    AND defaclobjtype = 'n'
+                    AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 4' ;
+
     END IF ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=]U[/]') ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_ASGARD_REC1[=]U[/]')
+    ) = 1, 'échec assertion 5' ;
     
-    r := r AND b ;
-    RAISE NOTICE '46b-5 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][%s]{%s}[/]', 
+                        z_asgard.asgard_table_owner_privileges_codes(),
+                        length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 6' ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
+                AND defaclobjtype = 'S'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwU]{3}[/]')
+    ) = 1, 'échec assertion 7' ;
     
-    r := r AND b ;
-    RAISE NOTICE '46b-6 > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin_ext')::regrole::oid
-            AND defaclobjtype = 'S'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwU]{3}[/]') ;
-                    
-    r := r AND b ;
-    RAISE NOTICE '46b-7 > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'f'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]X[/]') ;
-                    
-    r := r AND b ;
-    RAISE NOTICE '46b-8 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'f'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]X[/]')
+    ) = 1, 'échec assertion 8' ;
     
     ------ transfert à "g_ASGARD *REC2" (hors ASGARD) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD_REC1', 'g_ASGARD *REC2', True, True, True) IS NULL
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-9 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_ASGARD_REC1', 'g_ASGARD *REC2', True, True, True
+    ) IS NULL, 'échec assertion 9a' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1' ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-9b > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ 'g_ASGARD_REC1'
+    ) = 0, 'échec assertion 9b' ;
     
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-10 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][%s]{%s}[/]', 
+                        z_asgard.asgard_table_owner_privileges_codes(),
+                        length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 10' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
-        SELECT
-            count(*) = 1
-            INTO STRICT b 
-            FROM pg_default_acl
-            WHERE defaclnamespace = 0
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
                 AND defaclrole = quote_ident('g_admin')::regrole::oid
                 AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46b-11 > %', r::text ;
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 11' ;
+
     END IF ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-12 > %', r::text ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = 0
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]')
+    ) = 1, 'échec assertion 12' ;
     
     ------ suppression (schémas référencés) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, False, True, True) = ARRAY[current_database()::text]
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-13 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_ASGARD *REC2', NULL, False, True, True
+    ) = ARRAY[current_database()::text], 'échec assertion 13a' ;
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"'
+                AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+    ) = 0, 'échec assertion 13b' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"'
-            AND defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-13b > %', r::text ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
-            AND defaclrole = quote_ident('g_admin')::regrole::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][rwadDxt]{7}[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-14 > %', r::text ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Librairie')::regnamespace::oid
+                AND defaclrole = quote_ident('g_admin')::regrole::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][%s]{%s}[/]', 
+                        z_asgard.asgard_table_owner_privileges_codes(),
+                        length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 14' ;
     
     IF current_setting('server_version_num')::int >= 100000
     THEN
+
+        ASSERT (
+            SELECT
+                count(*)
+                FROM pg_default_acl
+                WHERE defaclnamespace = 0
+                    AND defaclrole = quote_ident('g_admin')::regrole::oid
+                    AND defaclobjtype = 'n'
+                    AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]')
+        ) = 1, 'échec assertion 15' ;
+
+    END IF ;
+
+    ASSERT (
         SELECT
-            count(*) = 1
-            INTO STRICT b 
+            count(*)
             FROM pg_default_acl
             WHERE defaclnamespace = 0
-                AND defaclrole = quote_ident('g_admin')::regrole::oid
-                AND defaclobjtype = 'n'
-                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=][UC]{2}[/]') ;
-        
-        r := r AND b ;
-        RAISE NOTICE '46b-15 > %', r::text ;
-    END IF ;
-    
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = 0
-            AND defaclrole = quote_ident(current_user)::regrole::oid
-            AND defaclobjtype = 'T'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]') ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-16 > %', r::text ;
+                AND defaclrole = quote_ident(current_user)::regrole::oid
+                AND defaclobjtype = 'T'
+                AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]][*]REC2"[=]U[/]')
+    ) = 1, 'échec assertion 16' ;
     
     ------ suppression (tout) ------
-    SELECT z_asgard_admin.asgard_reaffecte_role('g_ASGARD *REC2', NULL, True, True, True) IS NULL
-        INTO STRICT b ;
-        
-    r := r AND b ;
-    RAISE NOTICE '46b-17 > %', r::text ;
+    ASSERT z_asgard_admin.asgard_reaffecte_role(
+        'g_ASGARD *REC2', NULL, True, True, True
+    ) IS NULL, 'échec assertion 17' ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"' ;
-    
-    r := r AND b ;
-    RAISE NOTICE '46b-18 > %', r::text ;
-    
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE array_to_string(defaclacl, ',') ~ '"g_ASGARD[[:space:]][*]REC2"'
+    ) = 0, 'échec assertion 18' ;
+
     DROP ROLE "g_ASGARD_REC1" ;
     DROP ROLE "g_ASGARD *REC2" ;
     
@@ -6622,9 +6744,14 @@ BEGIN
     DROP SCHEMA "c_Librairie" ;
     DELETE FROM z_asgard.gestion_schema_usr ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -7048,8 +7175,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t048()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
    utilisateur text := current_user ;
@@ -7068,33 +7193,31 @@ BEGIN
     
     -- #1
     BEGIN
-    SET ROLE g_admin ;
-    
-    PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
-    
-    EXECUTE 'SET ROLE ' || utilisateur ;
-    RETURN False ;
+        SET ROLE g_admin ;
+        
+        PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
+        
+        EXECUTE format('SET ROLE %I', utilisateur) ;
+
+        ASSERT False, 'échec assertion 1a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
-                                
-        r := (e_mssg ~ 'FIS6[.]' OR e_detl ~ 'FIS6[.]' OR False) ;
-        RAISE NOTICE '48-1 > %', r::text ;
+
+        ASSERT e_mssg ~ 'FRE9' OR False, 'échec assertion 1b' ;
     END ;
     
     -- #2
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+    ) = 0, 'échec assertion 2' ;
     
-    r := r AND b ;
-    RAISE NOTICE '48-2 > %', r::text ;   
-
     ------ initialisation lors du référencement ------
     CREATE SCHEMA c_librairie ;
     PERFORM z_asgard_admin.asgard_sortie_gestion_schema('c_librairie') ;
@@ -7105,25 +7228,28 @@ BEGIN
     -- #3
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid ;
-        
-    r := r AND b ;
-    RAISE NOTICE '48-3 > %', r::text ; 
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_bibliotheque')::regnamespace::oid
+    ) = 0, 'échec assertion 3' ;
     
-    EXECUTE 'SET ROLE ' || utilisateur ;
+    EXECUTE format('SET ROLE %I', utilisateur) ;
     
     DROP SCHEMA c_bibliotheque ;
     DROP SCHEMA c_librairie ;
     DROP ROLE g_asgard_rec1 ;
     DELETE FROM z_asgard.gestion_schema_usr ;    
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -7159,32 +7285,30 @@ BEGIN
     
     -- #1
     BEGIN
-    SET ROLE g_admin ;
-    
-    PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
-    
-    EXECUTE 'SET ROLE ' || utilisateur ;
-    RETURN False ;
+        SET ROLE g_admin ;
+        
+        PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
+        
+        EXECUTE format('SET ROLE %I', utilisateur) ;
+
+        ASSERT False, 'échec assertion 1a' ;
     
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                                 e_detl = PG_EXCEPTION_DETAIL ;
                                 
-        r := (e_mssg ~ 'FIS6[.]' OR e_detl ~ 'FIS6[.]' OR False) ;
-        RAISE NOTICE '48b-1 > %', r::text ;
+        ASSERT e_mssg ~ 'FRE9' OR False, 'échec assertion 1b' ;
     END ;
     
     -- #2
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
-    
-    SELECT
-        count(*) = 0
-        INTO STRICT b
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
-    
-    r := r AND b ;
-    RAISE NOTICE '48b-2 > %', r::text ;   
+
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+    ) = 0, 'échec assertion 2' ;  
 
     ------ initialisation lors du référencement ------
     CREATE SCHEMA "c_Librairie" ;
@@ -7196,25 +7320,28 @@ BEGIN
     -- #3
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
     
-    SELECT
-        count(*) = 0
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid ;
-        
-    r := r AND b ;
-    RAISE NOTICE '48b-3 > %', r::text ; 
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Bibliothèque')::regnamespace::oid
+    ) = 0, 'échec assertion 3' ;  
     
-    EXECUTE 'SET ROLE ' || utilisateur ;
+    EXECUTE format('SET ROLE %I', utilisateur) ;
     
     DROP SCHEMA "c_Bibliothèque" ;
     DROP SCHEMA "c_Librairie" ;
     DROP ROLE "g_ASGARD rec*1" ;
     DELETE FROM z_asgard.gestion_schema_usr ;    
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -7230,8 +7357,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t049()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE g_asgard_rec1 ;
@@ -7244,40 +7371,47 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_schema('c_librairie', True) ;
     
     -- #1
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_class
-        WHERE relnamespace = quote_ident('c_librairie')::regnamespace::oid
-            AND relname = 'journal_du_mur'
-            AND array_to_string(relacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
-                    
-    r := b ;
-    RAISE NOTICE '49-1 > %', r::text ; 
+    ASSERT (
+        SELECT count(*)
+            FROM pg_class
+            WHERE relnamespace = quote_ident('c_librairie')::regnamespace::oid
+                AND relname = 'journal_du_mur'
+                AND array_to_string(relacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec1[=][%s]{%s}[/]',
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 1' ; 
     
     -- #2
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?g_asgard_rec1[=][rwadDxt]{7}[/]') ;
-        
-    r := r AND b ;
-    RAISE NOTICE '49-2 > %', r::text ; 
+    ASSERT (
+        SELECT count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_librairie')::regnamespace::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?g_asgard_rec1[=][%s]{%s}[/]',
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 2' ; 
     
     DROP SCHEMA c_librairie CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     DROP ROLE g_asgard_rec1 ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t049() IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
 
@@ -7288,8 +7422,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t049b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
+   e_mssg text ;
+   e_detl text ;
 BEGIN
 
     CREATE ROLE "g_ASGARD rec*1" ;
@@ -7302,40 +7436,49 @@ BEGIN
     PERFORM z_asgard.asgard_initialise_schema('c_Lib-rairie', True) ;
     
     -- #1
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_class
-        WHERE relnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
-            AND relname = 'Journal du mur !'
-            AND array_to_string(relacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][rwadDxt]{7}[/]') ;
-                    
-    r := b ;
-    RAISE NOTICE '49b-1 > %', r::text ; 
-    
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_class
+            WHERE relnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
+                AND relname = 'Journal du mur !'
+                AND array_to_string(relacl, ',') ~ format(
+                    '^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][%s]{%s}[/]',
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 1' ;
+
     -- #2
-    SELECT
-        count(*) = 1
-        INTO STRICT b 
-        FROM pg_default_acl
-        WHERE defaclnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
-            AND defaclobjtype = 'r'
-            AND array_to_string(defaclacl, ',') ~ ('^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][rwadDxt]{7}[/]') ;
-        
-    r := r AND b ;
-    RAISE NOTICE '49b-2 > %', r::text ; 
+    ASSERT (
+        SELECT
+            count(*)
+            FROM pg_default_acl
+            WHERE defaclnamespace = quote_ident('c_Lib-rairie')::regnamespace::oid
+                AND defaclobjtype = 'r'
+                AND array_to_string(defaclacl, ',') ~ format(
+                    '^(.*[,])?"g_ASGARD[[:space:]]rec[*]1"[=][%s]{%s}[/]',
+                    z_asgard.asgard_table_owner_privileges_codes(),
+                    length(z_asgard.asgard_table_owner_privileges_codes())
+                )
+    ) = 1, 'échec assertion 2' ;
     
     DROP SCHEMA "c_Lib-rairie" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     DROP ROLE "g_ASGARD rec*1" ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
-$_$;
+$_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t049b() IS 'ASGARD recette. TEST : (asgard_initialise_schema) préservation des droits à l''import.' ;
 
@@ -7557,7 +7700,6 @@ BEGIN
     END IF ;
     
     PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
-    PERFORM z_asgard.asgard_initialise_schema('z_asgard_admin') ;
     
     ------ désynchronisation des propriétaires ------
     ALTER EVENT TRIGGER asgard_on_alter_objet DISABLE ;
@@ -7849,7 +7991,7 @@ BEGIN
         GRANT ALL ON TYPES TO g_asgard_rec_pro ;
         
     -- #18
-    SELECT count(*) = 12
+    SELECT count(*) = length(z_asgard.asgard_table_owner_privileges_codes()) + 1 + 3 + 1
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -7883,13 +8025,10 @@ BEGIN
     RAISE NOTICE '51-20 > %', r::text ;
     
     ------ droits nécessaires à ASGARD ------
-    -- la suppression du privilège SELECT de g_admin_ext sur
-    -- gestion_schema n'est pas testée, car la fonction
-    -- asgard_diagnostic ne fonctionne plus dans ce cas
+    -- uniquement sur le schéma z_asgard, la fonction n'étant pas applicable
+    -- à z_asgard_admin puisqu'il ne peut plus être référencé.
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
-    REVOKE USAGE ON SCHEMA z_asgard_admin FROM g_admin_ext ;
-    REVOKE UPDATE, DELETE, INSERT ON TABLE z_asgard_admin.gestion_schema FROM g_admin_ext ;
     REVOKE USAGE ON SCHEMA z_asgard FROM public ;
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_etr FROM public ;
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_usr FROM public ;
@@ -7898,7 +8037,7 @@ BEGIN
     REVOKE SELECT ON TABLE z_asgard.gestion_schema_read_only FROM public ;
 
     -- #21
-    SELECT count(*) = 10
+    SELECT count(*) = 6
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -7906,15 +8045,11 @@ BEGIN
     RAISE NOTICE '51-21 > %', r::text ;
     
     -- #22
-    SELECT count(*) = 10
+    SELECT count(*) = 6
         INTO b
-        FROM z_asgard_admin.asgard_diagnostic(ARRAY['z_asgard', 'z_asgard_admin'])
+        FROM z_asgard_admin.asgard_diagnostic(ARRAY['z_asgard'])
             LEFT JOIN (
                 VALUES
-                ('z_asgard_admin', 'z_asgard_admin', 'schéma', 'USAGE', 'g_admin_ext'),
-                ('z_asgard_admin', 'gestion_schema', 'table', 'INSERT', 'g_admin_ext'),
-                ('z_asgard_admin', 'gestion_schema', 'table', 'UPDATE', 'g_admin_ext'),
-                ('z_asgard_admin', 'gestion_schema', 'table', 'DELETE', 'g_admin_ext'),
                 ('z_asgard', 'z_asgard', 'schéma', 'USAGE', 'public'),
                 ('z_asgard', 'gestion_schema_usr', 'vue', 'SELECT', 'public'),
                 ('z_asgard', 'gestion_schema_etr', 'vue', 'SELECT', 'public'),
@@ -7932,9 +8067,7 @@ BEGIN
     RAISE NOTICE '51-22 > %', r::text ;
     
     PERFORM z_asgard.asgard_initialise_schema('z_asgard') ;
-    PERFORM z_asgard.asgard_initialise_schema('z_asgard_admin') ;
     PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard') ;
-    PERFORM z_asgard_admin.asgard_sortie_gestion_schema('z_asgard_admin') ;
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
 
@@ -8284,7 +8417,7 @@ BEGIN
         GRANT ALL ON TYPES TO "g_ASGARD_rec\PRO" ;
         
     -- #18
-    SELECT count(*) = 12
+    SELECT count(*) = length(z_asgard.asgard_table_owner_privileges_codes()) + 1 + 3 + 1
         INTO b
         FROM z_asgard_admin.asgard_diagnostic() ;
             
@@ -8347,8 +8480,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t052()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    v int := 1 ;
    o text := 'c_bibliotheque' ;
    c text := 'c_librairie' ;
@@ -8616,8 +8747,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t052b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-    b boolean ;
-    r boolean ;
     v int := 1 ;
     o text := 'c_Bibliothèque' ;
     c text := 'c_Libr''airie' ;
@@ -9217,7 +9346,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t054()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-    r boolean ;
+    n int := 0 ;
+    anomalie record ;
     e_mssg text ;
     e_detl text ;
 BEGIN
@@ -9298,10 +9428,22 @@ BEGIN
     
     PERFORM z_asgard.asgard_initialise_schema('c_bibliotheque') ;
     
+    FOR anomalie IN (
+        SELECT * FROM z_asgard_admin.asgard_diagnostic()
+    )
+    LOOP
+        RAISE NOTICE '%', format(
+            '[Anomalie] %s %I.%I : %s', 
+            anomalie.typ_objet, 
+            anomalie.nom_schema, 
+            anomalie.nom_objet,
+            anomalie.anomalie
+        ) ;
+        n := n + 1 ;
+    END LOOP ;
+
     -- il devrait rester deux privilèges révoqués du pseudo-rôle public
-    SELECT count(*) = 2
-        INTO STRICT r
-        FROM z_asgard_admin.asgard_diagnostic() ;
+    ASSERT n = 2, 'échec assertion 1' ;
     
     ------ suppression des objets ------
     DROP SCHEMA c_bibliotheque CASCADE ;
@@ -9311,13 +9453,14 @@ BEGIN
     DROP ROLE g_asgard_rec1 ;
     DROP ROLE g_asgard_rec2 ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
         USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -9332,7 +9475,8 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t054b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-    r boolean ;
+    n int := 0 ;
+    anomalie record ;
     e_mssg text ;
     e_detl text ;
 BEGIN
@@ -9413,10 +9557,22 @@ BEGIN
     
     PERFORM z_asgard.asgard_initialise_schema('c_Bibliothèque') ;
     
+    FOR anomalie IN (
+        SELECT * FROM z_asgard_admin.asgard_diagnostic()
+    )
+    LOOP
+        RAISE NOTICE '%', format(
+            '[Anomalie] %s %I.%I : %s', 
+            anomalie.typ_objet, 
+            anomalie.nom_schema, 
+            anomalie.nom_objet,
+            anomalie.anomalie
+        ) ;
+        n := n + 1 ;
+    END LOOP ;
+
     -- il devrait rester deux privilèges révoqués du pseudo-rôle public
-    SELECT count(*) = 2
-        INTO STRICT r
-        FROM z_asgard_admin.asgard_diagnostic() ;
+    ASSERT n = 2, 'échec assertion 1' ;
     
     ------ suppression des objets ------
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
@@ -9426,13 +9582,14 @@ BEGIN
     DROP ROLE "g_asgard_rec1*" ;
     DROP ROLE "g_asgard REC#2" ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
         USING DETAIL = e_detl ;
+        
     RETURN False ;
     
 END
@@ -9976,8 +10133,8 @@ BEGIN
 
     CREATE ROLE g_asgard_rec ;
     CREATE ROLE g_asgard_rec_bis ;
-    o_role = 'g_asgard_rec'::regrole::oid ;
-    o_role_bis = 'g_asgard_rec_bis'::regrole::oid ;
+    o_role = quote_ident('g_asgard_rec')::regrole::oid ;
+    o_role_bis = quote_ident('g_asgard_rec_bis')::regrole::oid ;
     
     CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_rec ;
     o_nsp = 'c_bibliotheque'::regnamespace::oid ;
@@ -10384,8 +10541,8 @@ BEGIN
 
     CREATE ROLE """g_asgard_REC""" ;
     CREATE ROLE "g_asgard REC*" ;
-    o_role = '"""g_asgard_REC"""'::regrole::oid ;
-    o_role_bis = '"g_asgard REC*"'::regrole::oid ;
+    o_role = quote_ident('"g_asgard_REC"')::regrole::oid ;
+    o_role_bis = quote_ident('g_asgard REC*')::regrole::oid ;
     
     CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION """g_asgard_REC""" ;
     o_nsp = '"c_Bibliothèque"'::regnamespace::oid ;
@@ -11650,8 +11807,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t060()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -11676,18 +11831,55 @@ BEGIN
         SET editeur = 'g_asgard_rec3',
             lecteur = 'g_asgard_rec4'
         WHERE nom_schema = 'c_bibliotheque' ;
-        
-    r := NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
-        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
-        AND has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'SELECT')
-        AND has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT')
-        AND NOT has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT WITH GRANT OPTION')
-        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT')
-        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'INSERT')
-        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE')
-        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'DELETE')
-        AND has_table_privilege('g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
-        AND NOT has_table_privilege('g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+    
+    -- suppression des privilèges de l'ancien lecteur :
+    ASSERT NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT'),
+        'échec assertion 1a' ;
+    ASSERT NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT'),
+        'échec assertion 1b' ;
+
+    -- transmission au nouveau lecteur
+    ASSERT has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'SELECT'),
+        'échec assertion 2a' ;
+    ASSERT has_table_privilege('g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT'),
+        'échec assertion 2b' ;
+    
+    -- ... avec préservation de l'attribut GRANT OPTION, le cas échéant
+    ASSERT has_table_privilege(
+        'g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'INSERT WITH GRANT OPTION'
+    ), 'échec assertion 3a' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard_rec4', 'c_bibliotheque.journal_du_mur', 'SELECT WITH GRANT OPTION'
+    ), 'échec assertion 3b' ;
+
+    -- suppression des privilèges de l'ancien éditeur
+    ASSERT NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT'),
+        'échec assertion 4a' ;
+    ASSERT NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'INSERT'),
+        'échec assertion 4b' ;
+    ASSERT NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE'),
+        'échec assertion 4c' ;
+    ASSERT NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'DELETE'),
+        'échec assertion 4d' ;
+    
+    -- transmission au nouvel éditeur
+    ASSERT has_table_privilege(
+        'g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE'
+    ), 'échec assertion 5' ;
+
+    -- ... avec préservation de l'attribut GRANT OPTION, le cas échéant
+    ASSERT has_table_privilege(
+        'g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION'
+    ), 'échec assertion 6a' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'SELECT WITH GRANT OPTION'
+    ), 'échec assertion 6b' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'INSERT WITH GRANT OPTION'
+    ), 'échec assertion 6c' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard_rec3', 'c_bibliotheque.journal_du_mur', 'DELETE WITH GRANT OPTION'
+    ), 'échec assertion 6d' ;
         
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
@@ -11696,9 +11888,9 @@ BEGIN
     DROP ROLE g_asgard_rec3 ;
     DROP ROLE g_asgard_rec4 ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -11709,7 +11901,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t060() IS 'ASGARD recette. TEST : disparition des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t060() IS 'ASGARD recette. TEST : préservation des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
 
 -- FUNCTION: z_asgard_recette.t060b()
 
@@ -11718,8 +11910,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t060b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -11745,18 +11935,55 @@ BEGIN
             lecteur = 'g_asgard_REC4'
         WHERE nom_schema = 'c_Bibliothèque' ;
         
-    r := NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
-        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
-        AND has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
-        AND has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
-        AND NOT has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT WITH GRANT OPTION')
-        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
-        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
-        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE')
-        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'DELETE')
-        AND has_table_privilege('g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
-        AND NOT has_table_privilege('g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
-        
+    -- suppression des privilèges de l'ancien lecteur :
+    ASSERT NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT'),
+        'échec assertion 1a' ;
+    ASSERT NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT'),
+        'échec assertion 1b' ;
+
+    -- transmission au nouveau lecteur
+    ASSERT has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'SELECT'),
+        'échec assertion 2a' ;
+    ASSERT has_table_privilege('g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT'),
+        'échec assertion 2b' ;
+    
+    -- ... avec préservation de l'attribut GRANT OPTION, le cas échéant
+    ASSERT has_table_privilege(
+        'g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'INSERT WITH GRANT OPTION'
+    ), 'échec assertion 3a' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard_REC4', '"c_Bibliothèque"."Journal du Mur"', 'SELECT WITH GRANT OPTION'
+    ), 'échec assertion 3b' ;
+
+    -- suppression des privilèges de l'ancien éditeur
+    ASSERT NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT'),
+        'échec assertion 4a' ;
+    ASSERT NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'INSERT'),
+        'échec assertion 4b' ;
+    ASSERT NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE'),
+        'échec assertion 4c' ;
+    ASSERT NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'DELETE'),
+        'échec assertion 4d' ;
+    
+    -- transmission au nouvel éditeur
+    ASSERT has_table_privilege(
+        'g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE'
+    ), 'échec assertion 5' ;
+
+    -- ... avec préservation de l'attribut GRANT OPTION, le cas échéant
+    ASSERT has_table_privilege(
+        'g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION'
+    ), 'échec assertion 6a' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'SELECT WITH GRANT OPTION'
+    ), 'échec assertion 6b' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'INSERT WITH GRANT OPTION'
+    ), 'échec assertion 6c' ;
+    ASSERT NOT has_table_privilege(
+        'g_asgard REC3*', '"c_Bibliothèque"."Journal du Mur"', 'DELETE WITH GRANT OPTION'
+    ), 'échec assertion 6d' ;
+
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     DROP ROLE "g_asgard_REC1" ;
@@ -11764,9 +11991,9 @@ BEGIN
     DROP ROLE "g_asgard REC3*" ;
     DROP ROLE "g_asgard_REC4" ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -11777,7 +12004,7 @@ EXCEPTION WHEN OTHERS THEN
 END
 $_$;
 
-COMMENT ON FUNCTION z_asgard_recette.t060b() IS 'ASGARD recette. TEST : disparition des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
+COMMENT ON FUNCTION z_asgard_recette.t060b() IS 'ASGARD recette. TEST : préservation des GRANT OPTION lors de la transmission des droits du lecteur et de l''éditeur.' ;
 
 -- FUNCTION: z_asgard_recette.t061()
 
@@ -11786,8 +12013,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t061()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -11807,20 +12032,29 @@ BEGIN
     GRANT UPDATE ON TABLE c_bibliotheque.journal_du_mur TO g_asgard_rec1 WITH GRANT OPTION ;
     
     PERFORM z_asgard.asgard_initialise_obj('c_bibliotheque', 'journal_du_mur', 'table') ;
-        
-    r := has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT')
-        AND NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT')
-        AND has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE')
-        AND NOT has_table_privilege('g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION') ;
+    
+    ASSERT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'SELECT'),
+        'échec assertion 1' ;
+    
+    ASSERT NOT has_table_privilege('g_asgard_rec2', 'c_bibliotheque.journal_du_mur', 'INSERT'),
+        'échec assertion 2' ;
+    
+    ASSERT has_table_privilege(
+        'g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'SELECT, INSERT, UPDATE, DELETE'
+    ), 'échec assertion 3' ;
+
+    ASSERT NOT has_table_privilege(
+        'g_asgard_rec1', 'c_bibliotheque.journal_du_mur', 'UPDATE WITH GRANT OPTION'
+    ), 'échec assertion 4' ;
         
     DROP SCHEMA c_bibliotheque CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     DROP ROLE g_asgard_rec1 ;
     DROP ROLE g_asgard_rec2 ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -11840,8 +12074,6 @@ CREATE OR REPLACE FUNCTION z_asgard_recette.t061b()
     LANGUAGE plpgsql
     AS $_$
 DECLARE
-   b boolean ;
-   r boolean ;
    e_mssg text ;
    e_detl text ;
 BEGIN
@@ -11862,19 +12094,29 @@ BEGIN
     
     PERFORM z_asgard.asgard_initialise_obj('c_Bibliothèque', 'Journal du Mur', 'table') ;
         
-    r := has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT')
-        AND NOT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT')
-        AND has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE')
-        AND NOT has_table_privilege('g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION') ;
+    ASSERT has_table_privilege('g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'SELECT'),
+        'échec assertion 1' ;
+    
+    ASSERT NOT has_table_privilege(
+        'g_asgard REC2', '"c_Bibliothèque"."Journal du Mur"', 'INSERT'
+    ), 'échec assertion 2' ;
+
+    ASSERT has_table_privilege(
+        'g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'SELECT, INSERT, UPDATE, DELETE'
+    ), 'échec assertion 3' ;
+
+    ASSERT NOT has_table_privilege(
+        'g_asgard_REC1', '"c_Bibliothèque"."Journal du Mur"', 'UPDATE WITH GRANT OPTION'
+    ), 'échec assertion 4' ;
         
     DROP SCHEMA "c_Bibliothèque" CASCADE ;
     DELETE FROM z_asgard.gestion_schema_usr ;
     DROP ROLE "g_asgard_REC1" ;
     DROP ROLE "g_asgard REC2" ;
 
-    RETURN r ;
+    RETURN True ;
     
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
     GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
                             e_detl = PG_EXCEPTION_DETAIL ;
     RAISE NOTICE '%', e_mssg
@@ -12409,14 +12651,22 @@ BEGIN
     ALTER ROLE "consult.defaut" RENAME TO "consult.defaut_temp" ;
     
     DROP EXTENSION asgard ;
+
+    -- à compter d'Asgard v1.5.0, le rôle g_admin n'est plus créé par
+    -- Asgard, et doit être créé manuellement au préalable
+    -- et doit disposer du privilège CREATE sur la base de données
+    -- avec l'option GRANT
+    CREATE ROLE g_admin ;
+    EXECUTE 'GRANT CREATE ON DATABASE ' || quote_ident(current_database()) || ' TO g_admin WITH GRANT OPTION' ;
+
     CREATE EXTENSION asgard ;
     
     DROP EXTENSION asgard ;
     EXECUTE 'REVOKE CREATE ON DATABASE ' || quote_ident(current_database()) || ' FROM g_admin' ;
-    DROP ROLE g_admin ;
     DROP ROLE g_admin_ext ;
     DROP ROLE g_consult ;
     DROP ROLE "consult.defaut" ;
+    DROP ROLE g_admin ;
     
     ALTER ROLE g_admin_temp RENAME TO g_admin ;
     ALTER ROLE g_admin_ext_temp RENAME TO g_admin_ext ;
@@ -13264,7 +13514,8 @@ BEGIN
     END ;
 
     BEGIN
-        INSERT INTO z_asgard.asgardmanager_metadata (nom_schema, oid_producteur) VALUES ('erreur', 'g_admin'::regrole::oid) ;
+        INSERT INTO z_asgard.asgardmanager_metadata (nom_schema, oid_producteur) 
+            VALUES ('erreur', quote_ident('g_admin')::regrole::oid) ;
         RAISE NOTICE 'échec #2' ; 
         RETURN False ;
     EXCEPTION WHEN object_not_in_prerequisite_state
@@ -18438,12 +18689,20 @@ BEGIN
             WHERE nom_schema = 'c_librairie'
     ), 'échec assertion 4-b' ;
 
-    UPDATE z_asgard.gestion_schema_usr
-        SET producteur = 'g_admin'
-        WHERE nom_schema = 'c_librairie' ;
-    ASSERT NOT 'c_librairie' IN (
-        SELECT nom_schema FROM z_asgard.gestion_schema_usr
-    ), 'échec assertion 5' ;
+    BEGIN
+        UPDATE z_asgard.gestion_schema_usr
+            SET producteur = 'g_admin'
+            WHERE nom_schema = 'c_librairie' ;
+
+        ASSERT False, 'échec assertion 5a' ;
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        -- l'erreur se produit au niveau de la commande finale
+        -- du trigger asgard_on_modify_gestion_schema_after,
+        -- qui doit être capable de mettre à jour le champ de 
+        -- contrôle
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 5b' ;
+    END ;
 
     SET ROLE g_admin ;
     UPDATE z_asgard.gestion_schema_usr
@@ -18527,12 +18786,20 @@ BEGIN
             WHERE nom_schema = 'c $librairie'
     ), 'échec assertion 4-b' ;
 
-    UPDATE z_asgard.gestion_schema_usr
-        SET producteur = 'g_admin'
-        WHERE nom_schema = 'c $librairie' ;
-    ASSERT NOT 'c $librairie' IN (
-        SELECT nom_schema FROM z_asgard.gestion_schema_usr
-    ), 'échec assertion 5' ;
+    BEGIN
+        UPDATE z_asgard.gestion_schema_usr
+            SET producteur = 'g_admin'
+            WHERE nom_schema = 'c $librairie' ;
+
+        ASSERT False, 'échec assertion 5a' ;
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+        -- l'erreur se produit au niveau de la commande finale
+        -- du trigger asgard_on_modify_gestion_schema_after,
+        -- qui doit être capable de mettre à jour le champ de 
+        -- contrôle
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 5b' ;
+    END ;
 
     SET ROLE g_admin ;
     UPDATE z_asgard.gestion_schema_usr
@@ -18872,24 +19139,24 @@ BEGIN
     ) = 'g_asgard_assistant', 'échec assertion 1c' ;
 
     ASSERT (
-        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_assistant'::regrole::oid, 'échec assertion 1d' ;
+        SELECT oid_editeur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_assistant', 'échec assertion 1d' ;
 
     ASSERT (
         SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
     ) = 'g_asgard_passant', 'échec assertion 1e' ;
 
     ASSERT (
-        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_passant'::regrole::oid, 'échec assertion 1f' ;
+        SELECT oid_lecteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_passant', 'échec assertion 1f' ;
 
     ASSERT (
         SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
     ) = 'g_asgard_archiviste', 'échec assertion 1g' ;
 
     ASSERT (
-        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_archiviste'::regrole::oid, 'échec assertion 1h' ;
+        SELECT oid_producteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_bibliotheque'
+    ) = 'g_asgard_archiviste', 'échec assertion 1h' ;
 
 
     -- 2
@@ -18922,8 +19189,8 @@ BEGIN
     ) = 'g_asgard_archiviste', 'échec assertion 2g' ;
 
     ASSERT (
-        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
-    ) = 'g_asgard_archiviste'::regrole::oid, 'échec assertion 2h' ;
+        SELECT oid_producteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_librairie'
+    ) = 'g_asgard_archiviste', 'échec assertion 2h' ;
 
 
     -- 3
@@ -19072,24 +19339,24 @@ BEGIN
     ) = 'g_asgard assistant', 'échec assertion 1c' ;
 
     ASSERT (
-        SELECT oid_editeur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_asgard assistant"'::regrole::oid, 'échec assertion 1d' ;
+        SELECT oid_editeur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard assistant"', 'échec assertion 1d' ;
 
     ASSERT (
         SELECT lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
     ) = 'g_asgard*passant', 'échec assertion 1e' ;
 
     ASSERT (
-        SELECT oid_lecteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_asgard*passant"'::regrole::oid, 'échec assertion 1f' ;
+        SELECT oid_lecteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard*passant"', 'échec assertion 1f' ;
 
     ASSERT (
         SELECT producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
     ) = 'g_asgard_ARCHIVISTE', 'échec assertion 1g' ;
 
     ASSERT (
-        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_asgard_ARCHIVISTE"'::regrole::oid, 'échec assertion 1h' ;
+        SELECT oid_producteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c_Bibliothèque'
+    ) = '"g_asgard_ARCHIVISTE"', 'échec assertion 1h' ;
 
 
     -- 2
@@ -19122,8 +19389,8 @@ BEGIN
     ) = 'g_asgard_ARCHIVISTE', 'échec assertion 2g' ;
 
     ASSERT (
-        SELECT oid_producteur FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
-    ) = '"g_asgard_ARCHIVISTE"'::regrole::oid, 'échec assertion 2h' ;
+        SELECT oid_producteur::regrole::text FROM z_asgard_admin.gestion_schema WHERE nom_schema = 'c Librairie'
+    ) = '"g_asgard_ARCHIVISTE"', 'échec assertion 2h' ;
 
 
     -- 3
@@ -20107,10 +20374,10 @@ BEGIN
     ) = 'g_asgard_editeur_b', 'échec assertion 1' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_editeur_b'::regrole, 'échec assertion 1b' ;
+    ) = 'g_asgard_editeur_b', 'échec assertion 1b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20119,10 +20386,10 @@ BEGIN
     ) = 'g_asgard_lecteur_b', 'échec assertion 2' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text 
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_lecteur_b'::regrole, 'échec assertion 2b' ;
+    ) = 'g_asgard_lecteur_b', 'échec assertion 2b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20181,10 +20448,10 @@ BEGIN
     ) = 'g_asgard_editeur_a', 'échec assertion 7' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text 
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 7b' ;
+    ) = 'g_asgard_editeur_a', 'échec assertion 7b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20193,10 +20460,10 @@ BEGIN
     ) = 'g_asgard_lecteur_a', 'échec assertion 8' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_lecteur_a'::regrole, 'échec assertion 8b' ;
+    ) = 'g_asgard_lecteur_a', 'échec assertion 8b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20284,10 +20551,10 @@ BEGIN
     ) = 'g_asgard_editeur_a', 'échec assertion 13' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 13b' ;
+    ) = 'g_asgard_editeur_a', 'échec assertion 13b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20296,10 +20563,10 @@ BEGIN
     ) = 'g_asgard_lecteur_b', 'échec assertion 14' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_bibliotheque'
-    ) = 'g_asgard_lecteur_b'::regrole, 'échec assertion 14b' ;
+    ) = 'g_asgard_lecteur_b', 'échec assertion 14b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20308,10 +20575,10 @@ BEGIN
     ) = 'g_asgard_editeur_a', 'échec assertion 15' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_librairie'
-    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 15b' ;
+    ) = 'g_asgard_editeur_a', 'échec assertion 15b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20320,10 +20587,10 @@ BEGIN
     ) = 'g_asgard_lecteur_a', 'échec assertion 16' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text 
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_librairie'
-    ) = 'g_asgard_lecteur_a'::regrole, 'échec assertion 16b' ;
+    ) = 'g_asgard_lecteur_a', 'échec assertion 16b' ;
 
     ASSERT (
         SELECT 
@@ -20395,10 +20662,10 @@ BEGIN
     ) = 'g_asgard_editeur_a', 'échec assertion 21' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text 
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_librairie'
-    ) = 'g_asgard_editeur_a'::regrole, 'échec assertion 21b' ;
+    ) = 'g_asgard_editeur_a', 'échec assertion 21b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20541,10 +20808,10 @@ BEGIN
     ) = 'g_Asgard éditeur B', 'échec assertion 1' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text 
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard éditeur B"'::regrole, 'échec assertion 1b' ;
+    ) = '"g_Asgard éditeur B"', 'échec assertion 1b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20553,10 +20820,10 @@ BEGIN
     ) = 'g_Asgard Lecteur*B', 'échec assertion 2' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard Lecteur*B"'::regrole, 'échec assertion 2b' ;
+    ) = '"g_Asgard Lecteur*B"', 'échec assertion 2b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20615,10 +20882,10 @@ BEGIN
     ) = 'g_Asgard éditeur A', 'échec assertion 7' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 7b' ;
+    ) = '"g_Asgard éditeur A"', 'échec assertion 7b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20627,10 +20894,10 @@ BEGIN
     ) = 'g_Asgard Lecteur*A', 'échec assertion 8' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard Lecteur*A"'::regrole, 'échec assertion 8b' ;
+    ) = '"g_Asgard Lecteur*A"', 'échec assertion 8b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20718,10 +20985,10 @@ BEGIN
     ) = 'g_Asgard éditeur A', 'échec assertion 13' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 13b' ;
+    ) = '"g_Asgard éditeur A"', 'échec assertion 13b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20730,10 +20997,10 @@ BEGIN
     ) = 'g_Asgard Lecteur*B', 'échec assertion 14' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Bibliothèque'
-    ) = '"g_Asgard Lecteur*B"'::regrole, 'échec assertion 14b' ;
+    ) = '"g_Asgard Lecteur*B"', 'échec assertion 14b' ;
 
     ASSERT (
         SELECT editeur 
@@ -20742,10 +21009,10 @@ BEGIN
     ) = 'g_Asgard éditeur A', 'échec assertion 15' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Librairie'
-    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 15b' ;
+    ) = '"g_Asgard éditeur A"', 'échec assertion 15b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20754,10 +21021,10 @@ BEGIN
     ) = 'g_Asgard Lecteur*A', 'échec assertion 16' ;
 
     ASSERT (
-        SELECT oid_lecteur 
+        SELECT oid_lecteur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Librairie'
-    ) = '"g_Asgard Lecteur*A"'::regrole, 'échec assertion 16b' ;
+    ) = '"g_Asgard Lecteur*A"', 'échec assertion 16b' ;
 
     ASSERT (
         SELECT 
@@ -20829,10 +21096,10 @@ BEGIN
     ) = 'g_Asgard éditeur A', 'échec assertion 21' ;
 
     ASSERT (
-        SELECT oid_editeur 
+        SELECT oid_editeur::regrole::text
             FROM z_asgard_admin.gestion_schema 
             WHERE nom_schema = 'c_Librairie'
-    ) = '"g_Asgard éditeur A"'::regrole, 'échec assertion 21b' ;
+    ) = '"g_Asgard éditeur A"', 'échec assertion 21b' ;
 
     ASSERT (
         SELECT lecteur 
@@ -20890,3 +21157,13991 @@ END
 $_$ ;
 
 COMMENT ON FUNCTION z_asgard_recette.t107b() IS 'ASGARD recette. TEST : Test de la fonction "asgard_restaure_editeurs_lecteurs".' ;
+
+
+-- FUNCTION: z_asgard_recette.t0108()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t0108()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT NOT z_asgard.asgard_est_schema_systeme(NULL),
+        'échec assertion 1' ;
+
+    ASSERT NOT z_asgard.asgard_est_schema_systeme(''),
+        'échec assertion 2' ;
+
+    ASSERT NOT z_asgard.asgard_est_schema_systeme('c_bibliotheque'),
+        'échec assertion 3' ;
+
+    ASSERT z_asgard.asgard_est_schema_systeme('z_asgard_admin'),
+        'échec assertion 4' ;
+
+    ASSERT z_asgard.asgard_est_schema_systeme('pg_catalog'),
+        'échec assertion 5' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t0108() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_schema_systeme.' ;
+
+
+-- FUNCTION: z_asgard_recette.t0108b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t0108b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT NOT z_asgard.asgard_est_schema_systeme('c_Bibliothèque'),
+        'échec assertion 1' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t0108b() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_schema_systeme.' ;
+
+
+-- FUNCTION: z_asgard_recette.t109()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t109()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT 'SELECT' = ANY(z_asgard.asgard_table_owner_privileges()),
+        'échec assertion 1' ; 
+
+    ASSERT current_setting('server_version_num')::int < 170000
+            AND NOT 'MAINTAIN' = ANY(z_asgard.asgard_table_owner_privileges())
+        OR current_setting('server_version_num')::int >= 170000
+            AND 'MAINTAIN' = ANY(z_asgard.asgard_table_owner_privileges()),
+        'échec assertion 2' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t109() IS 'ASGARD recette. TEST : Test de la fonction table_owner_privileges.' ;
+
+
+-- FUNCTION: z_asgard_recette.t110()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t110()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT z_asgard.asgard_table_owner_privileges_codes() ~ 'w',
+        'échec assertion 1' ; 
+
+    ASSERT current_setting('server_version_num')::int < 170000
+            AND NOT z_asgard.asgard_table_owner_privileges_codes() ~ 'm'
+        OR current_setting('server_version_num')::int >= 170000
+            AND z_asgard.asgard_table_owner_privileges_codes() ~ 'm',
+        'échec assertion 2' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t110() IS 'ASGARD recette. TEST : Test de la fonction table_owner_privileges_codes.' ;
+
+
+-- FUNCTION: z_asgard_recette.t111()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t111()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT z_asgard.asgard_prefixe_erreur('Grave erreur !', 'FRE') = 'FRE0. Grave erreur !',
+        'échec assertion 1' ; 
+
+    ASSERT z_asgard.asgard_prefixe_erreur('FRE1. Grave erreur !', 'FRE') = 'FRE1. Grave erreur !',
+        'échec assertion 2' ;
+
+    ASSERT z_asgard.asgard_prefixe_erreur('', 'FRE') = 'FRE0. Erreur indéfinie.',
+        'échec assertion 3' ;
+
+    ASSERT z_asgard.asgard_prefixe_erreur(NULL, 'FRE') = 'FRE0. Erreur indéfinie.',
+        'échec assertion 4' ;
+
+    BEGIN
+
+        -- n'importe quel préfixe qui n'est pas exclusivement composé de
+        -- lettres majuscules
+        PERFORM z_asgard.asgard_prefixe_erreur('Grave erreur !', 'FRE0') ;
+
+        ASSERT False, 'échec assertion 5' ;
+
+    EXCEPTION WHEN syntax_error THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                                e_detl = PG_EXCEPTION_DETAIL ;
+        
+        ASSERT e_mssg ~ '^FPE1[.]', 'échec assertion 6' ;
+        
+    END ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t111() IS 'ASGARD recette. TEST : Test de la fonction asgard_prefixe_erreur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t112()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t112()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_user ;
+    CREATE ROLE g_asgard_cible ;
+
+    CREATE ROLE g_asgard_1a ;
+    CREATE ROLE g_asgard_1b ;
+    CREATE ROLE g_asgard_1c ;
+    CREATE ROLE g_asgard_1d ;
+
+    CREATE ROLE g_asgard_2a ;
+    CREATE ROLE g_asgard_2b ;
+    CREATE ROLE g_asgard_2c ;
+    CREATE ROLE g_asgard_2d ;
+
+    SET ROLE g_admin ;
+    CREATE ROLE g_asgard_3 ;
+    RESET ROLE ;
+
+    CREATE ROLE g_asgard_admin_delegue ;
+    GRANT g_admin TO g_asgard_admin_delegue ;
+
+    -- 1. le rôle courant n'est pas membre du rôle cible
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+        'échec assertion 1a' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+        'échec assertion 1b' ;
+
+    -- 2. le rôle courant est membre du rôle cible, mais n'hérite pas de ses droits
+    --    à cause d'un attribut NOINHERIT
+    ALTER ROLE g_asgard_1c NOINHERIT ;
+    GRANT g_asgard_cible TO g_asgard_1a ;
+    GRANT g_asgard_1a TO g_asgard_1b ;
+    GRANT g_asgard_1b TO g_asgard_1c ;
+    GRANT g_asgard_1c TO g_asgard_1d ;
+    GRANT g_asgard_1d TO g_asgard_user ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+        'échec assertion 2a' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+        'échec assertion 2b' ;
+
+    -- 3. le rôle courant est membre du rôle cible et hérite de ses droits
+    GRANT g_asgard_cible TO g_asgard_2a ;
+    GRANT g_asgard_2a TO g_asgard_2b ;
+    GRANT g_asgard_2b TO g_asgard_2c ;
+    GRANT g_asgard_2c TO g_asgard_2d ;
+    GRANT g_asgard_2d TO g_asgard_user ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+        'échec assertion 3a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+        'échec assertion 3b' ;
+
+    ------ PostgreSQL 16+ ------
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        ALTER ROLE g_asgard_1c INHERIT ;
+        REVOKE g_asgard_2d FROM g_asgard_user ;
+
+        EXECUTE 'GRANT g_asgard_1b TO g_asgard_1c WITH ADMIN True, INHERIT False' ;
+        EXECUTE 'GRANT g_asgard_1c TO g_asgard_1d WITH INHERIT False' ;
+
+        EXECUTE 'GRANT g_asgard_2a TO g_asgard_2b WITH ADMIN True, SET False, INHERIT False' ;
+        EXECUTE 'GRANT g_asgard_2b TO g_asgard_2c WITH ADMIN True, INHERIT False' ;
+
+        -- 4. chaîne insoluble
+        SET ROLE g_asgard_user ;
+
+        ASSERT NOT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+            'échec assertion 4a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 4b' ;
+        ASSERT NOT pg_has_role('g_asgard_1c', 'g_asgard_1b', 'USAGE'),
+            'échec assertion 4c' ;
+        ASSERT NOT pg_has_role('g_asgard_1d', 'g_asgard_1c', 'USAGE'),
+            'échec assertion 4d' ;
+
+        -- 5. avec le paramètre qui interdit de compléter les chaînes
+        --    de permission
+        GRANT g_asgard_2d TO g_asgard_user ;
+
+        INSERT INTO z_asgard_admin.asgard_configuration VALUES
+            ('sans_explicitation_set_inherit_option') ;
+
+        SET ROLE g_asgard_user ;
+
+        ASSERT NOT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+            'échec assertion 5a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 5b' ;
+
+        ASSERT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+            'échec assertion 5c' ;
+
+        TRUNCATE z_asgard_admin.asgard_configuration ;
+
+        -- 6. chaîne résoluble
+        SET ROLE g_asgard_user ;
+
+        ASSERT z_asgard.asgard_complete_heritage('g_asgard_cible'),
+            'échec assertion 6a' ;
+
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g_asgard_user', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 6b' ;
+        ASSERT NOT pg_has_role('g_asgard_1c', 'g_asgard_1b', 'USAGE'),
+            'échec assertion 6c' ;
+        ASSERT pg_has_role('g_asgard_2c', 'g_asgard_2b', 'USAGE'),
+            'échec assertion 6d' ;
+        ASSERT pg_has_role('g_asgard_2b', 'g_asgard_2a', 'USAGE'),
+            'échec assertion 6e' ;
+        ASSERT pg_has_role('g_asgard_2b', 'g_asgard_2a', 'SET'),
+            'échec assertion 6f' ;
+
+        -- 7. cas concret d'un rôle créé par g_admin
+        ASSERT NOT pg_has_role('g_asgard_admin_delegue', 'g_asgard_3', 'USAGE'),
+            'échec assertion 7a' ;
+        ASSERT NOT pg_has_role('g_asgard_admin_delegue', 'g_asgard_3', 'SET'),
+            'échec assertion 7b' ;
+        ASSERT NOT pg_has_role('g_admin', 'g_asgard_3', 'USAGE'),
+            'échec assertion 7c' ;
+        ASSERT NOT pg_has_role('g_admin', 'g_asgard_3', 'SET'),
+            'échec assertion 7d' ;
+
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_complete_heritage('g_asgard_3'),
+            'échec assertion 7e' ;
+
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g_asgard_admin_delegue', 'g_asgard_3', 'USAGE'),
+            'échec assertion 7f' ;
+        ASSERT pg_has_role('g_asgard_admin_delegue', 'g_asgard_3', 'SET'),
+            'échec assertion 7g' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_3', 'USAGE'),
+            'échec assertion 7h' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_3', 'SET'),
+            'échec assertion 7i' ;
+
+    END IF ;
+
+    DROP ROLE g_asgard_user ;
+    DROP ROLE g_asgard_cible ;
+    DROP ROLE g_asgard_1a ;
+    DROP ROLE g_asgard_1b ;
+    DROP ROLE g_asgard_1c ;
+    DROP ROLE g_asgard_1d ;
+    DROP ROLE g_asgard_2a ;
+    DROP ROLE g_asgard_2b ;
+    DROP ROLE g_asgard_2c ;
+    DROP ROLE g_asgard_2d ;
+    DROP ROLE g_asgard_3 ;
+    DROP ROLE g_asgard_admin_delegue ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t112() IS 'ASGARD recette. TEST : Test de la fonction asgard_complete_heritage.' ;
+
+
+-- FUNCTION: z_asgard_recette.t112b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t112b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g*Asgard_user" ;
+    CREATE ROLE "g*Asgard_cible" ;
+
+    CREATE ROLE "g*Asgard_1a" ;
+    CREATE ROLE "g*Asgard_1b" ;
+    CREATE ROLE "g*Asgard_1c" ;
+    CREATE ROLE "g*Asgard_1d" ;
+
+    CREATE ROLE "g*Asgard_2a" ;
+    CREATE ROLE "g*Asgard_2b" ;
+    CREATE ROLE "g*Asgard_2c" ;
+    CREATE ROLE "g*Asgard_2d" ;
+
+    SET ROLE g_admin ;
+    CREATE ROLE "g*Asgard_3" ;
+    RESET ROLE ;
+
+    CREATE ROLE "g*Asgard_admin_delegue" ;
+    GRANT g_admin TO "g*Asgard_admin_delegue" ;
+
+    -- 1. le rôle courant n'est pas membre du rôle cible
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_complete_heritage('g*Asgard_cible'),
+        'échec assertion 1a' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g*Asgard_user', 'g*Asgard_cible', 'USAGE'),
+        'échec assertion 1b' ;
+
+    -- 2. le rôle courant est membre du rôle cible, mais n'hérite pas de ses droits
+    --    à cause d'un attribut NOINHERIT
+    ALTER ROLE "g*Asgard_1c" NOINHERIT ;
+    GRANT "g*Asgard_cible" TO "g*Asgard_1a" ;
+    GRANT "g*Asgard_1a" TO "g*Asgard_1b" ;
+    GRANT "g*Asgard_1b" TO "g*Asgard_1c" ;
+    GRANT "g*Asgard_1c" TO "g*Asgard_1d" ;
+    GRANT "g*Asgard_1d" TO "g*Asgard_user" ;
+
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_complete_heritage('g*Asgard_cible'),
+        'échec assertion 2a' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g*Asgard_user', 'g*Asgard_cible', 'USAGE'),
+        'échec assertion 2b' ;
+
+    -- 3. le rôle courant est membre du rôle cible et hérite de ses droits
+    GRANT "g*Asgard_cible" TO "g*Asgard_2a" ;
+    GRANT "g*Asgard_2a" TO "g*Asgard_2b" ;
+    GRANT "g*Asgard_2b" TO "g*Asgard_2c" ;
+    GRANT "g*Asgard_2c" TO "g*Asgard_2d" ;
+    GRANT "g*Asgard_2d" TO "g*Asgard_user" ;
+
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT z_asgard.asgard_complete_heritage('g*Asgard_cible'),
+        'échec assertion 3a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g*Asgard_user', 'g*Asgard_cible', 'USAGE'),
+        'échec assertion 3b' ;
+
+    ------ PostgreSQL 16+ ------
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        ALTER ROLE "g*Asgard_1c" INHERIT ;
+        REVOKE "g*Asgard_2d" FROM "g*Asgard_user" ;
+
+        EXECUTE 'GRANT "g*Asgard_1b" TO "g*Asgard_1c" WITH ADMIN True, INHERIT False' ;
+        EXECUTE 'GRANT "g*Asgard_1c" TO "g*Asgard_1d" WITH INHERIT False' ;
+
+        EXECUTE 'GRANT "g*Asgard_2a" TO "g*Asgard_2b" WITH ADMIN True, SET False, INHERIT False' ;
+        EXECUTE 'GRANT "g*Asgard_2b" TO "g*Asgard_2c" WITH ADMIN True, INHERIT False' ;
+
+        -- 4. chaîne insoluble
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT NOT z_asgard.asgard_complete_heritage('g*Asgard_cible'),
+            'échec assertion 4a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g*Asgard_user', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 4b' ;
+        ASSERT NOT pg_has_role('g*Asgard_1c', 'g*Asgard_1b', 'USAGE'),
+            'échec assertion 4c' ;
+        ASSERT NOT pg_has_role('g*Asgard_1d', 'g*Asgard_1c', 'USAGE'),
+            'échec assertion 4d' ;
+
+        -- 5. chaîne résoluble
+        GRANT "g*Asgard_2d" TO "g*Asgard_user" ;
+
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT z_asgard.asgard_complete_heritage('g*Asgard_cible'),
+            'échec assertion 5a' ;
+
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g*Asgard_user', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 5b' ;
+        ASSERT NOT pg_has_role('g*Asgard_1c', 'g*Asgard_1b', 'USAGE'),
+            'échec assertion 5c' ;
+        ASSERT pg_has_role('g*Asgard_2c', 'g*Asgard_2b', 'USAGE'),
+            'échec assertion 5d' ;
+        ASSERT pg_has_role('g*Asgard_2b', 'g*Asgard_2a', 'USAGE'),
+            'échec assertion 5e' ;
+        ASSERT pg_has_role('g*Asgard_2b', 'g*Asgard_2a', 'SET'),
+            'échec assertion 5f' ;
+
+        -- 6. cas concret d'un rôle créé par g_admin
+        ASSERT NOT pg_has_role('g*Asgard_admin_delegue', 'g*Asgard_3', 'USAGE'),
+            'échec assertion 6a' ;
+        ASSERT NOT pg_has_role('g*Asgard_admin_delegue', 'g*Asgard_3', 'SET'),
+            'échec assertion 6b' ;
+        ASSERT NOT pg_has_role('g_admin', 'g*Asgard_3', 'USAGE'),
+            'échec assertion 6c' ;
+        ASSERT NOT pg_has_role('g_admin', 'g*Asgard_3', 'SET'),
+            'échec assertion 6d' ;
+
+        SET ROLE "g*Asgard_admin_delegue" ;
+
+        ASSERT z_asgard.asgard_complete_heritage('g*Asgard_3'),
+            'échec assertion 6e' ;
+
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g*Asgard_admin_delegue', 'g*Asgard_3', 'USAGE'),
+            'échec assertion 6f' ;
+        ASSERT pg_has_role('g*Asgard_admin_delegue', 'g*Asgard_3', 'SET'),
+            'échec assertion 6g' ;
+        ASSERT pg_has_role('g_admin', 'g*Asgard_3', 'USAGE'),
+            'échec assertion 6h' ;
+        ASSERT pg_has_role('g_admin', 'g*Asgard_3', 'SET'),
+            'échec assertion 6i' ;
+
+    END IF ;
+
+    DROP ROLE "g*Asgard_user" ;
+    DROP ROLE "g*Asgard_cible" ;
+    DROP ROLE "g*Asgard_1a" ;
+    DROP ROLE "g*Asgard_1b" ;
+    DROP ROLE "g*Asgard_1c" ;
+    DROP ROLE "g*Asgard_1d" ;
+    DROP ROLE "g*Asgard_2a" ;
+    DROP ROLE "g*Asgard_2b" ;
+    DROP ROLE "g*Asgard_2c" ;
+    DROP ROLE "g*Asgard_2d" ;
+    DROP ROLE "g*Asgard_3" ;
+    DROP ROLE "g*Asgard_admin_delegue" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t112b() IS 'ASGARD recette. TEST : Test de la fonction asgard_complete_heritage.' ;
+
+
+-- FUNCTION: z_asgard_recette.t113()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t113()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_quidam ;
+
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES 
+        ('autorise_objets_inconnus'), 
+        ('createur_sans_admin_option_producteurs') ;
+
+    -- 1. n'importe qui doit pouvoir accéder aux paramètres
+    SET ROLE g_asgard_quidam ;
+
+    ASSERT NOT z_asgard.asgard_parametre('autorise_producteur_connexion'),
+        'échec assertion 1a' ;
+
+    ASSERT z_asgard.asgard_parametre('autorise_objets_inconnus'),
+        'échec assertion 1b' ;
+
+    RESET ROLE ;
+
+    -- 2. mais la fonction échoue si le paramètre n'est pas une
+    --    valeur déclarée.
+    BEGIN
+
+        PERFORM z_asgard.asgard_parametre('un_truc') ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN OTHERS THEN END ;
+
+    DROP ROLE g_asgard_quidam ;
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t113() IS 'ASGARD recette. TEST : Test de la fonction asgard_parametre.' ;
+
+
+-- FUNCTION: z_asgard_recette.t114()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t114()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_user ;
+    GRANT g_asgard_producteur TO g_asgard_user WITH ADMIN OPTION ;
+
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('autorise_producteur_membre_g_admin'),
+        ('g_admin_sans_permission_producteurs'),
+        ('g_admin_sans_admin_option_producteurs'),
+        ('autorise_producteur_connexion') ;
+
+    -- 1. avec le paramètre qui interdit de conférer des permissions à g_admin
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 1a' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_producteur', 'MEMBER'),
+        'échec assertion 1b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'g_admin_sans_permission_producteurs' ;
+
+    -- 2. avec le paramètre qui demande à ne pas conférer l'option ADMIN
+    SET ROLE g_asgard_user ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 2a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+        'échec assertion 2b' ;
+
+    ASSERT NOT (
+        SELECT admin_option
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 2c' ;
+    -- NB: pg_has_role ne permettait pas de tester l'option ADMIN avant PG12.
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'g_admin_sans_admin_option_producteurs' ;
+
+    SET ROLE g_asgard_user ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+    RESET ROLE ;
+
+    -- 3. producteur super-utilisateur
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin(current_user),
+        'échec assertion 3a' ;
+
+    ASSERT NOT pg_has_role('g_admin', current_user, 'MEMBER'),
+        'échec assertion 3b' ;
+
+    -- 4. producteur membre de g_admin
+    --    d'abord avec le paramètre de configuration qui laisse
+    --    passer sans erreur, puis sans, puis avec le paramètre
+    --    "permissif" de la fonction.
+    GRANT g_admin TO g_asgard_producteur ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 4a' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_producteur', 'MEMBER'),
+        'échec assertion 4b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'autorise_producteur_membre_g_admin' ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur') ;
+
+        ASSERT False, 'échec assertion 4c' ;
+
+    EXCEPTION WHEN invalid_grant_operation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ '^FGP3[.]', 'échec assertion 4d' ;
+
+    END ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin(
+        'g_asgard_producteur', permissif := True
+    ), 'échec assertion 4e' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_producteur', 'MEMBER'),
+        'échec assertion 4f' ;
+
+    REVOKE g_admin FROM g_asgard_producteur ;
+
+    -- 5. producteur rôle de connexion
+    --    d'abord avec le paramètre de configuration qui laisse
+    --    passer sans erreur, puis sans, puis avec le paramètre
+    --    "permissif" de la fonction.
+    ALTER ROLE g_asgard_producteur LOGIN ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 5a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+        'échec assertion 5b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'autorise_producteur_connexion' ;
+
+    BEGIN
+        -- échoue même si g_admin est déjà membre du producteur
+        PERFORM z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur') ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN invalid_grant_operation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ '^FGP2[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    REVOKE g_asgard_producteur FROM g_admin GRANTED BY g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin(
+        'g_asgard_producteur', permissif := True
+    ), 'échec assertion 5e' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_producteur', 'MEMBER'),
+        'échec assertion 5f' ;
+
+    ALTER ROLE g_asgard_producteur NOLOGIN ;
+
+    -- 6. g_admin est déjà membre du producteur
+    --    si n'avait l'option ADMIN, on lui donne,
+    --    sauf si la configuration d'Asgard dit de ne pas
+    --    donner l'option ADMIN à g_admin.
+    GRANT g_asgard_producteur TO g_admin WITH ADMIN OPTION ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+        'échec assertion 6b' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+    GRANT g_asgard_producteur TO g_admin ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 6c' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT bool_or(admin_option) 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6d' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        REVOKE g_asgard_producteur FROM g_admin GRANTED BY g_asgard_user ;
+    ELSE
+        REVOKE g_asgard_producteur FROM g_admin ;
+        GRANT g_asgard_producteur TO g_admin ;
+    END IF ;
+
+    ASSERT NOT (
+        SELECT admin_option 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6e' ;
+
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_admin_option_producteurs') ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_asgard_producteur'),
+        'échec assertion 6f' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT (
+        SELECT admin_option 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6g' ;
+
+    -- 7. le producteur est g_admin
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_admin'),
+        'échec assertion 7' ;
+
+    RESET ROLE ;
+
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_user ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t114() IS 'ASGARD recette. TEST : Test de la fonction asgard_grant_producteur_to_g_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t114b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t114b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_Asgard producteur" ;
+    CREATE ROLE "g_Asgard_user" ;
+    GRANT "g_Asgard producteur" TO "g_Asgard_user" WITH ADMIN OPTION ;
+
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('autorise_producteur_membre_g_admin'),
+        ('g_admin_sans_permission_producteurs'),
+        ('g_admin_sans_admin_option_producteurs'),
+        ('autorise_producteur_connexion') ;
+
+    -- 1. avec le paramètre qui interdit de conférer des permissions à g_admin
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 1a' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_Asgard producteur', 'MEMBER'),
+        'échec assertion 1b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'g_admin_sans_permission_producteurs' ;
+
+    -- 2. avec le paramètre qui demande à ne pas conférer l'option ADMIN
+    SET ROLE "g_Asgard_user" ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 2a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_Asgard producteur', 'USAGE'),
+        'échec assertion 2b' ;
+
+    ASSERT NOT (
+        SELECT admin_option
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_Asgard producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 2c' ;
+    -- NB: pg_has_role ne permettait pas de tester l'option ADMIN avant PG12.
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'g_admin_sans_admin_option_producteurs' ;
+
+    SET ROLE "g_Asgard_user" ;
+    REVOKE "g_Asgard producteur" FROM g_admin ;
+    RESET ROLE ;
+
+    -- 4. producteur membre de g_admin
+    --    d'abord avec le paramètre de configuration qui laisse
+    --    passer sans erreur, puis sans, puis avec le paramètre
+    --    "permissif" de la fonction.
+    GRANT g_admin TO "g_Asgard producteur" ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 4a' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_Asgard producteur', 'MEMBER'),
+        'échec assertion 4b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'autorise_producteur_membre_g_admin' ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur') ;
+
+        ASSERT False, 'échec assertion 4c' ;
+
+    EXCEPTION WHEN invalid_grant_operation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ '^FGP3[.]', 'échec assertion 4d' ;
+
+    END ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin(
+        'g_Asgard producteur', permissif := True
+    ), 'échec assertion 4e' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_Asgard producteur', 'MEMBER'),
+        'échec assertion 4f' ;
+
+    REVOKE g_admin FROM "g_Asgard producteur" ;
+
+    -- 5. producteur rôle de connexion
+    --    d'abord avec le paramètre de configuration qui laisse
+    --    passer sans erreur, puis sans, puis avec le paramètre
+    --    "permissif" de la fonction.
+    ALTER ROLE "g_Asgard producteur" LOGIN ;
+
+    SET ROLE "g_Asgard_user" ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 5a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_Asgard producteur', 'USAGE'),
+        'échec assertion 5b' ;
+
+    DELETE FROM z_asgard_admin.asgard_configuration
+        WHERE parametre = 'autorise_producteur_connexion' ;
+
+    BEGIN
+        -- échoue même si g_admin est déjà membre du producteur
+        PERFORM z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur') ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN invalid_grant_operation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ '^FGP2[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    REVOKE "g_Asgard producteur" FROM g_admin GRANTED BY "g_Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin(
+        'g_Asgard producteur', permissif := True
+    ), 'échec assertion 5e' ;
+
+    ASSERT NOT pg_has_role('g_admin', 'g_Asgard producteur', 'MEMBER'),
+        'échec assertion 5f' ;
+
+    ALTER ROLE "g_Asgard producteur" NOLOGIN ;
+
+    -- 6. g_admin est déjà membre du producteur
+    --    si n'avait l'option ADMIN, on lui donne,
+    --    sauf si la configuration d'Asgard dit de ne pas
+    --    donner l'option ADMIN à g_admin.
+    GRANT "g_Asgard producteur" TO g_admin WITH ADMIN OPTION ;
+
+    SET ROLE "g_Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_Asgard producteur', 'USAGE'),
+        'échec assertion 6b' ;
+
+    REVOKE "g_Asgard producteur" FROM g_admin ;
+    GRANT "g_Asgard producteur" TO g_admin ;
+
+    SET ROLE "g_Asgard_user" ;
+
+    ASSERT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 6c' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT bool_or(admin_option) 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_Asgard producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6d' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        REVOKE "g_Asgard producteur" FROM g_admin GRANTED BY "g_Asgard_user" ;
+    ELSE
+        REVOKE "g_Asgard producteur" FROM g_admin ;
+        GRANT "g_Asgard producteur" TO g_admin ;
+    END IF ;
+
+    ASSERT NOT (
+        SELECT admin_option 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_Asgard producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6e' ;
+
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_admin_option_producteurs') ;
+
+    SET ROLE "g_Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_grant_producteur_to_g_admin('g_Asgard producteur'),
+        'échec assertion 6f' ;
+
+    RESET ROLE ;
+
+    ASSERT NOT (
+        SELECT admin_option 
+            FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_Asgard producteur')::regrole
+                AND member::regrole::text = 'g_admin'
+    ), 'échec assertion 6g' ;
+
+    DROP ROLE "g_Asgard producteur" ;
+    DROP ROLE "g_Asgard_user" ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t114b() IS 'ASGARD recette. TEST : Test de la fonction asgard_grant_producteur_to_g_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t115()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t115()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_user NOINHERIT ;
+    -- tout le test est réalisé avec un rôle qui sera
+    -- membre de g_admin sans hériter de ses droits,
+    -- car il est censé pouvoir l'endosser autant que
+    -- nécessaire
+    CREATE ROLE g_asgard_cible ;
+    CREATE ROLE g_asgard_1 ;
+
+    -- 1. le rôle courant n'est pas membre de g_admin
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+        'échec assertion 1' ;
+    
+    RESET ROLE ;
+
+    GRANT g_admin TO g_asgard_user ;
+
+    -- 2. le rôle cible est un super-utilisateur
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('postgres'),
+        'échec assertion 2' ;
+    
+    RESET ROLE ;
+
+    -- 3. g_admin hérite déjà du rôle cible
+    GRANT g_asgard_1 TO g_admin ;
+    GRANT g_asgard_cible TO g_asgard_1 ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+        'échec assertion 3' ;
+    
+    RESET ROLE ;
+
+    -- 4. si la configuration d'Asgard interdit de rendre
+    --    g_admin membre des rôles producteurs
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_permission_producteurs') ;
+
+    DROP ROLE g_asgard_1 ;
+
+    SET ROLE g_asgard_user ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+        'échec assertion 4' ;
+    
+    RESET ROLE ;  
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    -- 5. si la configuration d'Asgard prévoit de ne pas
+    --    donner à g_admin l'option ADMIN
+    
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_admin_option_producteurs') ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        SET ROLE g_asgard_user ;
+
+        ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+            'échec assertion 5a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_admin', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 5b' ;
+
+    ELSE
+
+        SET ROLE g_asgard_user ;
+
+        ASSERT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+            'échec assertion 5c' ;
+        
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 5d' ;
+
+        ASSERT NOT (
+            SELECT admin_option
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                    AND member::regrole::text = 'g_admin'
+        ), 'échec assertion 5e' ;
+
+        REVOKE g_asgard_cible FROM g_admin ;
+
+    END IF ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    -- 6. si la configuration d'Asgard prévoit de
+    --    donner à g_admin l'option ADMIN
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        SET ROLE g_asgard_user ;
+
+        ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+            'échec assertion 6a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_admin', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 6b' ;
+
+    ELSE
+
+        SET ROLE g_asgard_user ;
+
+        ASSERT z_asgard.asgard_heritage_via_g_admin('g_asgard_cible'),
+            'échec assertion 6c' ;
+
+        RESET ROLE ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_cible', 'USAGE'),
+            'échec assertion 6d' ;
+
+        ASSERT (
+            SELECT admin_option
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                    AND member::regrole::text = 'g_admin'
+        ), 'échec assertion 6e' ;
+
+    END IF ;
+
+    DROP ROLE g_asgard_user ;
+    DROP ROLE g_asgard_cible ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t115() IS 'ASGARD recette. TEST : Test de la fonction asgard_heritage_via_g_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t115b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t115b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g*Asgard_user" NOINHERIT ;
+    -- tout le test est réalisé avec un rôle qui sera
+    -- membre de g_admin sans hériter de ses droits,
+    -- car il est censé pouvoir l'endosser autant que
+    -- nécessaire
+    CREATE ROLE "g*Asgard_cible" ;
+    CREATE ROLE "g*Asgard_1" ;
+
+    -- 1. le rôle courant n'est pas membre de g_admin
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+        'échec assertion 1' ;
+    
+    RESET ROLE ;
+
+    GRANT g_admin TO "g*Asgard_user" ;
+
+    -- 2. le rôle cible est un super-utilisateur
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('postgres'),
+        'échec assertion 2' ;
+    
+    RESET ROLE ;
+
+    -- 3. g_admin hérite déjà du rôle cible
+    GRANT "g*Asgard_1" TO g_admin ;
+    GRANT "g*Asgard_cible" TO "g*Asgard_1" ;
+
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+        'échec assertion 3' ;
+    
+    RESET ROLE ;
+
+    -- 4. si la configuration d'Asgard interdit de rendre
+    --    g_admin membre des rôles producteurs
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_permission_producteurs') ;
+
+    DROP ROLE "g*Asgard_1" ;
+
+    SET ROLE "g*Asgard_user" ;
+
+    ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+        'échec assertion 4' ;
+    
+    RESET ROLE ;  
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    -- 5. si la configuration d'Asgard prévoit de ne pas
+    --    donner à g_admin l'option ADMIN
+    
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES
+        ('g_admin_sans_admin_option_producteurs') ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+            'échec assertion 5a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_admin', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 5b' ;
+
+    ELSE
+
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+            'échec assertion 5c' ;
+        
+        RESET ROLE ;
+
+        ASSERT pg_has_role('g_admin', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 5d' ;
+
+        ASSERT NOT (
+            SELECT admin_option
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g*Asgard_cible')::regrole
+                    AND member::regrole::text = 'g_admin'
+        ), 'échec assertion 5e' ;
+
+        REVOKE "g*Asgard_cible" FROM g_admin ;
+
+    END IF ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    -- 6. si la configuration d'Asgard prévoit de
+    --    donner à g_admin l'option ADMIN
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT NOT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+            'échec assertion 6a' ;
+
+        RESET ROLE ;
+
+        ASSERT NOT pg_has_role('g_admin', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 6b' ;
+
+    ELSE
+
+        SET ROLE "g*Asgard_user" ;
+
+        ASSERT z_asgard.asgard_heritage_via_g_admin('g*Asgard_cible'),
+            'échec assertion 6c' ;
+
+        RESET ROLE ;
+        ASSERT pg_has_role('g_admin', 'g*Asgard_cible', 'USAGE'),
+            'échec assertion 6d' ;
+
+        ASSERT (
+            SELECT admin_option
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g*Asgard_cible')::regrole
+                    AND member::regrole::text = 'g_admin'
+        ), 'échec assertion 6e' ;
+
+    END IF ;
+
+    DROP ROLE "g*Asgard_user" ;
+    DROP ROLE "g*Asgard_cible" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t115b() IS 'ASGARD recette. TEST : Test de la fonction asgard_heritage_via_g_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t116()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t116()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   executant text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur CREATEROLE ;
+    CREATE ROLE g_asgard_createur_delegue ;
+    GRANT g_asgard_createur TO g_asgard_createur_delegue ;
+
+    -- avec un super-utilisateur, la fonction crée juste le rôle
+    executant := z_asgard.asgard_create_role(
+        'g_asgard_nouveau_role',
+        grant_role_to_createur := True,
+        with_admin_option := True,
+        with_set_inherit_option := True
+    ) ;
+
+    ASSERT executant = current_user, 'échec assertion 1' ;
+    
+    ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+        'échec assertion 2' ;
+
+    ASSERT NOT quote_ident(current_user)::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+    ), 'échec assertion 3' ;
+
+    DROP ROLE g_asgard_nouveau_role ;
+
+    -- avec un rôle ordinaire
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        -- aucune permission
+        SET ROLE g_asgard_createur_delegue ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_asgard_nouveau_role',
+            grant_role_to_createur := False,
+            with_admin_option := True,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_asgard_createur', 'échec assertion 4' ;
+        
+        ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 5' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+        ), 'échec assertion 6' ;
+
+        DROP ROLE g_asgard_nouveau_role ;
+
+        -- créateur rendu membre simple
+        SET ROLE g_asgard_createur_delegue ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_asgard_nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := False,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_asgard_createur', 'échec assertion 7' ;
+        
+        ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 8' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+        ), 'échec assertion 9' ;
+
+        ASSERT NOT (
+            SELECT admin_option 
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole 
+                    AND member = quote_ident('g_asgard_createur')::regrole
+        ), 'échec assertion 10' ;
+
+        DROP ROLE g_asgard_nouveau_role ;
+
+        -- créateur rendu membre avec option ADMIN
+        SET ROLE g_asgard_createur_delegue ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_asgard_nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := True,
+            with_set_inherit_option := False
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_asgard_createur', 'échec assertion 11' ;
+        
+        ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 12' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+        ), 'échec assertion 13' ;
+
+        ASSERT (
+            SELECT admin_option 
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole 
+                    AND member = quote_ident('g_asgard_createur')::regrole
+        ), 'échec assertion 14' ;
+
+        DROP ROLE g_asgard_nouveau_role ;
+
+    ELSE
+
+        -- sans permissions aditionnelles
+        SET ROLE g_asgard_createur_delegue ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_asgard_nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := True,
+            with_set_inherit_option := False
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_asgard_createur', 'échec assertion 15' ;
+        
+        ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 16' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+                    AND admin_option
+        ), 'échec assertion 17' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+                    AND member = quote_ident('g_asgard_createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 18' ;
+
+        DROP ROLE g_asgard_nouveau_role ;
+
+        -- avec les options SET et INHERIT
+        SET ROLE g_asgard_createur_delegue ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_asgard_nouveau_role',
+            grant_role_to_createur := False,
+            with_admin_option := False,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_asgard_createur', 'échec assertion 19' ;
+        
+        ASSERT 'g_asgard_nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 20' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+                    AND admin_option
+        ), 'échec assertion 21' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_role')::regrole
+                    AND inherit_option AND set_option
+                    AND grantor = quote_ident('g_asgard_createur')::regrole
+        ), 'échec assertion 22' ;
+
+        -- NB: L'option ADMIN étant conférée par postgres, tandis que INHERIT et
+        -- SET sont auto-conférées, les deux assertions ci-dessus portent sur
+        -- deux enregistrements différents de pg_auth_members
+
+        DROP ROLE g_asgard_nouveau_role ;
+
+    END IF ;
+
+    DROP ROLE g_asgard_createur ;
+    DROP ROLE g_asgard_createur_delegue ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t116() IS 'ASGARD recette. TEST : Test de la fonction asgard_create_role.' ;
+
+
+-- FUNCTION: z_asgard_recette.t116b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t116b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   executant text ;
+BEGIN
+
+    CREATE ROLE "g_ASGARD_createur" CREATEROLE ;
+    CREATE ROLE "g_Asgard*createur delegue" ;
+    GRANT "g_ASGARD_createur" TO "g_Asgard*createur delegue" ;
+
+    -- avec un super-utilisateur, la fonction crée juste le rôle
+    executant := z_asgard.asgard_create_role(
+        'g_Asgard*nouveau_role',
+        grant_role_to_createur := True,
+        with_admin_option := True,
+        with_set_inherit_option := True
+    ) ;
+
+    ASSERT executant = current_user, 'échec assertion 1' ;
+    
+    ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+        'échec assertion 2' ;
+
+    ASSERT NOT quote_ident(current_user)::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+    ), 'échec assertion 3' ;
+
+    DROP ROLE "g_Asgard*nouveau_role" ;
+
+    -- avec un rôle ordinaire
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        -- aucune permission
+        SET ROLE "g_Asgard*createur delegue" ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_Asgard*nouveau_role',
+            grant_role_to_createur := False,
+            with_admin_option := True,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_ASGARD_createur', 'échec assertion 4' ;
+        
+        ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 5' ;
+
+        ASSERT NOT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+        ), 'échec assertion 6' ;
+
+        DROP ROLE "g_Asgard*nouveau_role" ;
+
+        -- créateur rendu membre simple
+        SET ROLE "g_Asgard*createur delegue" ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_Asgard*nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := False,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_ASGARD_createur', 'échec assertion 7' ;
+        
+        ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 8' ;
+
+        ASSERT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+        ), 'échec assertion 9' ;
+
+        ASSERT NOT (
+            SELECT admin_option 
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole 
+                    AND member = quote_ident('g_ASGARD_createur')::regrole
+        ), 'échec assertion 10' ;
+
+        DROP ROLE "g_Asgard*nouveau_role" ;
+
+        -- créateur rendu membre avec option ADMIN
+        SET ROLE "g_Asgard*createur delegue" ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_Asgard*nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := True,
+            with_set_inherit_option := False
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_ASGARD_createur', 'échec assertion 11' ;
+        
+        ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 12' ;
+
+        ASSERT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+        ), 'échec assertion 13' ;
+
+        ASSERT (
+            SELECT admin_option 
+                FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole 
+                    AND member = quote_ident('g_ASGARD_createur')::regrole
+        ), 'échec assertion 14' ;
+
+        DROP ROLE "g_Asgard*nouveau_role" ;
+
+    ELSE
+
+        -- sans permissions aditionnelles
+        SET ROLE "g_Asgard*createur delegue" ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_Asgard*nouveau_role',
+            grant_role_to_createur := True,
+            with_admin_option := True,
+            with_set_inherit_option := False
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_ASGARD_createur', 'échec assertion 15' ;
+        
+        ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 16' ;
+
+        ASSERT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+                    AND admin_option
+        ), 'échec assertion 17' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+                    AND member = quote_ident('g_ASGARD_createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 18' ;
+
+        DROP ROLE "g_Asgard*nouveau_role" ;
+
+        -- avec les options SET et INHERIT
+        SET ROLE "g_Asgard*createur delegue" ;
+
+        executant := z_asgard.asgard_create_role(
+            'g_Asgard*nouveau_role',
+            grant_role_to_createur := False,
+            with_admin_option := False,
+            with_set_inherit_option := True
+        ) ;
+
+        RESET ROLE ;
+
+        ASSERT executant = 'g_ASGARD_createur', 'échec assertion 19' ;
+        
+        ASSERT 'g_Asgard*nouveau_role' IN (SELECT pg_roles.rolname FROM pg_roles),
+            'échec assertion 20' ;
+
+        ASSERT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+                    AND admin_option
+        ), 'échec assertion 21' ;
+
+        ASSERT quote_ident('g_ASGARD_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_Asgard*nouveau_role')::regrole
+                    AND inherit_option AND set_option
+                    AND grantor = quote_ident('g_ASGARD_createur')::regrole
+        ), 'échec assertion 22' ;
+
+        -- NB: L'option ADMIN étant conférée par postgres, tandis que INHERIT et
+        -- SET sont auto-conférées, les deux assertions ci-dessus portent sur
+        -- deux enregistrements différents de pg_auth_members
+
+        DROP ROLE "g_Asgard*nouveau_role" ;
+
+    END IF ;
+
+    DROP ROLE "g_ASGARD_createur" ;
+    DROP ROLE "g_Asgard*createur delegue" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t116b() IS 'ASGARD recette. TEST : Test de la fonction asgard_create_role.' ;
+
+
+-- FUNCTION: z_asgard_recette.t117()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t117()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   executant text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur CREATEROLE ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO g_asgard_createur', current_database()) ;
+    CREATE ROLE g_asgard_createur_delegue ;
+    GRANT g_asgard_createur TO g_asgard_createur_delegue ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur)
+        VALUES ('c_bibliotheque', True, 'g_asgard_producteur_1', 'g_asgard_editeur_1', 'g_asgard_lecteur_1') ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        -- par défaut, le créateur est seulement rendu membre du rôle
+        -- producteur, avec l'option ADMIN
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 1' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_1')::regrole
+        ), 'échec assertion 2' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_1')::regrole
+        ), 'échec assertion 3' ;
+
+    ELSE
+
+        -- par défaut, le créateur ne reçoit des permissions supplémentaires
+        -- que sur le producteur
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 4a' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_1')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 4b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 5a' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_1')::regrole
+                    AND member = quote_ident('g_asgard_createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 5b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 6a' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_1')::regrole
+                    AND member = quote_ident('g_asgard_createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 6b' ;
+
+    END IF ;
+
+    -- [PG15-] en rendant aussi le créateur membre des rôles lecteurs et éditeurs
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES ('createur_avec_permission_editeurs_lecteurs') ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur_2',
+            editeur = 'g_asgard_editeur_2',
+            lecteur = 'g_asgard_lecteur_2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 7' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_2')::regrole
+        ), 'échec assertion 8a' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 8b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_2')::regrole
+        ), 'échec assertion 9a' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 9b' ;
+
+    END IF ;
+
+    -- [PG15-] en rendant le créateur membre des rôles lecteurs et éditeurs avec option ADMIN,
+    -- sans option ADMIN pour le producteur
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES 
+        ('createur_avec_admin_option_editeurs_lecteurs'),
+        ('createur_sans_admin_option_producteurs') ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur_3',
+            editeur = 'g_asgard_editeur_3',
+            lecteur = 'g_asgard_lecteur_3'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_3')::regrole
+        ), 'échec assertion 10a' ;
+
+        ASSERT NOT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 10b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 11' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 12' ;
+
+    END IF ;
+
+    -- [PG16+] en donnant SET et INHERIT sur le lecteur et l'éditeur
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES 
+        ('createur_avec_set_inherit_option_editeurs_lecteurs') ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur_4',
+            editeur = 'g_asgard_editeur_4',
+            lecteur = 'g_asgard_lecteur_4'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 19a' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 19b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 20a' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_editeur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 20b' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 21a' ;
+
+        ASSERT quote_ident('g_asgard_createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_lecteur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 21b' ;
+
+    END IF ;
+
+    -- pas de permission sur les rôles pré-existants
+    DELETE FROM z_asgard_admin.asgard_configuration 
+        WHERE parametre = 'g_admin_sans_permission_producteurs' ;
+
+    CREATE ROLE g_asgard_producteur_5 ;
+    CREATE ROLE g_asgard_editeur_5 ;
+    CREATE ROLE g_asgard_lecteur_5 ;
+
+    CREATE ROLE g_asgard_intermediaire ;
+    GRANT g_asgard_producteur_5 TO g_asgard_intermediaire ;
+    GRANT g_asgard_intermediaire TO g_asgard_createur_delegue ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur_5',
+            editeur = 'g_asgard_editeur_5',
+            lecteur = 'g_asgard_lecteur_5'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_5')::regrole
+                AND member = quote_ident('g_asgard_createur')::regrole
+    ) = 0, 'échec assertion 22a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_5')::regrole
+                AND member = quote_ident('g_asgard_createur_delegue')::regrole
+    ) = 0, 'échec assertion 22b' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_editeur_5')::regrole
+                AND member = quote_ident('g_asgard_createur')::regrole
+    ) = 0, 'échec assertion 23a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_editeur_5')::regrole
+                AND member = quote_ident('g_asgard_createur_delegue')::regrole
+    ) = 0, 'échec assertion 23b' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_lecteur_5')::regrole
+                AND member = quote_ident('g_asgard_createur')::regrole
+    ) = 0, 'échec assertion 24a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_lecteur_5')::regrole
+                AND member = quote_ident('g_asgard_createur_delegue')::regrole
+    ) = 0, 'échec assertion 24b' ;
+    
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    DROP ROLE g_asgard_producteur_1 ;
+    DROP ROLE g_asgard_editeur_1 ;
+    DROP ROLE g_asgard_lecteur_1 ;
+    DROP ROLE g_asgard_producteur_2 ;
+    DROP ROLE g_asgard_editeur_2 ;
+    DROP ROLE g_asgard_lecteur_2 ;
+    DROP ROLE g_asgard_producteur_3 ;
+    DROP ROLE g_asgard_editeur_3 ;
+    DROP ROLE g_asgard_lecteur_3 ;
+    DROP ROLE g_asgard_producteur_4 ;
+    DROP ROLE g_asgard_editeur_4 ;
+    DROP ROLE g_asgard_lecteur_4 ;
+    DROP ROLE g_asgard_producteur_5 ;
+    DROP ROLE g_asgard_editeur_5 ;
+    DROP ROLE g_asgard_lecteur_5 ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM g_asgard_createur', current_database()) ;
+    DROP ROLE g_asgard_createur ;
+    DROP ROLE g_asgard_createur_delegue ;
+    DROP ROLE g_asgard_intermediaire ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t117() IS 'ASGARD recette. TEST : Création d''un rôle via la table de gestion et privilèges du créateur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t117b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t117b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   executant text ;
+BEGIN
+
+    CREATE ROLE "g_asgard*Createur" CREATEROLE ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO "g_asgard*Createur"', current_database()) ;
+    CREATE ROLE "g_asgard_Créateur Délégué" ;
+    GRANT "g_asgard*Createur" TO "g_asgard_Créateur Délégué" ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur)
+        VALUES ('*c_Bibliothèque*', True, 'g_asgard*producteur_1', 'g_asgard Editeur_1', 'g_asgard_Lecteur_1') ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        -- par défaut, le créateur est seulement rendu membre du rôle
+        -- producteur, avec l'option ADMIN
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 1' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_1')::regrole
+                    AND member = quote_ident('g_asgard*Createur')::regrole
+        ) = 0, 'échec assertion 2' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_1')::regrole
+                    AND member = quote_ident('g_asgard*Createur')::regrole
+        ) = 0, 'échec assertion 3' ;
+
+    ELSE
+
+        -- par défaut, le créateur ne reçoit des permissions supplémentaires
+        -- que sur le producteur
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 4a' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_1')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 4b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 5a' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_1')::regrole
+                    AND member = quote_ident('g_asgard*Createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 5b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_1')::regrole
+                    AND admin_option
+        ), 'échec assertion 6a' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_1')::regrole
+                    AND member = quote_ident('g_asgard*Createur')::regrole
+                    AND (inherit_option OR set_option)
+        ) = 0, 'échec assertion 6b' ;
+
+    END IF ;
+
+    -- [PG15-] en rendant aussi le créateur membre des rôles lecteurs et éditeurs
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES ('createur_avec_permission_editeurs_lecteurs') ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard*producteur_2',
+            editeur = 'g_asgard Editeur_2',
+            lecteur = 'g_asgard_Lecteur_2'
+        WHERE nom_schema = '*c_Bibliothèque*' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 7' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_2')::regrole
+        ), 'échec assertion 8a' ;
+
+        ASSERT NOT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 8b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_2')::regrole
+        ), 'échec assertion 9a' ;
+
+        ASSERT NOT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_2')::regrole
+                    AND admin_option
+        ), 'échec assertion 9b' ;
+
+    END IF ;
+
+    -- [PG15-] en rendant le créateur membre des rôles lecteurs et éditeurs avec option ADMIN,
+    -- sans option ADMIN pour le producteur
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES 
+        ('createur_avec_admin_option_editeurs_lecteurs'),
+        ('createur_sans_admin_option_producteurs') ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard*producteur_3',
+            editeur = 'g_asgard Editeur_3',
+            lecteur = 'g_asgard_Lecteur_3'
+        WHERE nom_schema = '*c_Bibliothèque*' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_3')::regrole
+        ), 'échec assertion 10a' ;
+
+        ASSERT NOT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 10b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 11' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_3')::regrole
+                    AND admin_option
+        ), 'échec assertion 12' ;
+
+    END IF ;
+
+    -- [PG16+] en donnant SET et INHERIT sur le lecteur et l'éditeur
+    INSERT INTO z_asgard_admin.asgard_configuration VALUES 
+        ('createur_avec_set_inherit_option_editeurs_lecteurs') ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard*producteur_4',
+            editeur = 'g_asgard Editeur_4',
+            lecteur = 'g_asgard_Lecteur_4'
+        WHERE nom_schema = '*c_Bibliothèque*' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 19a' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*producteur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 19b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 20a' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Editeur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 20b' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_4')::regrole
+                    AND admin_option
+        ), 'échec assertion 21a' ;
+
+        ASSERT quote_ident('g_asgard*Createur')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Lecteur_4')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 21b' ;
+
+    END IF ;
+
+    -- pas de permission sur les rôles pré-existants
+    DELETE FROM z_asgard_admin.asgard_configuration 
+        WHERE parametre = 'g_admin_sans_permission_producteurs' ;
+
+    CREATE ROLE "g_asgard*producteur_5" ;
+    CREATE ROLE "g_asgard Editeur_5" ;
+    CREATE ROLE "g_asgard_Lecteur_5" ;
+
+    CREATE ROLE "g_asgard Intermediaire" ;
+    GRANT "g_asgard*producteur_5" TO "g_asgard Intermediaire" ;
+    GRANT "g_asgard Intermediaire" TO "g_asgard_Créateur Délégué" ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard*producteur_5',
+            editeur = 'g_asgard Editeur_5',
+            lecteur = 'g_asgard_Lecteur_5'
+        WHERE nom_schema = '*c_Bibliothèque*' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*producteur_5')::regrole
+                AND member = quote_ident('g_asgard*Createur')::regrole
+    ) = 0, 'échec assertion 22a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*producteur_5')::regrole
+                AND member = quote_ident('g_asgard_Créateur Délégué')::regrole
+    ) = 0, 'échec assertion 22b' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Editeur_5')::regrole
+                AND member = quote_ident('g_asgard*Createur')::regrole
+    ) = 0, 'échec assertion 23a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Editeur_5')::regrole
+                AND member = quote_ident('g_asgard_Créateur Délégué')::regrole
+    ) = 0, 'échec assertion 23b' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_Lecteur_5')::regrole
+                AND member = quote_ident('g_asgard*Createur')::regrole
+    ) = 0, 'échec assertion 24a' ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_Lecteur_5')::regrole
+                AND member = quote_ident('g_asgard_Créateur Délégué')::regrole
+    ) = 0, 'échec assertion 24b' ;
+    
+    DROP SCHEMA "*c_Bibliothèque*" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    TRUNCATE z_asgard_admin.asgard_configuration ;
+
+    DROP ROLE "g_asgard*producteur_1" ;
+    DROP ROLE "g_asgard Editeur_1" ;
+    DROP ROLE "g_asgard_Lecteur_1" ;
+    DROP ROLE "g_asgard*producteur_2" ;
+    DROP ROLE "g_asgard Editeur_2" ;
+    DROP ROLE "g_asgard_Lecteur_2" ;
+    DROP ROLE "g_asgard*producteur_3" ;
+    DROP ROLE "g_asgard Editeur_3" ;
+    DROP ROLE "g_asgard_Lecteur_3" ;
+    DROP ROLE "g_asgard*producteur_4" ;
+    DROP ROLE "g_asgard Editeur_4" ;
+    DROP ROLE "g_asgard_Lecteur_4" ;
+    DROP ROLE "g_asgard*producteur_5" ;
+    DROP ROLE "g_asgard Editeur_5" ;
+    DROP ROLE "g_asgard_Lecteur_5" ;
+    
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM "g_asgard*Createur"', current_database()) ;
+    DROP ROLE "g_asgard*Createur" ;
+    DROP ROLE "g_asgard_Créateur Délégué" ;
+    DROP ROLE "g_asgard Intermediaire" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t117b() IS 'ASGARD recette. TEST : Création d''un rôle via la table de gestion et privilèges du créateur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t118()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t118()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur CREATEROLE ;
+    CREATE ROLE g_asgard_createur_delegue ;
+    GRANT g_asgard_createur TO g_asgard_createur_delegue ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO g_asgard_createur', current_database()) ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur)
+            VALUES ('c_bibliotheque', True, 'g_asgard_producteur_1', 'g_asgard_editeur_1', 'g_asgard_lecteur_1') ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_asgard_producteur_1' = (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 1a' ;
+
+    ASSERT 'g_asgard_producteur_1' = (
+        SELECT oid_producteur::regrole::text
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 1b' ;
+
+    ASSERT 'g_asgard_editeur_1' = (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 2a' ;
+
+    ASSERT 'g_asgard_editeur_1' = (
+        SELECT oid_editeur::regrole::text
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 2b' ;
+
+    ASSERT 'g_asgard_lecteur_1' = (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 3a' ;
+
+    ASSERT 'g_asgard_lecteur_1' = (
+        SELECT oid_lecteur::regrole::text
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 3b' ;
+
+    SET ROLE g_asgard_createur_delegue ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur_2',
+            editeur = 'g_asgard_editeur_2'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_asgard_producteur_2' = (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 4a' ;
+
+    ASSERT 'g_asgard_producteur_2' = (
+        SELECT oid_producteur::regrole::text
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 4b' ;
+
+    ASSERT 'g_asgard_editeur_2' = (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 5a' ;
+
+    ASSERT 'g_asgard_editeur_2' = (
+        SELECT oid_editeur::regrole::text 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 5b' ;
+
+    ASSERT 'g_asgard_lecteur_1' = (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 6a' ;
+
+    ASSERT 'g_asgard_lecteur_1' = (
+        SELECT oid_lecteur::regrole::text 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 6b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_producteur_2 ;
+    DROP ROLE g_asgard_editeur_2 ;
+    DROP ROLE g_asgard_producteur_1 ;
+    DROP ROLE g_asgard_editeur_1 ;
+    DROP ROLE g_asgard_lecteur_1 ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM g_asgard_createur', current_database()) ;
+    DROP ROLE g_asgard_createur ;
+    DROP ROLE g_asgard_createur_delegue ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t118() IS 'ASGARD recette. TEST : Bonne gestion des OID des nouveaux rôles.' ;
+
+
+-- FUNCTION: z_asgard_recette.t118b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t118b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard**Créateur" CREATEROLE ;
+    CREATE ROLE "g_asgard_Créateur Délégué" ;
+    GRANT "g_asgard**Créateur" TO "g_asgard_Créateur Délégué" ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO "g_asgard**Créateur"', current_database()) ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur, editeur, lecteur)
+            VALUES ('*c_Bibliothèque*', True, 'g_asgard_Producteur 1', 'g_asgard_Editeur_1', 'g_asgard!lecteur_1!!!') ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_asgard_Producteur 1' = (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 1a' ;
+
+    ASSERT quote_ident('g_asgard_Producteur 1')::regrole::oid = (
+        SELECT oid_producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 1b' ;
+
+    ASSERT 'g_asgard_Editeur_1' = (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 2a' ;
+
+    ASSERT quote_ident('g_asgard_Editeur_1')::regrole::oid = (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 2b' ;
+
+    ASSERT 'g_asgard!lecteur_1!!!' = (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 3a' ;
+
+    ASSERT quote_ident('g_asgard!lecteur_1!!!')::regrole::oid = (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 3b' ;
+
+    SET ROLE "g_asgard_Créateur Délégué" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_Producteur 2',
+            editeur = 'g_asgard_Editeur_2'
+        WHERE nom_schema = '*c_Bibliothèque*' ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_asgard_Producteur 2' = (
+        SELECT producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 4a' ;
+
+    ASSERT quote_ident('g_asgard_Producteur 2')::regrole::oid = (
+        SELECT oid_producteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 4b' ;
+
+    ASSERT 'g_asgard_Editeur_2' = (
+        SELECT editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 5a' ;
+
+    ASSERT quote_ident('g_asgard_Editeur_2')::regrole::oid = (
+        SELECT oid_editeur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 5b' ;
+
+    ASSERT 'g_asgard!lecteur_1!!!' = (
+        SELECT lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 6a' ;
+
+    ASSERT quote_ident('g_asgard!lecteur_1!!!')::regrole::oid = (
+        SELECT oid_lecteur 
+            FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = '*c_Bibliothèque*'
+    ), 'échec assertion 6b' ;
+
+    DROP SCHEMA "*c_Bibliothèque*" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard_Producteur 2" ;
+    DROP ROLE "g_asgard_Editeur_2" ;
+    DROP ROLE "g_asgard_Producteur 1" ;
+    DROP ROLE "g_asgard_Editeur_1" ;
+    DROP ROLE "g_asgard!lecteur_1!!!" ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM "g_asgard**Créateur"', current_database()) ;
+    DROP ROLE "g_asgard**Créateur" ;
+    DROP ROLE "g_asgard_Créateur Délégué" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t118b() IS 'ASGARD recette. TEST : Bonne gestion des OID des nouveaux rôles.' ;
+
+
+-- FUNCTION: z_asgard_recette.t119()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t119()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_utilisateur ;
+
+    CREATE ROLE g_asgard_createur_role CREATEROLE ;
+    CREATE ROLE g_asgard_createur_role_2 ;
+    CREATE ROLE g_asgard_createur_role_3 NOINHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_createur_role TO g_asgard_createur_role_2 WITH ADMIN True, INHERIT False' ;
+    ELSE
+        GRANT g_asgard_createur_role TO g_asgard_createur_role_2 ;
+    END IF ;
+
+    GRANT g_asgard_createur_role_2 TO g_asgard_createur_role_3 ;
+    GRANT g_asgard_createur_role_3 TO g_asgard_utilisateur ;
+
+    CREATE ROLE g_asgard_createur_schema ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO g_asgard_createur_schema', current_database()) ;
+    CREATE ROLE g_asgard_createur_schema_2 ;
+    CREATE ROLE g_asgard_createur_schema_3 ;
+
+    GRANT g_asgard_createur_schema TO g_asgard_createur_schema_2 ;
+    GRANT g_asgard_createur_schema_2 TO g_asgard_createur_schema_3 ;
+    GRANT g_asgard_createur_schema_3 TO g_asgard_utilisateur ;
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_producteur_2 ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        CREATE ROLE g_asgard_producteur_3 ;
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_producteur_2 WITH ADMIN True, INHERIT False, SET False' ;
+        EXECUTE 'GRANT g_asgard_producteur_2 TO g_asgard_producteur_3 WITH ADMIN True, INHERIT False, SET False' ;
+    ELSE
+        CREATE ROLE g_asgard_producteur_3 NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_producteur_2 ;
+        GRANT g_asgard_producteur_2 TO g_asgard_producteur_3 ;
+    END IF ;
+
+    GRANT g_asgard_producteur_3 TO g_asgard_utilisateur ;
+
+    ------ Création d'un schéma et de son producteur ------
+    -- Le rôle courant est membre d'un rôle capable de créer des rôles
+    -- mais n'hérite pas de ses privilèges.
+    -- Il hérite via un autre rôle du droit de créer des schémas.
+    SET ROLE g_asgard_utilisateur ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_bibliotheque', True, 'g_asgard_producteur_temporaire') ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_asgard_producteur_temporaire')::regrole = (
+        SELECT nspowner FROM pg_namespace WHERE nspname = 'c_bibliotheque'
+    ), 'échec assertion 1' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_temporaire')::regrole
+                AND admin_option
+    ), 'échec assertion 2' ;
+
+    ASSERT quote_ident('g_asgard_createur_role')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_temporaire')::regrole
+                AND admin_option
+    ), 'échec assertion 3a' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT quote_ident('g_asgard_createur_role')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_temporaire')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 3b' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_temporaire')::regrole
+        ) = 3, 'échec assertion 4a' ;
+    ELSE
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur_temporaire')::regrole
+        ) = 2, 'échec assertion 4b' ;
+    END IF ;
+
+    ASSERT NOT pg_has_role('g_asgard_utilisateur', 'g_asgard_createur_role', 'USAGE'),
+        'échec assertion 5' ;
+
+    ASSERT NOT pg_has_role('g_asgard_utilisateur', 'g_asgard_producteur_temporaire', 'USAGE'),
+        'échec assertion 6a' ;
+
+    ASSERT pg_has_role('g_asgard_utilisateur', 'g_asgard_producteur_temporaire', 'MEMBER'),
+        'échec assertion 6b' ;
+
+    ------ Changement de propriétaire ------
+    -- Le rôle courant est membre indirect de l'ancien et du nouveau
+    -- propriétaire, mais n'hérite pas des droits de ce dernier.
+
+    GRANT g_asgard_producteur_temporaire TO g_asgard_utilisateur ;
+
+    SET ROLE g_asgard_utilisateur ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_producteur'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_asgard_producteur')::regrole = (
+        SELECT nspowner FROM pg_namespace WHERE nspname = 'c_bibliotheque'
+    ), 'échec assertion 7' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT pg_has_role('g_asgard_utilisateur', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 8a' ;
+        ASSERT pg_has_role('g_asgard_utilisateur', 'g_asgard_producteur', 'SET'),
+            'échec assertion 8b' ;
+    ELSE
+        ASSERT NOT pg_has_role('g_asgard_utilisateur', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 8c' ;
+    END IF ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+    ), 'échec assertion 9' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM g_asgard_createur_schema', current_database()) ;
+
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_createur_role ;
+    DROP ROLE g_asgard_createur_role_2 ;
+    DROP ROLE g_asgard_createur_role_3 ;
+    DROP ROLE g_asgard_createur_schema ;
+    DROP ROLE g_asgard_createur_schema_2 ;
+    DROP ROLE g_asgard_createur_schema_3 ;
+    DROP ROLE g_asgard_producteur_temporaire ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_producteur_2 ;
+    DROP ROLE g_asgard_producteur_3 ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t119() IS 'ASGARD recette. TEST : Actions via la table de gestion reposant sur un héritage de privilèges complexe.' ;
+
+
+-- FUNCTION: z_asgard_recette.t119b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t119b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard^^utilisateur" ;
+
+    CREATE ROLE "g_asgard Créateur_role" CREATEROLE ;
+    CREATE ROLE "g_asgard Créateur_role 2" ;
+    CREATE ROLE "g_asgard Créateur_role 3" NOINHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard Créateur_role" TO "g_asgard Créateur_role 2" WITH ADMIN True, INHERIT False' ;
+    ELSE
+        GRANT "g_asgard Créateur_role" TO "g_asgard Créateur_role 2" ;
+    END IF ;
+
+    GRANT "g_asgard Créateur_role 2" TO "g_asgard Créateur_role 3" ;
+    GRANT "g_asgard Créateur_role 3" TO "g_asgard^^utilisateur" ;
+
+    CREATE ROLE "g_asgard*Createur_schéma" ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO "g_asgard*Createur_schéma"', current_database()) ;
+    CREATE ROLE "g_asgard*Createur_schéma 2" ;
+    CREATE ROLE "g_asgard*Createur_schéma 3" ;
+
+    GRANT "g_asgard*Createur_schéma" TO "g_asgard*Createur_schéma 2" ;
+    GRANT "g_asgard*Createur_schéma 2" TO "g_asgard*Createur_schéma 3" ;
+    GRANT "g_asgard*Createur_schéma 3" TO "g_asgard^^utilisateur" ;
+
+    CREATE ROLE "g_asgard_PROducteur" ;
+    CREATE ROLE "g_asgard_PROducteur 2" ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        CREATE ROLE "g_asgard_PROducteur 3" ;
+        EXECUTE 'GRANT "g_asgard_PROducteur" TO "g_asgard_PROducteur 2" WITH ADMIN True, INHERIT False, SET False' ;
+        EXECUTE 'GRANT "g_asgard_PROducteur 2" TO "g_asgard_PROducteur 3" WITH ADMIN True, INHERIT False, SET False' ;
+    ELSE
+        CREATE ROLE "g_asgard_PROducteur 3" NOINHERIT ;
+        GRANT "g_asgard_PROducteur" TO "g_asgard_PROducteur 2" ;
+        GRANT "g_asgard_PROducteur 2" TO "g_asgard_PROducteur 3" ;
+    END IF ;
+
+    GRANT "g_asgard_PROducteur 3" TO "g_asgard^^utilisateur" ;
+
+    ------ Création d'un schéma et de son producteur ------
+    -- Le rôle courant est membre d'un rôle capable de créer des rôles
+    -- mais n'hérite pas de ses privilèges.
+    -- Il hérite via un autre rôle du droit de créer des schémas.
+    SET ROLE "g_asgard^^utilisateur" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (nom_schema, creation, producteur)
+        VALUES ('c_Bibliothèque', True, '"g_asgard_PROducteur"_temporaire') ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('"g_asgard_PROducteur"_temporaire')::regrole = (
+        SELECT nspowner FROM pg_namespace WHERE nspname = 'c_Bibliothèque'
+    ), 'échec assertion 1' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('"g_asgard_PROducteur"_temporaire')::regrole
+                AND admin_option
+    ), 'échec assertion 2' ;
+
+    ASSERT quote_ident('g_asgard Créateur_role')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('"g_asgard_PROducteur"_temporaire')::regrole
+                AND admin_option
+    ), 'échec assertion 3a' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT quote_ident('g_asgard Créateur_role')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('"g_asgard_PROducteur"_temporaire')::regrole
+                    AND set_option AND inherit_option
+        ), 'échec assertion 3b' ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('"g_asgard_PROducteur"_temporaire')::regrole
+        ) = 3, 'échec assertion 4a' ;
+    ELSE
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members 
+                WHERE roleid = quote_ident('"g_asgard_PROducteur"_temporaire')::regrole
+        ) = 2, 'échec assertion 4b' ;
+    END IF ;
+
+    ASSERT NOT pg_has_role('g_asgard^^utilisateur', 'g_asgard Créateur_role', 'USAGE'),
+        'échec assertion 5' ;
+
+    ASSERT NOT pg_has_role('g_asgard^^utilisateur', '"g_asgard_PROducteur"_temporaire', 'USAGE'),
+        'échec assertion 6a' ;
+
+    ASSERT pg_has_role('g_asgard^^utilisateur', '"g_asgard_PROducteur"_temporaire', 'MEMBER'),
+        'échec assertion 6b' ;
+
+    ------ Changement de propriétaire ------
+    -- Le rôle courant est membre indirect de l'ancien et du nouveau
+    -- propriétaire, mais n'hérite pas des droits de ce dernier.
+
+    GRANT """g_asgard_PROducteur""_temporaire" TO "g_asgard^^utilisateur" ;
+
+    SET ROLE "g_asgard^^utilisateur" ;
+
+    UPDATE z_asgard.gestion_schema_usr
+        SET producteur = 'g_asgard_PROducteur'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_asgard_PROducteur')::regrole = (
+        SELECT nspowner FROM pg_namespace WHERE nspname = 'c_Bibliothèque'
+    ), 'échec assertion 7' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT pg_has_role('g_asgard^^utilisateur', 'g_asgard_PROducteur', 'USAGE'),
+            'échec assertion 8a' ;
+        ASSERT pg_has_role('g_asgard^^utilisateur', 'g_asgard_PROducteur', 'SET'),
+            'échec assertion 8b' ;
+    ELSE
+        ASSERT NOT pg_has_role('g_asgard^^utilisateur', 'g_asgard_PROducteur', 'USAGE'),
+            'échec assertion 8c' ;
+    END IF ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_PROducteur')::regrole
+                AND admin_option
+    ), 'échec assertion 9' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM "g_asgard*Createur_schéma"', current_database()) ;
+
+    DROP ROLE "g_asgard^^utilisateur" ;
+    DROP ROLE "g_asgard Créateur_role" ;
+    DROP ROLE "g_asgard Créateur_role 2" ;
+    DROP ROLE "g_asgard Créateur_role 3" ;
+    DROP ROLE "g_asgard*Createur_schéma" ;
+    DROP ROLE "g_asgard*Createur_schéma 2" ;
+    DROP ROLE "g_asgard*Createur_schéma 3" ;
+    DROP ROLE """g_asgard_PROducteur""_temporaire" ;
+    DROP ROLE "g_asgard_PROducteur" ;
+    DROP ROLE "g_asgard_PROducteur 2" ;
+    DROP ROLE "g_asgard_PROducteur 3" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t119b() IS 'ASGARD recette. TEST : Actions via la table de gestion reposant sur un héritage de privilèges complexe.' ;
+
+
+-- FUNCTION: z_asgard_recette.t120()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t120()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_utilisateur ;
+    CREATE ROLE g_asgard_producteur_1 ;
+    CREATE ROLE g_asgard_producteur_2 ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur) VALUES 
+        (True, 'c_bibliotheque', 'g_asgard_producteur_1'),
+        (False, 'c_librairie', 'g_asgard_producteur_2'),
+        (False, 'c_archives', 'g_asgard_producteur_3') ;
+
+    SET ROLE g_asgard_utilisateur ;
+
+    -- schéma non référencé
+    ASSERT z_asgard.asgard_producteur_apparent('z_asgard_admin') IS NULL,
+        'échec assertion 1a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('z_asgard_admin'), quoted := True 
+    ) IS NULL, 'échec assertion 1b' ;
+
+    -- schéma actif
+    ASSERT z_asgard.asgard_producteur_apparent('c_bibliotheque') = 'g_asgard_producteur_1',
+        'échec assertion 2a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_bibliotheque'), quoted := True
+    ) = 'g_asgard_producteur_1', 'échec assertion 2b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_bibliotheque', compare_oid := True
+    ) = 'g_asgard_producteur_1', 'échec assertion 2c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_bibliotheque'), quoted := True, compare_oid := True
+    ) = 'g_asgard_producteur_1', 'échec assertion 2d' ; 
+
+    -- schéma inactif dont le producteur existe
+    ASSERT z_asgard.asgard_producteur_apparent('c_librairie') = 'g_asgard_producteur_2',
+        'échec assertion 3a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_librairie'), quoted := True
+    ) = 'g_asgard_producteur_2', 'échec assertion 3b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_librairie', compare_oid := True
+    ) IS NULL, 'échec assertion 3c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_librairie'), quoted := True, compare_oid := True
+    ) IS NULL, 'échec assertion 3d' ; 
+
+    -- schéma inactif dont le producteur n'existe pas
+    ASSERT z_asgard.asgard_producteur_apparent('c_archives') = 'g_admin',
+        'échec assertion 4a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_archives'), quoted := True
+    ) = 'g_admin', 'échec assertion 4b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_archives', compare_oid := True
+    ) IS NULL, 'échec assertion 4c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_archives'), quoted := True, compare_oid := True
+    ) IS NULL, 'échec assertion 4d' ; 
+
+    RESET ROLE ;
+
+    -- rôle dont le nom a été modifié
+    ALTER ROLE g_asgard_producteur_1 RENAME TO g_asgard_producteur_1b ;
+
+    ASSERT 'g_asgard_producteur_1' = (
+        SELECT producteur FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 5a' ;
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_producteur_apparent('c_bibliotheque') = 'g_asgard_producteur_1b',
+        'échec assertion 5b' ;
+
+    RESET ROLE ;    
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_producteur_1b ;
+    DROP ROLE g_asgard_producteur_2 ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t120() IS 'ASGARD recette. TEST : Test de la fonction asgard_producteur_apparent.' ;
+
+
+-- FUNCTION: z_asgard_recette.t120b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t120b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard*Utilisateur" ;
+    CREATE ROLE "g_asgard_Producteur 1" ;
+    CREATE ROLE "g_asgard_Producteur 2" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur) VALUES 
+        (True, 'c_Bibliothèque', 'g_asgard_Producteur 1'),
+        (False, 'c_Librairie!', 'g_asgard_Producteur 2'),
+        (False, 'c_Archives XXX', 'g_asgard_Producteur 3') ;
+
+    SET ROLE "g_asgard*Utilisateur" ;
+
+    -- schéma qui n'existe pas
+    ASSERT z_asgard.asgard_producteur_apparent('z_asgard_BLOBI') IS NULL,
+        'échec assertion 1a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('z_asgard_BLOBI'), quoted := True 
+    ) IS NULL, 'échec assertion 1b' ;
+
+    -- schéma actif
+    ASSERT z_asgard.asgard_producteur_apparent('c_Bibliothèque') = 'g_asgard_Producteur 1',
+        'échec assertion 2a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Bibliothèque'), quoted := True
+    ) = 'g_asgard_Producteur 1', 'échec assertion 2b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_Bibliothèque', compare_oid := True
+    ) = 'g_asgard_Producteur 1', 'échec assertion 2c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Bibliothèque'), quoted := True, compare_oid := True
+    ) = 'g_asgard_Producteur 1', 'échec assertion 2d' ; 
+
+    -- schéma inactif dont le producteur existe
+    ASSERT z_asgard.asgard_producteur_apparent('c_Librairie!') = 'g_asgard_Producteur 2',
+        'échec assertion 3a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Librairie!'), quoted := True
+    ) = 'g_asgard_Producteur 2', 'échec assertion 3b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_Librairie!', compare_oid := True
+    ) IS NULL, 'échec assertion 3c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Librairie!'), quoted := True, compare_oid := True
+    ) IS NULL, 'échec assertion 3d' ; 
+
+    -- schéma inactif dont le producteur n'existe pas
+    ASSERT z_asgard.asgard_producteur_apparent('c_Archives XXX') = 'g_admin',
+        'échec assertion 4a' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Archives XXX'), quoted := True
+    ) = 'g_admin', 'échec assertion 4b' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        'c_Archives XXX', compare_oid := True
+    ) IS NULL, 'échec assertion 4c' ;
+
+    ASSERT z_asgard.asgard_producteur_apparent(
+        quote_ident('c_Archives XXX'), quoted := True, compare_oid := True
+    ) IS NULL, 'échec assertion 4d' ;
+
+    RESET ROLE ;
+
+    -- rôle dont le nom a été modifié
+    ALTER ROLE "g_asgard_Producteur 1" RENAME TO "g_asgard_Producteur 1 BIS" ;
+
+    ASSERT 'g_asgard_Producteur 1' = (
+        SELECT producteur FROM z_asgard_admin.gestion_schema 
+            WHERE nom_schema = 'c_Bibliothèque'
+    ), 'échec assertion 5a' ;
+
+    SET ROLE "g_asgard*Utilisateur" ;
+
+    ASSERT z_asgard.asgard_producteur_apparent('c_Bibliothèque') = 'g_asgard_Producteur 1 BIS',
+        'échec assertion 5b' ;
+
+    RESET ROLE ;    
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    DROP ROLE "g_asgard*Utilisateur" ;
+    DROP ROLE "g_asgard_Producteur 1 BIS" ;
+    DROP ROLE "g_asgard_Producteur 2" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t120b() IS 'ASGARD recette. TEST : Test de la fonction asgard_producteur_apparent.' ;
+
+
+-- FUNCTION: z_asgard_recette.t121()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t121()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur_schema ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 
+        'g_asgard_createur_schema'
+    ) ;
+    CREATE ROLE g_asgard_producteur ;
+
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_bibliotheque', 'g_asgard_producteur') ;
+
+    BEGIN
+        SET ROLE g_asgard_createur_schema ;
+
+        CREATE SCHEMA c_bibliotheque ;
+
+        ASSERT False, 'échec assertion 1' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 2' ;
+
+    END ;
+
+    RESET ROLE ;
+
+    SET ROLE g_admin ;
+
+    CREATE SCHEMA c_bibliotheque ;
+
+    ASSERT 'g_admin' = (
+        SELECT producteur
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 3' ;
+
+    RESET ROLE ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 
+        'g_asgard_createur_schema'
+    ) ;
+    DROP ROLE g_asgard_createur_schema ;
+    DROP ROLE g_asgard_producteur ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t121() IS 'ASGARD recette. TEST : Création d''un schéma pré-référencé lorsque le rôle courant n''est pas membre du producteur qui apparaît dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t121b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t121b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard Créateur_schema" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 
+        'g_asgard Créateur_schema'
+    ) ;
+    CREATE ROLE "g_asgard_Producteur" ;
+
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_Bibliothèque', 'g_asgard_Producteur') ;
+
+    BEGIN
+        SET ROLE "g_asgard Créateur_schema" ;
+
+        CREATE SCHEMA "c_Bibliothèque" ;
+
+        ASSERT False, 'échec assertion 1' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 2' ;
+
+    END ;
+
+    RESET ROLE ;
+
+    SET ROLE g_admin ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+
+    ASSERT 'g_admin' = (
+        SELECT producteur
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Bibliothèque'
+    ), 'échec assertion 3' ;
+
+    RESET ROLE ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 
+        'g_asgard Créateur_schema'
+    ) ;
+    DROP ROLE "g_asgard Créateur_schema" ;
+    DROP ROLE "g_asgard_Producteur" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t121b() IS 'ASGARD recette. TEST : Création d''un schéma pré-référencé lorsque le rôle courant n''est pas membre du producteur qui apparaît dans la table de gestion.' ;
+
+
+-- FUNCTION: z_asgard_recette.t122()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t122()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur_schema ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 
+        'g_asgard_createur_schema'
+    ) ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_lecteur ;
+    GRANT g_asgard_producteur TO g_admin ;
+
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (True, 'c_bibliotheque', 'g_asgard_producteur') ;
+
+    RESET ROLE ;
+
+    BEGIN
+        SET ROLE g_asgard_createur_schema ;
+
+        INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur, lecteur)
+            VALUES (True, 'c_bibliotheque', 'g_asgard_createur_schema', 'g_asgard_lecteur') ;
+
+        RESET ROLE ;
+
+        ASSERT False, 'échec assertion 1' ;
+
+    EXCEPTION WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 2' ;
+
+    END ;
+
+    -- quand c'est g_admin, le mécanisme anti-échec à la restauration de la
+    -- table de gestion remplace l'enregistrement pré-existant par le nouveau
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur, lecteur)
+        VALUES (True, 'c_bibliotheque', 'g_admin', 'g_asgard_lecteur') ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_admin' = (
+        SELECT producteur
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 3' ;
+
+    ASSERT has_schema_privilege('g_asgard_lecteur', 'c_bibliotheque', 'USAGE'),
+        'échec assertion 4' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 
+        'g_asgard_createur_schema'
+    ) ;
+    DROP ROLE g_asgard_createur_schema ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_lecteur ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t122() IS 'ASGARD recette. TEST : INSERT sur la table de gestion alors qu''un schéma de même nom est déjà référencé.' ;
+
+
+-- FUNCTION: z_asgard_recette.t122b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t122b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_Créateur_schema" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 
+        'g_asgard_Créateur_schema'
+    ) ;
+    CREATE ROLE "g_asgard PROducteur" ;
+    CREATE ROLE "g_asgard&lecteur" ;
+    GRANT "g_asgard PROducteur" TO g_admin ;
+
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (True, 'c_Biblioth&que', 'g_asgard PROducteur') ;
+
+    RESET ROLE ;
+
+    BEGIN
+        SET ROLE "g_asgard_Créateur_schema" ;
+
+        INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur, lecteur)
+            VALUES (True, 'c_Biblioth&que', 'g_asgard_Créateur_schema', 'g_asgard&lecteur') ;
+
+        RESET ROLE ;
+
+        ASSERT False, 'échec assertion 1' ;
+
+    EXCEPTION WHEN unique_violation THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'TB9[.]', 'échec assertion 2' ;
+
+    END ;
+
+    -- quand c'est g_admin, le mécanisme anti-échec à la restauration de la
+    -- table de gestion remplace l'enregistrement pré-existant par le nouveau
+    SET ROLE g_admin ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur, lecteur)
+        VALUES (True, 'c_Biblioth&que', 'g_admin', 'g_asgard&lecteur') ;
+
+    RESET ROLE ;
+
+    ASSERT 'g_admin' = (
+        SELECT producteur
+            FROM z_asgard.gestion_schema_usr
+            WHERE nom_schema = 'c_Biblioth&que'
+    ), 'échec assertion 3' ;
+
+    ASSERT has_schema_privilege('g_asgard&lecteur', 'c_Biblioth&que', 'USAGE'),
+        'échec assertion 4' ;
+
+    DROP SCHEMA "c_Biblioth&que" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 
+        'g_asgard_Créateur_schema'
+    ) ;
+    DROP ROLE "g_asgard_Créateur_schema" ;
+    DROP ROLE "g_asgard PROducteur" ;
+    DROP ROLE "g_asgard&lecteur" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t122b() IS 'ASGARD recette. TEST : INSERT sur la table de gestion alors qu''un schéma de même nom est déjà référencé.' ;
+
+
+-- FUNCTION: z_asgard_recette.t123()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t123()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ASSERT NOT z_asgard.asgard_est_reference(NULL), 'échec assertion 1' ;
+
+    ASSERT NOT z_asgard.asgard_est_reference('glouglou'), 'échec assertion 2' ;
+
+    ASSERT NOT z_asgard.asgard_est_reference(
+        quote_ident('glouglou'), quoted := True
+    ), 'échec assertion 3' ;
+
+    CREATE SCHEMA c_bibliotheque ;
+
+    ASSERT NOT z_asgard.asgard_est_reference('z_asgard_admin'), 'échec assertion 4' ;
+
+    ASSERT z_asgard.asgard_est_reference('c_bibliotheque'), 'échec assertion 5' ;
+
+    ASSERT z_asgard.asgard_est_reference(
+        quote_ident('c_bibliotheque'), quoted := True
+    ), 'échec assertion 6' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t123() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_reference.' ;
+
+
+-- FUNCTION: z_asgard_recette.t123b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t123b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+
+    ASSERT NOT z_asgard.asgard_est_reference(NULL), 'échec assertion 1' ;
+
+    ASSERT NOT z_asgard.asgard_est_reference('Glouglou'), 'échec assertion 2' ;
+
+    ASSERT NOT z_asgard.asgard_est_reference(
+        quote_ident('Glouglou'), quoted := True
+    ), 'échec assertion 3' ;
+
+    ASSERT NOT z_asgard.asgard_est_reference('z_asgard_admin'), 'échec assertion 4' ;
+
+    ASSERT z_asgard.asgard_est_reference('c_Bibliothèque'), 'échec assertion 5' ;
+
+    ASSERT z_asgard.asgard_est_reference(
+        quote_ident('c_Bibliothèque'), quoted := True
+    ), 'échec assertion 6' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t123b() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_reference.' ;
+
+
+-- FUNCTION: z_asgard_recette.t124()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t124()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA c_bibliotheque ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_librairie', 'g_admin') ;
+
+    ASSERT z_asgard.asgard_est_actif(NULL) IS NULL, 'échec assertion 1' ;
+
+    ASSERT z_asgard.asgard_est_actif('glouglou') IS NULL, 'échec assertion 2' ;
+
+    ASSERT z_asgard.asgard_est_actif(
+        quote_ident('glouglou'), quoted := True
+    ) IS NULL, 'échec assertion 3' ;
+
+    ASSERT z_asgard.asgard_est_actif('z_asgard_admin') IS NULL, 'échec assertion 4' ;
+
+    ASSERT z_asgard.asgard_est_actif('c_bibliotheque'), 'échec assertion 5' ;
+
+    ASSERT z_asgard.asgard_est_actif(
+        quote_ident('c_bibliotheque'), quoted := True
+    ), 'échec assertion 6' ;
+
+    ASSERT NOT z_asgard.asgard_est_actif('c_librairie'), 'échec assertion 7' ;
+
+    ASSERT NOT z_asgard.asgard_est_actif(
+        quote_ident('c_librairie'), quoted := True
+    ), 'échec assertion 8' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t124() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_actif.' ;
+
+
+-- FUNCTION: z_asgard_recette.t124b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t124b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE SCHEMA "c_!Bibliothèque" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_Lib Rai Rie', 'g_admin') ;
+
+    ASSERT z_asgard.asgard_est_actif(NULL) IS NULL, 'échec assertion 1' ;
+
+    ASSERT z_asgard.asgard_est_actif('Glouglou') IS NULL, 'échec assertion 2' ;
+
+    ASSERT z_asgard.asgard_est_actif(
+        quote_ident('Glouglou'), quoted := True
+    ) IS NULL, 'échec assertion 3' ;
+
+    ASSERT z_asgard.asgard_est_actif('z_asgard_admin') IS NULL, 'échec assertion 4' ;
+
+    ASSERT z_asgard.asgard_est_actif('c_!Bibliothèque'), 'échec assertion 5' ;
+
+    ASSERT z_asgard.asgard_est_actif(
+        quote_ident('c_!Bibliothèque'), quoted := True
+    ), 'échec assertion 6' ;
+
+    ASSERT NOT z_asgard.asgard_est_actif('c_Lib Rai Rie'), 'échec assertion 7' ;
+
+    ASSERT NOT z_asgard.asgard_est_actif(
+        quote_ident('c_Lib Rai Rie'), quoted := True
+    ), 'échec assertion 8' ;
+
+    DROP SCHEMA "c_!Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t124b() IS 'ASGARD recette. TEST : Test de la fonction asgard_est_actif.' ;
+
+
+-- FUNCTION: z_asgard_recette.t125()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t125()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   rec record ;
+   oid_edit oid ;
+   oid_lect oid ;
+   oid_prod oid ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur_a ;
+    CREATE ROLE g_asgard_editeur_a ;
+    CREATE ROLE g_asgard_lecteur_a ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (
+        creation, nom_schema, 
+        producteur, editeur, lecteur, 
+        niv1, niv1_abr, niv2, niv2_abr
+    ) VALUES (
+        True, 'c_bibliotheque', 
+        'g_asgard_producteur_a', 'g_asgard_editeur_a',  'g_asgard_lecteur_a',
+        'Archives', 'arc', 'Livres', 'liv'
+    ), (
+        False, 'c_librairie', 
+        'g_asgard_producteur_a', 'g_asgard_editeur_a',  'g_asgard_lecteur_a',
+        'Archives', 'arc', 'Livres', 'liv'
+    ) ;
+
+    ALTER ROLE g_asgard_producteur_a
+        RENAME TO g_asgard_producteur_b ;
+    ALTER ROLE g_asgard_editeur_a
+        RENAME TO g_asgard_editeur_b ;
+    ALTER ROLE g_asgard_lecteur_a
+        RENAME TO g_asgard_lecteur_b ;
+
+    oid_edit := quote_ident('g_asgard_editeur_b')::regrole ;
+    oid_lect := quote_ident('g_asgard_lecteur_b')::regrole ;
+    oid_prod := quote_ident('g_asgard_producteur_b')::regrole ;
+
+    -- schéma non référencé
+    ASSERT (
+        SELECT info.producteur
+            FROM pg_namespace 
+                NATURAL LEFT JOIN z_asgard.asgard_information(
+                    pg_namespace.nspname
+                ) AS info
+            WHERE nspname = 'z_asgard_admin'
+    ) IS NULL, 'échec assertion 1' ;
+
+    -- schéma actif référencé, sans "quoted" ni "consolide_roles"
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname
+            ) AS info
+        WHERE nspname = 'c_bibliotheque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 2a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 2b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 2c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 2d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 2e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 2f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 2g' ;
+    ASSERT rec.creation, 'échec assertion 2h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 2i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 2j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 2k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 2l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 2m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 2n' ;
+
+    -- schéma actif référencé, sans "quoted", avec "consolide_roles"
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname, consolide_roles := True
+            ) AS info
+        WHERE nspname = 'c_bibliotheque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 3a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 3b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 3c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 3d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 3e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 3f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 3g' ;
+    ASSERT rec.creation, 'échec assertion 3h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_b', 'échec assertion 3i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_b', 'échec assertion 3j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_b', 'échec assertion 3k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 3l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 3m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 3n' ;
+
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_editeur_b ;
+    REVOKE USAGE ON SCHEMA c_bibliotheque FROM g_asgard_lecteur_b ;
+
+    DROP ROLE g_asgard_editeur_b ;
+    DROP ROLE g_asgard_lecteur_b ;
+
+    -- schéma actif référencé, avec "quoted", "consolide_roles" et 
+    -- des rôles éditeur et lecteur supprimés entre temps
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.oid::regnamespace::text, quoted := True, 
+                consolide_roles := True
+            ) AS info
+        WHERE nspname = 'c_bibliotheque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 5a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 5b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 5c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 5d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 5e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 5f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 5g' ;
+    ASSERT rec.creation, 'échec assertion 5h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_b', 'échec assertion 5i' ;
+    ASSERT rec.editeur IS NULL, 'échec assertion 5j' ;
+    ASSERT rec.lecteur IS NULL, 'échec assertion 5k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 5l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 5m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 5n' ;
+
+    -- schéma actif référencé, sans "consolide_roles", mais avec "quoted"
+    -- et des rôles éditeur et lecteur supprimés entre temps
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.oid::regnamespace::text, quoted := True
+            ) AS info
+        WHERE nspname = 'c_bibliotheque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 6a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 6b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 6c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 6d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 6e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 6f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 6g' ;
+    ASSERT rec.creation, 'échec assertion 6h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 6i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 6j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 6k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 6l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 6m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 6n' ;
+
+    -- suppression du producteur, sans "consolide_roles"
+    REASSIGN OWNED BY g_asgard_producteur_b TO g_admin ;
+    DROP ROLE g_asgard_producteur_b ;
+
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname
+            ) AS info
+        WHERE nspname = 'c_bibliotheque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 7a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 7b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 7c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 7d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 7e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 7f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 7g' ;
+    ASSERT rec.creation, 'échec assertion 7h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 7i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 7j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 7k' ;
+    ASSERT rec.oid_producteur = oid_prod, 'échec assertion 7l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 7m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 7n' ;
+
+    -- suppression du producteur, avec "consolide_roles"
+    BEGIN
+        SELECT 
+            info.*, pg_namespace.nspowner, pg_namespace.oid
+            INTO rec 
+            FROM pg_namespace 
+                NATURAL LEFT JOIN z_asgard.asgard_information(
+                    pg_namespace.nspname, consolide_roles := True
+                ) AS info
+            WHERE nspname = 'c_bibliotheque' ;
+
+        ASSERT False, 'échec assertion 8a' ;
+    
+    EXCEPTION WHEN raise_exception THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FIF1[.]', 'échec assertion 8b' ;
+    END ;
+
+    -- schéma inactif, sans "quoted", ni "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                'c_librairie'
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 9a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 9b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 9c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 9d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 9e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 9f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 9g' ;
+    ASSERT NOT rec.creation, 'échec assertion 9h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 9i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 9j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 9k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 9l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 9m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 9n' ;
+
+    -- schéma inactif avec "quoted", sans "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                quote_ident('c_librairie'), quoted := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 10a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 10b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 10c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 10d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 10e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 10f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 10g' ;
+    ASSERT NOT rec.creation, 'échec assertion 10h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 10i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 10j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 10k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 10l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 10m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 10n' ;
+
+    -- schéma inactif avec "quoted" et "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                quote_ident('c_librairie'), quoted := True,
+                consolide_roles := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 11a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 11b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 11c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 11d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 11e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 11f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 11g' ;
+    ASSERT NOT rec.creation, 'échec assertion 11h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 11i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 11j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 11k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 11l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 11m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 11n' ;
+
+    -- schéma inactif avec "consolide_roles", sans "quoted"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                'c_librairie',
+                consolide_roles := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 12a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 12b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 12c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 12d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 12e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 12f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 12g' ;
+    ASSERT NOT rec.creation, 'échec assertion 12h' ;
+    ASSERT rec.producteur = 'g_asgard_producteur_a', 'échec assertion 12i' ;
+    ASSERT rec.editeur = 'g_asgard_editeur_a', 'échec assertion 12j' ;
+    ASSERT rec.lecteur = 'g_asgard_lecteur_a', 'échec assertion 12k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 12l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 12m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 12n' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t125() IS 'ASGARD recette. TEST : Test de la fonction asgard_information.' ;
+
+
+-- FUNCTION: z_asgard_recette.t125b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t125b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+   rec record ;
+   oid_edit oid ;
+   oid_lect oid ;
+   oid_prod oid ;
+BEGIN
+
+    CREATE ROLE "g_asgard*PROducteur_a" ;
+    CREATE ROLE "g_asgard*EDIteur_a" ;
+    CREATE ROLE "g_asgard*LECteur_a" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (
+        creation, nom_schema, 
+        producteur, editeur, lecteur, 
+        niv1, niv1_abr, niv2, niv2_abr
+    ) VALUES (
+        True, 'c_Bibliothèque', 
+        'g_asgard*PROducteur_a', 'g_asgard*EDIteur_a',  'g_asgard*LECteur_a',
+        'Archives', 'arc', 'Livres', 'liv'
+    ), (
+        False, 'c_Lib Rai Rie', 
+        'g_asgard*PROducteur_a', 'g_asgard*EDIteur_a',  'g_asgard*LECteur_a',
+        'Archives', 'arc', 'Livres', 'liv'
+    ) ;
+
+    ALTER ROLE "g_asgard*PROducteur_a"
+        RENAME TO "g_asgard*PROducteur_b" ;
+    ALTER ROLE "g_asgard*EDIteur_a"
+        RENAME TO "g_asgard*EDIteur_b" ;
+    ALTER ROLE "g_asgard*LECteur_a"
+        RENAME TO "g_asgard*LECteur_b" ;
+
+    oid_edit := quote_ident('g_asgard*EDIteur_b')::regrole ;
+    oid_lect := quote_ident('g_asgard*LECteur_b')::regrole ;
+    oid_prod := quote_ident('g_asgard*PROducteur_b')::regrole ;
+
+    -- schéma non référencé
+    ASSERT (
+        SELECT info.producteur
+            FROM pg_namespace 
+                NATURAL LEFT JOIN z_asgard.asgard_information(
+                    pg_namespace.nspname
+                ) AS info
+            WHERE nspname = 'z_asgard_admin'
+    ) IS NULL, 'échec assertion 1' ;
+
+    -- schéma actif référencé, sans "quoted" ni "consolide_roles"
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname
+            ) AS info
+        WHERE nspname = 'c_Bibliothèque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 2a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 2b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 2c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 2d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 2e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 2f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 2g' ;
+    ASSERT rec.creation, 'échec assertion 2h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 2i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 2j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 2k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 2l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 2m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 2n' ;
+
+    -- schéma actif référencé, sans "quoted", avec "consolide_roles"
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname, consolide_roles := True
+            ) AS info
+        WHERE nspname = 'c_Bibliothèque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 3a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 3b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 3c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 3d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 3e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 3f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 3g' ;
+    ASSERT rec.creation, 'échec assertion 3h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_b', 'échec assertion 3i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_b', 'échec assertion 3j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_b', 'échec assertion 3k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 3l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 3m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 3n' ;
+
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_asgard*EDIteur_b" ;
+    REVOKE USAGE ON SCHEMA "c_Bibliothèque" FROM "g_asgard*LECteur_b" ;
+
+    DROP ROLE "g_asgard*EDIteur_b" ;
+    DROP ROLE "g_asgard*LECteur_b" ;
+
+    -- schéma actif référencé, avec "quoted", "consolide_roles" et 
+    -- des rôles éditeur et lecteur supprimés entre temps
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.oid::regnamespace::text, quoted := True, 
+                consolide_roles := True
+            ) AS info
+        WHERE nspname = 'c_Bibliothèque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 5a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 5b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 5c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 5d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 5e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 5f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 5g' ;
+    ASSERT rec.creation, 'échec assertion 5h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_b', 'échec assertion 5i' ;
+    ASSERT rec.editeur IS NULL, 'échec assertion 5j' ;
+    ASSERT rec.lecteur IS NULL, 'échec assertion 5k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 5l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 5m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 5n' ;
+
+    -- schéma actif référencé, sans "consolide_roles", mais avec "quoted"
+    -- et des rôles éditeur et lecteur supprimés entre temps
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.oid::regnamespace::text, quoted := True
+            ) AS info
+        WHERE nspname = 'c_Bibliothèque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 6a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 6b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 6c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 6d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 6e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 6f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 6g' ;
+    ASSERT rec.creation, 'échec assertion 6h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 6i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 6j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 6k' ;
+    ASSERT rec.oid_producteur = rec.nspowner, 'échec assertion 6l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 6m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 6n' ;
+
+    -- suppression du producteur, sans "consolide_roles"
+    REASSIGN OWNED BY "g_asgard*PROducteur_b" TO g_admin ;
+    DROP ROLE "g_asgard*PROducteur_b" ;
+
+    SELECT 
+        info.*, pg_namespace.nspowner, pg_namespace.oid
+        INTO rec 
+        FROM pg_namespace 
+            NATURAL LEFT JOIN z_asgard.asgard_information(
+                pg_namespace.nspname
+            ) AS info
+        WHERE nspname = 'c_Bibliothèque' ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 7a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 7b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 7c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 7d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 7e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 7f' ;
+    ASSERT rec.oid_schema = rec.oid, 'échec assertion 7g' ;
+    ASSERT rec.creation, 'échec assertion 7h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 7i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 7j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 7k' ;
+    ASSERT rec.oid_producteur = oid_prod, 'échec assertion 7l' ;
+    ASSERT rec.oid_editeur = oid_edit, 'échec assertion 7m' ;
+    ASSERT rec.oid_lecteur = oid_lect, 'échec assertion 7n' ;
+
+    -- suppression du producteur, avec "consolide_roles"
+    BEGIN
+        SELECT 
+            info.*, pg_namespace.nspowner, pg_namespace.oid
+            INTO rec 
+            FROM pg_namespace 
+                NATURAL LEFT JOIN z_asgard.asgard_information(
+                    pg_namespace.nspname, consolide_roles := True
+                ) AS info
+            WHERE nspname = 'c_Bibliothèque' ;
+
+        ASSERT False, 'échec assertion 8a' ;
+    
+    EXCEPTION WHEN raise_exception THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FIF1[.]', 'échec assertion 8b' ;
+    END ;
+
+    -- schéma inactif, sans "quoted", ni "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                'c_Lib Rai Rie'
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 9a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 9b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 9c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 9d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 9e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 9f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 9g' ;
+    ASSERT NOT rec.creation, 'échec assertion 9h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 9i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 9j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 9k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 9l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 9m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 9n' ;
+
+    -- schéma inactif avec "quoted", sans "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                quote_ident('c_Lib Rai Rie'), quoted := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 10a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 10b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 10c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 10d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 10e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 10f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 10g' ;
+    ASSERT NOT rec.creation, 'échec assertion 10h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 10i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 10j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 10k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 10l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 10m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 10n' ;
+
+    -- schéma inactif avec "quoted" et "consolide_roles"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                quote_ident('c_Lib Rai Rie'), quoted := True,
+                consolide_roles := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 11a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 11b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 11c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 11d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 11e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 11f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 11g' ;
+    ASSERT NOT rec.creation, 'échec assertion 11h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 11i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 11j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 11k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 11l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 11m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 11n' ;
+
+    -- schéma inactif avec "consolide_roles", sans "quoted"
+    SELECT 
+        * INTO rec 
+        FROM z_asgard.asgard_information(
+                'c_Lib Rai Rie',
+                consolide_roles := True
+            ) AS info ;
+
+    ASSERT rec.bloc = 'c', 'échec assertion 12a' ;
+    ASSERT NOT rec.nomenclature, 'échec assertion 12b' ;
+    ASSERT rec.niv1 = 'Archives', 'échec assertion 12c' ;
+    ASSERT rec.niv1_abr = 'arc', 'échec assertion 12d' ;
+    ASSERT rec.niv2 = 'Livres', 'échec assertion 12e' ;
+    ASSERT rec.niv2_abr = 'liv', 'échec assertion 12f' ;
+    ASSERT rec.oid_schema IS NULL, 'échec assertion 12g' ;
+    ASSERT NOT rec.creation, 'échec assertion 12h' ;
+    ASSERT rec.producteur = 'g_asgard*PROducteur_a', 'échec assertion 12i' ;
+    ASSERT rec.editeur = 'g_asgard*EDIteur_a', 'échec assertion 12j' ;
+    ASSERT rec.lecteur = 'g_asgard*LECteur_a', 'échec assertion 12k' ;
+    ASSERT rec.oid_producteur IS NULL, 'échec assertion 12l' ;
+    ASSERT rec.oid_editeur IS NULL, 'échec assertion 12m' ;
+    ASSERT rec.oid_lecteur IS NULL, 'échec assertion 12n' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t125b() IS 'ASGARD recette. TEST : Test de la fonction asgard_information.' ;
+
+
+-- FUNCTION: z_asgard_recette.t126()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t126()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_createur NOINHERIT ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO g_asgard_createur', current_database()) ;
+
+    CREATE ROLE g_asgard_producteur_a ;
+    CREATE ROLE g_asgard_producteur_b ;
+
+    GRANT g_asgard_producteur_a TO g_asgard_createur ;
+    GRANT g_asgard_producteur_b TO g_asgard_createur ;
+
+    ASSERT NOT pg_has_role('g_asgard_createur', 'g_asgard_producteur_a', 'USAGE'),
+        'échec assertion 1a' ;
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_producteur_a', 'MEMBER'),
+        'échec assertion 1b' ;
+
+    -- via une commande directe
+    SET ROLE g_asgard_createur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur_a ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_createur', 'g_asgard_producteur_a', 'USAGE'),
+        'échec assertion 2a' ;
+    
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_a')::regrole
+                AND admin_option
+    ), 'échec assertion 2b' ;
+
+    ASSERT 'g_asgard_producteur_a' = (
+        SELECT gestion_schema.producteur
+            FROM z_asgard_admin.gestion_schema
+            WHERE gestion_schema.nom_schema = 'c_bibliotheque'
+    ), 'échec assertion 2c' ;
+
+    -- via la table gestion
+    SET ROLE g_asgard_createur ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (True, 'c_librairie', 'g_asgard_producteur_b') ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_createur', 'g_asgard_producteur_b', 'USAGE'),
+        'échec assertion 3a' ;
+    
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur_b')::regrole
+                AND admin_option
+    ), 'échec assertion 3b' ;
+
+    ASSERT 'g_asgard_producteur_b' = (
+        SELECT gestion_schema.producteur
+            FROM z_asgard_admin.gestion_schema
+            WHERE gestion_schema.nom_schema = 'c_librairie'
+    ), 'échec assertion 3c' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM g_asgard_createur', current_database()) ;
+    DROP ROLE g_asgard_createur ;
+    DROP ROLE g_asgard_producteur_a ;
+    DROP ROLE g_asgard_producteur_b ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t126() IS 'ASGARD recette. TEST : Création d''un schéma par un rôle qui n''hérite pas des droits du futur producteur.' ;
+
+
+-- FUNCTION: z_asgard_recette.t126b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t126b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_Créateur" NOINHERIT ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO "g_asgard_Créateur"', current_database()) ;
+
+    CREATE ROLE "g_asgard_*PROducteur_a" ;
+    CREATE ROLE "g_asgard_*PROducteur_b" ;
+
+    GRANT "g_asgard_*PROducteur_a" TO "g_asgard_Créateur" ;
+    GRANT "g_asgard_*PROducteur_b" TO "g_asgard_Créateur" ;
+
+    ASSERT NOT pg_has_role('g_asgard_Créateur', 'g_asgard_*PROducteur_a', 'USAGE'),
+        'échec assertion 1a' ;
+    ASSERT NOT pg_has_role('g_admin', 'g_asgard_*PROducteur_a', 'MEMBER'),
+        'échec assertion 1b' ;
+
+    -- via une commande directe
+    SET ROLE "g_asgard_Créateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_*PROducteur_a" ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_Créateur', 'g_asgard_*PROducteur_a', 'USAGE'),
+        'échec assertion 2a' ;
+    
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_*PROducteur_a')::regrole
+                AND admin_option
+    ), 'échec assertion 2b' ;
+
+    ASSERT 'g_asgard_*PROducteur_a' = (
+        SELECT gestion_schema.producteur
+            FROM z_asgard_admin.gestion_schema
+            WHERE gestion_schema.nom_schema = 'c_Bibliothèque'
+    ), 'échec assertion 2c' ;
+
+    -- via la table gestion
+    SET ROLE "g_asgard_Créateur" ;
+
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (True, 'c_Lib Rai Rie', 'g_asgard_*PROducteur_b') ;
+
+    RESET ROLE ;
+
+    ASSERT NOT pg_has_role('g_asgard_Créateur', 'g_asgard_*PROducteur_b', 'USAGE'),
+        'échec assertion 3a' ;
+    
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_*PROducteur_b')::regrole
+                AND admin_option
+    ), 'échec assertion 3b' ;
+
+    ASSERT 'g_asgard_*PROducteur_b' = (
+        SELECT gestion_schema.producteur
+            FROM z_asgard_admin.gestion_schema
+            WHERE gestion_schema.nom_schema = 'c_Lib Rai Rie'
+    ), 'échec assertion 3c' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DROP SCHEMA "c_Lib Rai Rie" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM "g_asgard_Créateur"', current_database()) ;
+    DROP ROLE "g_asgard_Créateur" ;
+    DROP ROLE "g_asgard_*PROducteur_a" ;
+    DROP ROLE "g_asgard_*PROducteur_b" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t126b() IS 'ASGARD recette. TEST : Création d''un schéma par un rôle qui n''hérite pas des droits du futur producteur.' ;
+
+
+
+-- FUNCTION: z_asgard_recette.t127()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t127()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_role_a CREATEROLE ;
+    CREATE ROLE g_asgard_role_b ;
+    CREATE ROLE g_asgard_role_c ;
+
+    GRANT g_asgard_role_a TO g_asgard_role_b ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_role_b TO g_asgard_role_c WITH ADMIN True, SET False' ;
+    ELSE
+        GRANT g_asgard_role_b TO g_asgard_role_c ;
+    END IF ;
+
+    SET ROLE g_asgard_role_a ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard_role_a',
+        'échec assertion 1' ;
+
+    SET ROLE g_asgard_role_c ;
+    -- avec asgard_complete_heritage
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard_role_a',
+        'échec assertion 2' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT pg_has_role('g_asgard_role_a', 'SET'), 'échec assertion 3' ; 
+    END IF ;
+
+    -- sans asgard_complete_heritage
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard_role_a',
+        'échec assertion 4' ;
+
+    SET ROLE g_admin ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_admin',
+        'échec assertion 5' ;
+
+    RESET ROLE ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = current_user,
+        'échec assertion 6' ;
+
+    DROP ROLE g_asgard_role_a ;
+    DROP ROLE g_asgard_role_b ;
+    DROP ROLE g_asgard_role_c ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t127() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''CREATE ROLE.''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t127b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t127b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_SUPER" SUPERUSER ;
+    CREATE ROLE "g_asgard*Role_a" CREATEROLE ;
+    CREATE ROLE "g_asgard*Role_b" ;
+    CREATE ROLE "g_asgard*Role_c" ;
+
+    GRANT "g_asgard*Role_a" TO "g_asgard*Role_b" ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard*Role_b" TO "g_asgard*Role_c" WITH ADMIN True, SET False' ;
+    ELSE
+        GRANT "g_asgard*Role_b" TO "g_asgard*Role_c" ;
+    END IF ;
+
+    SET ROLE "g_asgard*Role_a" ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard*Role_a',
+        'échec assertion 1' ;
+
+    SET ROLE "g_asgard*Role_c" ;
+    -- avec asgard_complete_heritage
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard*Role_a',
+        'échec assertion 2' ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT pg_has_role('g_asgard*Role_a', 'SET'), 'échec assertion 3' ; 
+    END IF ;
+
+    -- sans asgard_complete_heritage
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard*Role_a',
+        'échec assertion 4' ;
+
+    SET ROLE g_admin ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_admin',
+        'échec assertion 5' ;
+
+    SET ROLE "g_asgard_SUPER" ;
+    ASSERT z_asgard.asgard_cherche_executant('CREATE ROLE') = 'g_asgard_SUPER',
+        'échec assertion 6' ;
+
+    RESET ROLE ;
+
+    DROP ROLE "g_asgard_SUPER" ; 
+    DROP ROLE "g_asgard*Role_a" ;
+    DROP ROLE "g_asgard*Role_b" ;
+    DROP ROLE "g_asgard*Role_c" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t127b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''CREATE ROLE.''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t128()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t128()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_parent ;
+    CREATE ROLE g_asgard_enfant ;
+
+    CREATE ROLE g_asgard_temoin ;
+    CREATE ROLE g_aaaaasgard_temoin ;
+    GRANT g_asgard_parent TO g_asgard_temoin WITH ADMIN OPTION ;
+    GRANT g_asgard_parent TO g_aaaaasgard_temoin WITH ADMIN OPTION ;
+
+    -- le rôle cible n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('GRANT ROLE') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', old_producteur := 'g_asgard_parent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le rôle cible n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- le rôle cible est un super-utilisateur, et pas le
+    -- rôle courant
+    BEGIN
+
+        CREATE ROLE g_asgard_superuser SUPERUSER ;
+        CREATE ROLE g_asgard_createrole CREATEROLE ;
+
+        SET ROLE g_asgard_createrole ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_superuser'
+        ) ;
+
+        ASSERT False, 'échec assertion 3a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE10[.]', 'échec assertion 3b' ;
+
+    END ;
+
+    -- le rôle courant n'a juste pas les privilèges nécessaires
+    BEGIN
+
+        SET ROLE g_asgard_enfant ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_parent'
+        ) ;
+
+        ASSERT False, 'échec assertion 4a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE11[.]', 'échec assertion 4b' ;
+
+    END ;
+
+    -- le rôle courant est un super-utilisateur
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+
+    SET ROLE g_asgard_superuser ;
+    
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard_parent'
+    ) = current_user, 'échec assertion 5a' ;
+
+    GRANT g_asgard_parent TO g_asgard_enfant ;
+
+    ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 5b' ;
+
+    REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+    ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 5c' ;
+
+    RESET ROLE ;
+
+    DROP ROLE g_asgard_superuser ;
+
+    -- [PG 15-] le rôle courant a CREATEROLE
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE g_asgard_createrole CREATEROLE ;
+
+        SET ROLE g_asgard_createrole ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_parent'
+        ) = current_user, 'échec assertion 6a' ;
+
+        GRANT g_asgard_parent TO g_asgard_enfant ;
+
+        ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 6b' ;
+
+        REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+        ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 6c' ;
+
+        RESET ROLE ;
+
+        DROP ROLE g_asgard_createrole ;
+
+    END IF ;
+
+    -- [PG 15-] le rôle courant est membre d'un rôle qui a CREATEROLE
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE g_asgard_createrole CREATEROLE ;
+        CREATE ROLE g_asgard_assistant NOINHERIT ;
+        GRANT g_asgard_createrole TO g_asgard_assistant ;
+
+        SET ROLE g_asgard_assistant ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_parent'
+        ) = 'g_asgard_createrole', 'échec assertion 7a' ;
+
+        SET ROLE g_asgard_createrole ;
+
+        GRANT g_asgard_parent TO g_asgard_enfant ;
+
+        ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 7b' ;
+
+        REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+        ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 7c' ;
+
+        RESET ROLE ;
+
+        DROP ROLE g_asgard_createrole ;
+        DROP ROLE g_asgard_assistant ;
+
+    END IF ;
+
+    -- [PG 15-] le rôle courant est membre de g_admin
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE g_asgard_assistant ;
+        GRANT g_admin TO g_asgard_assistant ;
+
+        SET ROLE g_asgard_assistant ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_parent'
+        ) = 'g_admin', 'échec assertion 7d' ;
+
+        SET ROLE g_admin ;
+
+        GRANT g_asgard_parent TO g_asgard_enfant ;
+
+        ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 7e' ;
+
+        REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+        ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 7f' ;
+
+        RESET ROLE ;
+
+        REVOKE g_admin FROM g_asgard_assistant ;
+        DROP ROLE g_asgard_assistant ;
+
+    END IF ;
+
+    -- le rôle courant est membre du rôle cible avec l'option ADMIN
+    CREATE ROLE g_asgard_manipulateur ;
+    
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        GRANT g_asgard_parent TO g_asgard_manipulateur WITH ADMIN OPTION ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_parent TO g_asgard_manipulateur WITH ADMIN True, SET False, INHERIT False' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard_parent'
+    ) = 'g_asgard_manipulateur', 'échec assertion 8a' ;
+
+    GRANT g_asgard_parent TO g_asgard_enfant ;
+
+    ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 8b' ;
+
+    REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+    ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 8c' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT NOT pg_has_role('g_asgard_manipulateur', 'g_asgard_parent', 'SET'),
+            'échec assertion 8d' ;
+        ASSERT NOT pg_has_role('g_asgard_manipulateur', 'g_asgard_parent', 'USAGE'),
+            'échec assertion 8e' ;
+    END IF ;
+
+    -- le rôle courant est membre avec héritage d'un rôle qui est membre 
+    -- du rôle cible avec l'option ADMIN
+    CREATE ROLE g_asgard_apprenti ;
+    GRANT g_asgard_manipulateur TO g_asgard_apprenti ;
+
+    SET ROLE g_asgard_apprenti ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard_parent'
+    ) = 'g_asgard_apprenti', 'échec assertion 9a' ;
+
+    GRANT g_asgard_parent TO g_asgard_enfant ;
+
+    ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 9b' ;
+
+    REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+    ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+        'échec assertion 9c' ;
+
+    RESET ROLE ;
+
+    REVOKE g_asgard_manipulateur FROM g_asgard_apprenti ;
+
+    -- [PG 16+] le rôle courant est membre avec héritage incomplet d'un rôle qui est membre 
+    -- du rôle cible avec l'option ADMIN
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        EXECUTE 'GRANT g_asgard_manipulateur TO g_asgard_apprenti WITH ADMIN True, SET False, INHERIT False' ;
+
+        SET ROLE g_asgard_apprenti ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_parent'
+        ) = 'g_asgard_apprenti', 'échec assertion 10a' ;
+
+        GRANT g_asgard_parent TO g_asgard_enfant ;
+
+        ASSERT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 10b' ;
+
+        REVOKE g_asgard_parent FROM g_asgard_enfant ;
+
+        ASSERT NOT pg_has_role('g_asgard_enfant', 'g_asgard_parent', 'MEMBER'),
+            'échec assertion 10c' ;
+
+        RESET ROLE ;
+
+        -- l'héritage a été complété
+        ASSERT pg_has_role('g_asgard_apprenti', 'g_asgard_manipulateur', 'USAGE'),
+            'échec assertion 11c' ;
+
+    END IF ;
+
+    DROP ROLE  g_asgard_parent ;
+    DROP ROLE  g_asgard_enfant ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_apprenti ;
+    DROP ROLE g_asgard_temoin ;
+    DROP ROLE g_aaaaasgard_temoin ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t128() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''GRANT ROLE''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t128b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t128b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard$PARent" ;
+    CREATE ROLE "g_asgard?ENFant" ;
+
+    CREATE ROLE "g_asgard_téMoin" ;
+    CREATE ROLE "g_aaaaasgard Témoin" ;
+    GRANT "g_asgard$PARent" TO "g_asgard_téMoin" WITH ADMIN OPTION ;
+    GRANT "g_asgard$PARent" TO "g_aaaaasgard Témoin" WITH ADMIN OPTION ;
+
+    -- le rôle cible n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('GRANT ROLE') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', old_producteur := 'g_asgard$PARent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le rôle cible n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- le rôle cible est un super-utilisateur, et pas le
+    -- rôle courant
+    BEGIN
+
+        CREATE ROLE "g_asgard:SUPeruser" SUPERUSER ;
+        CREATE ROLE "g_asgard.CREaterole" CREATEROLE ;
+
+        SET ROLE "g_asgard.CREaterole" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard:SUPeruser'
+        ) ;
+
+        ASSERT False, 'échec assertion 3a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE10[.]', 'échec assertion 3b' ;
+
+    END ;
+
+    -- le rôle courant n'a juste pas les privilèges nécessaires
+    BEGIN
+
+        SET ROLE "g_asgard?ENFant" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+        ) ;
+
+        ASSERT False, 'échec assertion 4a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE11[.]', 'échec assertion 4b' ;
+
+    END ;
+
+    -- le rôle courant est un super-utilisateur
+    CREATE ROLE "g_asgard:SUPeruser" SUPERUSER ;
+
+    SET ROLE "g_asgard:SUPeruser" ;
+    
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+    ) = current_user, 'échec assertion 5a' ;
+
+    GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+    ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 5b' ;
+
+    REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+    ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 5c' ;
+
+    RESET ROLE ;
+
+    DROP ROLE "g_asgard:SUPeruser" ;
+
+    -- [PG 15-] le rôle courant a CREATEROLE
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE "g_asgard.CREaterole" CREATEROLE ;
+
+        SET ROLE "g_asgard.CREaterole" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+        ) = current_user, 'échec assertion 6a' ;
+
+        GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+        ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 6b' ;
+
+        REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+        ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 6c' ;
+
+        RESET ROLE ;
+
+        DROP ROLE "g_asgard.CREaterole" ;
+
+    END IF ;
+
+    -- [PG 15-] le rôle courant est membre d'un rôle qui a CREATEROLE
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE "g_asgard.CREaterole" CREATEROLE ;
+        CREATE ROLE "g_asgard_A$$istant" NOINHERIT ;
+        GRANT "g_asgard.CREaterole" TO "g_asgard_A$$istant" ;
+
+        SET ROLE "g_asgard_A$$istant" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+        ) = 'g_asgard.CREaterole', 'échec assertion 7a' ;
+
+        SET ROLE "g_asgard.CREaterole" ;
+
+        GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+        ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 7b' ;
+
+        REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+        ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 7c' ;
+
+        RESET ROLE ;
+
+        DROP ROLE "g_asgard.CREaterole" ;
+        DROP ROLE "g_asgard_A$$istant" ;
+
+    END IF ;
+
+    -- [PG 15-] le rôle courant est membre de g_admin
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE ROLE "g_asgard_A$$istant" ;
+        GRANT g_admin TO "g_asgard_A$$istant" ;
+
+        SET ROLE "g_asgard_A$$istant" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+        ) = 'g_admin', 'échec assertion 7d' ;
+
+        SET ROLE g_admin ;
+
+        GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+        ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 7e' ;
+
+        REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+        ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 7f' ;
+
+        RESET ROLE ;
+
+        REVOKE g_admin FROM "g_asgard_A$$istant" ;
+        DROP ROLE "g_asgard_A$$istant" ;
+
+    END IF ;
+
+    -- le rôle courant est membre du rôle cible avec l'option ADMIN
+    CREATE ROLE "g_asgard MANipulateur" ;
+    
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        GRANT "g_asgard$PARent" TO "g_asgard MANipulateur" WITH ADMIN OPTION ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard$PARent" TO "g_asgard MANipulateur" WITH ADMIN True, SET False, INHERIT False' ;
+    END IF ;
+
+    SET ROLE "g_asgard MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+    ) = 'g_asgard MANipulateur', 'échec assertion 8a' ;
+
+    GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+    ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 8b' ;
+
+    REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+    ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 8c' ;
+
+    RESET ROLE ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        ASSERT NOT pg_has_role('g_asgard MANipulateur', 'g_asgard$PARent', 'SET'),
+            'échec assertion 8d' ;
+        ASSERT NOT pg_has_role('g_asgard MANipulateur', 'g_asgard$PARent', 'USAGE'),
+            'échec assertion 8e' ;
+    END IF ;
+
+    -- le rôle courant est membre avec héritage d'un rôle qui est membre 
+    -- du rôle cible avec l'option ADMIN
+    CREATE ROLE "g_asgard-APPrenti" ;
+    GRANT "g_asgard MANipulateur" TO "g_asgard-APPrenti" ;
+
+    SET ROLE "g_asgard-APPrenti" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+    ) = 'g_asgard-APPrenti', 'échec assertion 9a' ;
+
+    GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+    ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 9b' ;
+
+    REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+    ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+        'échec assertion 9c' ;
+
+    RESET ROLE ;
+
+    REVOKE "g_asgard MANipulateur" FROM "g_asgard-APPrenti" ;
+
+    -- [PG 16+] le rôle courant est membre avec héritage incomplet d'un rôle qui est membre 
+    -- du rôle cible avec l'option ADMIN
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+
+        EXECUTE 'GRANT "g_asgard MANipulateur" TO "g_asgard-APPrenti" WITH ADMIN True, SET False, INHERIT False' ;
+
+        SET ROLE "g_asgard-APPrenti" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'GRANT ROLE', new_producteur := 'g_asgard$PARent'
+        ) = 'g_asgard-APPrenti', 'échec assertion 10a' ;
+
+        GRANT "g_asgard$PARent" TO "g_asgard?ENFant" ;
+
+        ASSERT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 10b' ;
+
+        REVOKE "g_asgard$PARent" FROM "g_asgard?ENFant" ;
+
+        ASSERT NOT pg_has_role('g_asgard?ENFant', 'g_asgard$PARent', 'MEMBER'),
+            'échec assertion 10c' ;
+
+        RESET ROLE ;
+
+        -- l'héritage a été complété
+        ASSERT pg_has_role('g_asgard-APPrenti', 'g_asgard MANipulateur', 'USAGE'),
+            'échec assertion 11c' ;
+
+    END IF ;
+
+    DROP ROLE  "g_asgard$PARent" ;
+    DROP ROLE  "g_asgard?ENFant" ;
+    DROP ROLE "g_asgard MANipulateur" ;
+    DROP ROLE "g_asgard-APPrenti" ;
+    DROP ROLE "g_asgard_téMoin" ;
+    DROP ROLE "g_aaaaasgard Témoin" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t128b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''GRANT ROLE''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t129()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t129()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_createschema ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_asgard_createschema TO g_asgard_manipulateur ;
+    GRANT g_asgard_createschema TO g_asgard_createrole ;
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('CREATE SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', old_producteur := 'g_asgard_parent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur le futur producteur
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3a' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3b' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3c' ;
+
+        CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA c_bibliotheque ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3d' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3e' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3f' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3g' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3h' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur du futur schéma
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE g_asgard_createschema ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    RESET ROLE ;
+
+    -- si le nouveau producteur est le rôle courant et est habilité
+    -- à créer des schémas
+    SET ROLE g_asgard_createschema ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard_createschema'
+    ) = 'g_asgard_createschema', 'échec assertion 8a' ;
+
+    CREATE SCHEMA c_bibliotheque ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_createschema')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 8b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8c' ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser le futur producteur
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9c' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas et peut endosser le futur producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_createschema ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t129() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''CREATE SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t129b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t129b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard?SUPeruser" SUPERUSER ;
+    CREATE ROLE "g_asgard~CREATEschema" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard~CREATEschema'
+    ) ;
+
+    CREATE ROLE "g_asgard Producteur" ;
+    CREATE ROLE "g_asgard Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard_MAN!pulateur" ;
+    CREATE ROLE "g_asgard CREATErole" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin_délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        GRANT "g_asgard Producteur" TO "g_asgard_MAN!pulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard Producteur" TO "g_asgard_MAN!pulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT "g_asgard~CREATEschema" TO "g_asgard_MAN!pulateur" ;
+    GRANT "g_asgard~CREATEschema" TO "g_asgard CREATErole" ;
+    GRANT g_admin TO "g_asgard_admin_délégué" ;
+    GRANT "g_asgard_MAN!pulateur" TO "g_asgard Utilisateur" ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('CREATE SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', old_producteur := 'g_asgard_parent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur le futur producteur
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+        ) = 'g_admin', 'échec assertion 3a' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard Producteur', 'USAGE'),
+            'échec assertion 3b' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3c' ;
+
+        CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard Producteur" ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA "c_Bibliothèque" ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+        REVOKE "g_asgard Producteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+        ) = 0, 'échec assertion 3d' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin_délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+        ) = 'g_admin', 'échec assertion 3e' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard Producteur', 'USAGE'),
+            'échec assertion 3f' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3g' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard Producteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+        ) = 0, 'échec assertion 3h' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard CREATErole" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur du futur schéma
+    BEGIN
+            
+        SET ROLE "g_asgard Producteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE "g_asgard~CREATEschema" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE2[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard?SUPeruser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+    ) = 'g_asgard?SUPeruser', 'échec assertion 7a' ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard Producteur" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard Producteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    RESET ROLE ;
+
+    -- si le nouveau producteur est le rôle courant et est habilité
+    -- à créer des schémas
+    SET ROLE "g_asgard~CREATEschema" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard~CREATEschema'
+    ) = 'g_asgard~CREATEschema', 'échec assertion 8a' ;
+
+    CREATE SCHEMA "c_Bibliothèque" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard~CREATEschema')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 8b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard Producteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+    ) = 0, 'échec assertion 8c' ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser le futur producteur
+
+    SET ROLE "g_asgard_MAN!pulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+    ) = 'g_asgard_MAN!pulateur', 'échec assertion 9a' ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard Producteur" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard Producteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+    ) = 0, 'échec assertion 9c' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas et peut endosser le futur producteur
+
+    SET ROLE "g_asgard Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'CREATE SCHEMA', new_producteur := 'g_asgard Producteur'
+    ) = 'g_asgard_MAN!pulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard Producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN!pulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard~CREATEschema'
+    ) ;
+    DROP ROLE "g_asgard?SUPeruser" ;
+    DROP ROLE "g_asgard~CREATEschema" ;
+    DROP ROLE "g_asgard Producteur" ;
+    DROP ROLE "g_asgard Utilisateur" ;
+    DROP ROLE "g_asgard_MAN!pulateur" ;
+    DROP ROLE "g_asgard CREATErole" ;
+    DROP ROLE "g_asgard_admin_délégué" ;
+    
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t129b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''CREATE SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t130()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t130()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_createschema ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_asgard_createschema TO g_asgard_manipulateur ;
+    GRANT g_asgard_createschema TO g_asgard_createrole ;
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER SCHEMA RENAME') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', old_producteur := 'g_asgard_parent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur le producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        ALTER SCHEMA c_bibliotheque RENAME TO c_librairie ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA c_librairie ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur du schéma
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE g_asgard_createschema ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    ALTER SCHEMA c_bibliotheque RENAME TO c_librairie ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    RESET ROLE ;
+
+    -- si le producteur est le rôle courant et est habilité
+    -- à créer des schémas
+    -- le test suivant vérifie aussi que g_admin est rendu membre du producteur
+    -- s'il ne l'était pas déjà.
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_createschema ;
+    REVOKE g_asgard_createschema FROM g_admin ;
+
+    SET ROLE g_asgard_createschema ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_createschema'
+    ) = 'g_asgard_createschema', 'échec assertion 8a' ;
+
+    ALTER SCHEMA c_bibliotheque RENAME TO c_librairie ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_createschema')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 8b' ;
+
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_createschema FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8c' ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser le producteur, mais n'hérite pas de ses droits
+
+    BEGIN
+
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et du producteur du schéma
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9c' ;
+
+    ALTER SCHEMA c_bibliotheque RENAME TO c_librairie ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9d' ;
+
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9e' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas et hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_createschema ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t130() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER SCHEMA RENAME''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t130b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t130b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard CREATE*schema" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard CREATE*schema'
+    ) ;
+
+    CREATE ROLE "g_asgard PRO?ducteur" ;
+    CREATE ROLE "g_asgard UTI~lisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard_MAN--ipulateur" ;
+    CREATE ROLE "g_asgard CREATErole" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin Délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard_MAN--ipulateur" NOINHERIT ;
+        GRANT "g_asgard PRO?ducteur" TO "g_asgard_MAN--ipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard PRO?ducteur" TO "g_asgard_MAN--ipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT "g_asgard CREATE*schema" TO "g_asgard_MAN--ipulateur" ;
+    GRANT "g_asgard CREATE*schema" TO "g_asgard CREATErole" ;
+    GRANT g_admin TO "g_asgard_admin Délégué" ;
+    GRANT "g_asgard_MAN--ipulateur" TO "g_asgard UTI~lisateur" ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER SCHEMA RENAME') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', old_producteur := 'g_asgard_parent',
+            new_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur le producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PRO?ducteur" ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE "g_asgard PRO?ducteur" FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PRO?ducteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        ALTER SCHEMA "c_Bibliothèque" RENAME TO "c_ *Librairie*" ;
+
+        REVOKE "g_asgard PRO?ducteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA "c_ *Librairie*" ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin Délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PRO?ducteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard PRO?ducteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard CREATErole" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur du schéma
+    BEGIN
+            
+        SET ROLE "g_asgard PRO?ducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE "g_asgard CREATE*schema" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PRO?ducteur" ;
+
+    SET ROLE "g_asgard_SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+    ) = 'g_asgard_SUPERuser', 'échec assertion 7a' ;
+
+    ALTER SCHEMA "c_Bibliothèque" RENAME TO "c_ *Librairie*" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DROP SCHEMA "c_ *Librairie*" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard PRO?ducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    RESET ROLE ;
+
+    -- si le producteur est le rôle courant et est habilité
+    -- à créer des schémas
+    -- le test suivant vérifie aussi que g_admin est rendu membre du producteur
+    -- s'il ne l'était pas déjà.
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard CREATE*schema" ;
+    REVOKE "g_asgard CREATE*schema" FROM g_admin ;
+
+    SET ROLE "g_asgard CREATE*schema" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard CREATE*schema'
+    ) = 'g_asgard CREATE*schema', 'échec assertion 8a' ;
+
+    ALTER SCHEMA "c_Bibliothèque" RENAME TO "c_ *Librairie*" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard CREATE*schema')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 8b' ;
+
+    DROP SCHEMA "c_ *Librairie*" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard CREATE*schema" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+    ) = 0, 'échec assertion 8c' ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser le producteur, mais n'hérite pas de ses droits
+
+    BEGIN
+
+        SET ROLE "g_asgard_MAN--ipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE3[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et du producteur du schéma
+    ALTER ROLE "g_asgard_MAN--ipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard PRO?ducteur" TO "g_asgard_MAN--ipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PRO?ducteur" ;
+
+    SET ROLE "g_asgard_MAN--ipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+    ) = 'g_asgard_MAN--ipulateur', 'échec assertion 9c' ;
+
+    ALTER SCHEMA "c_Bibliothèque" RENAME TO "c_ *Librairie*" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9d' ;
+
+    DROP SCHEMA "c_ *Librairie*" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard PRO?ducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+    ) = 0, 'échec assertion 9e' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas et hérite des droits du producteur
+
+    SET ROLE "g_asgard UTI~lisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA RENAME', new_producteur := 'g_asgard PRO?ducteur'
+    ) = 'g_asgard_MAN--ipulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard PRO?ducteur')::regrole
+                AND NOT member = quote_ident('g_asgard_MAN--ipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard CREATE*schema'
+    ) ;
+    DROP ROLE "g_asgard_SUPERuser" ;
+    DROP ROLE "g_asgard CREATE*schema" ;
+    DROP ROLE "g_asgard PRO?ducteur" ;
+    DROP ROLE "g_asgard UTI~lisateur" ;
+    DROP ROLE "g_asgard_MAN--ipulateur" ;
+    DROP ROLE "g_asgard CREATErole" ;
+    DROP ROLE "g_asgard_admin Délégué" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t130b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER SCHEMA RENAME''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t131()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t131()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_createschema ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_intermediaire NOINHERIT ;
+    CREATE ROLE g_asgard_nouveau_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+        GRANT g_asgard_intermediaire TO g_asgard_manipulateur ;
+        GRANT g_asgard_nouveau_producteur TO g_asgard_intermediaire ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT g_asgard_nouveau_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_asgard_createschema TO g_asgard_manipulateur ;
+    GRANT g_asgard_createschema TO g_asgard_createrole ;
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER SCHEMA OWNER') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard_nouveau_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard_ghost', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard_nouveau_producteur', 
+            old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur l'ancien et/ou le nouveau producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3d' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ALTER SCHEMA c_bibliotheque OWNER TO g_asgard_nouveau_producteur ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA c_bibliotheque ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3g' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3h' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3i' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3j' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3k' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3l' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    ) AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3m' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard_nouveau_producteur',
+                old_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    ) AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 4c' ;
+
+    END IF ;
+
+    -- il ne suffit pas d'être l'ancien producteur du schéma
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard_nouveau_producteur',
+                old_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou le nouveau
+    BEGIN
+            
+        SET ROLE g_asgard_nouveau_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard_nouveau_producteur',
+                old_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- ou les deux
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard_producteur',
+                old_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5e' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5f' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE g_asgard_createschema ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard_nouveau_producteur',
+                old_producteur := 'g_asgard_producteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    ALTER SCHEMA c_bibliotheque OWNER TO g_asgard_nouveau_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7c' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+    REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 7d' ;
+
+    RESET ROLE ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser l'ancien producteur, mais n'hérite pas de ses droits
+
+    BEGIN
+
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur' 
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et de l'ancien producteur du schéma, et peut endosser le nouveau
+    -- producteur
+    -- (ce test vérifie aussi que g_admin retrouve ses droits sur l'ancien
+    -- producteur s'ils lui avaient été retirés)
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur' 
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    ALTER SCHEMA c_bibliotheque OWNER TO g_asgard_nouveau_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9c' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+    REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 9d' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas, hérite des droits de l'ancien
+    -- producteur et peut endosser le nouveau
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur' 
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard_createschema'
+    ) ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_createschema ;
+    DROP ROLE g_asgard_nouveau_producteur ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_intermediaire ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t131() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER SCHEMA OWNER''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t131b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t131b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard_CREATEschema" ;
+    EXECUTE format(
+        'GRANT CREATE ON DATABASE %I TO %I', 
+        current_database(), 'g_asgard_CREATEschema'
+    ) ;
+
+    CREATE ROLE "g_asgard PROducteur" ;
+    CREATE ROLE "g_asgard:INTERmédiaire" NOINHERIT ;
+    CREATE ROLE "g_asgard Nouveau-PROducteur" ;
+    CREATE ROLE "g_asgard Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard*MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATErôle" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin_Délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard*MANipulateur" NOINHERIT ;
+        GRANT "g_asgard PROducteur" TO "g_asgard*MANipulateur" ;
+        GRANT "g_asgard:INTERmédiaire" TO "g_asgard*MANipulateur" ;
+        GRANT "g_asgard Nouveau-PROducteur" TO "g_asgard:INTERmédiaire" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard PROducteur" TO "g_asgard*MANipulateur"
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT "g_asgard Nouveau-PROducteur" TO "g_asgard*MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT "g_asgard_CREATEschema" TO "g_asgard*MANipulateur" ;
+    GRANT "g_asgard_CREATEschema" TO "g_asgard_CREATErôle" ;
+    GRANT g_admin TO "g_asgard_admin_Délégué" ;
+    GRANT "g_asgard*MANipulateur" TO "g_asgard Utilisateur" ;
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER SCHEMA OWNER') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard Nouveau-PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard_ghost', 
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', new_producteur := 'g_asgard Nouveau-PROducteur', 
+            old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il peut créer des schémas mais n'a pas les droits requis
+    -- sur l'ancien et/ou le nouveau producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PROducteur" ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE "g_asgard PROducteur" FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard Nouveau-PROducteur',
+            old_producteur := 'g_asgard PROducteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PROducteur', 'USAGE'),
+            'échec assertion 3c' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard Nouveau-PROducteur', 'USAGE'),
+            'échec assertion 3d' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ALTER SCHEMA "c_Bibliothèque" OWNER TO "g_asgard Nouveau-PROducteur" ;
+
+        REVOKE "g_asgard PROducteur" FROM g_admin ;
+        REVOKE "g_asgard Nouveau-PROducteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        DROP SCHEMA "c_Bibliothèque" ;
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard PROducteur')::regrole, 
+                        quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard*MANipulateur')::regrole,
+                        quote_ident('g_asgard:INTERmédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3g' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin_Délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard Nouveau-PROducteur',
+            old_producteur := 'g_asgard PROducteur'
+        ) = 'g_admin', 'échec assertion 3h' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PROducteur', 'USAGE'),
+            'échec assertion 3i' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard Nouveau-PROducteur', 'USAGE'),
+            'échec assertion 3j' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3k' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3l' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard PROducteur" FROM g_admin ;
+        REVOKE "g_asgard Nouveau-PROducteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard PROducteur')::regrole, 
+                        quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                    ) AND NOT member IN (
+                        quote_ident('g_asgard*MANipulateur')::regrole,
+                        quote_ident('g_asgard:INTERmédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3m' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATErôle" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard Nouveau-PROducteur',
+                old_producteur := 'g_asgard PROducteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard PROducteur')::regrole, 
+                        quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                    ) AND NOT member IN (
+                        quote_ident('g_asgard*MANipulateur')::regrole,
+                        quote_ident('g_asgard:INTERmédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 4c' ;
+
+    END IF ;
+
+    -- il ne suffit pas d'être l'ancien producteur du schéma
+    BEGIN
+            
+        SET ROLE "g_asgard PROducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard Nouveau-PROducteur',
+                old_producteur := 'g_asgard PROducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou le nouveau
+    BEGIN
+            
+        SET ROLE "g_asgard Nouveau-PROducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard Nouveau-PROducteur',
+                old_producteur := 'g_asgard PROducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- ou les deux
+    BEGIN
+            
+        SET ROLE "g_asgard PROducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard PROducteur',
+                old_producteur := 'g_asgard PROducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 5e' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 5f' ;
+
+    END ;
+
+    -- il ne suffit pas d'avoir le droit de créer des schémas
+    BEGIN
+            
+        SET ROLE "g_asgard_CREATEschema" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER SCHEMA OWNER', 
+                new_producteur := 'g_asgard Nouveau-PROducteur',
+                old_producteur := 'g_asgard PROducteur'
+            ) ;
+
+        ASSERT False, 'échec assertion 6a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 6b' ;
+
+    END ;
+
+    -- super-utilisateur
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PROducteur" ;
+
+    SET ROLE "g_asgard SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard Nouveau-PROducteur',
+        old_producteur := 'g_asgard PROducteur'
+    ) = 'g_asgard SUPERuser', 'échec assertion 7a' ;
+
+    ALTER SCHEMA "c_Bibliothèque" OWNER TO "g_asgard Nouveau-PROducteur" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7c' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard PROducteur" FROM g_admin ;
+    REVOKE "g_asgard Nouveau-PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard*MANipulateur')::regrole,
+                    quote_ident('g_asgard:INTERmédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 7d' ;
+
+    RESET ROLE ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et peut endosser l'ancien producteur, mais n'hérite pas de ses droits
+
+    BEGIN
+
+        SET ROLE "g_asgard*MANipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER SCHEMA OWNER', 
+            new_producteur := 'g_asgard Nouveau-PROducteur',
+            old_producteur := 'g_asgard PROducteur' 
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE4[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- si le rôle courant hérite d'un rôle habilité à créer des schémas
+    -- et de l'ancien producteur du schéma, et peut endosser le nouveau
+    -- producteur
+    -- (ce test vérifie aussi que g_admin retrouve ses droits sur l'ancien
+    -- producteur s'ils lui avaient été retirés)
+    ALTER ROLE "g_asgard*MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard PROducteur" TO "g_asgard*MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PROducteur" ;
+
+    SET ROLE "g_asgard*MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard Nouveau-PROducteur',
+        old_producteur := 'g_asgard PROducteur' 
+    ) = 'g_asgard*MANipulateur', 'échec assertion 9a' ;
+
+    ALTER SCHEMA "c_Bibliothèque" OWNER TO "g_asgard Nouveau-PROducteur" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9c' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard PROducteur" FROM g_admin ;
+    REVOKE "g_asgard Nouveau-PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard*MANipulateur')::regrole,
+                    quote_ident('g_asgard:INTERmédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 9d' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite d'un rôle 
+    -- habilité à créer des schémas, hérite des droits de l'ancien
+    -- producteur et peut endosser le nouveau
+
+    SET ROLE "g_asgard Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER SCHEMA OWNER', 
+        new_producteur := 'g_asgard Nouveau-PROducteur',
+        old_producteur := 'g_asgard PROducteur' 
+    ) = 'g_asgard*MANipulateur', 'échec assertion 10a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard Nouveau-PROducteur')::regrole
+                ) AND NOT member IN (
+                    quote_ident('g_asgard*MANipulateur')::regrole,
+                    quote_ident('g_asgard:INTERmédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+
+    EXECUTE format(
+        'REVOKE CREATE ON DATABASE %I FROM %I', 
+        current_database(), 'g_asgard_CREATEschema'
+    ) ;
+    DROP ROLE "g_asgard SUPERuser" ;
+    DROP ROLE "g_asgard_CREATEschema" ;
+    DROP ROLE "g_asgard Nouveau-PROducteur" ;
+    DROP ROLE "g_asgard PROducteur" ;
+    DROP ROLE "g_asgard Utilisateur" ;
+    DROP ROLE "g_asgard*MANipulateur" ;
+    DROP ROLE "g_asgard_CREATErôle" ;
+    DROP ROLE "g_asgard_admin_Délégué" ;
+    DROP ROLE "g_asgard:INTERmédiaire" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t131b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER SCHEMA OWNER''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t132()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t132()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('DROP SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', new_producteur := 'g_asgard_parent',
+            old_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        DROP SCHEMA c_bibliotheque ;
+        
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE5[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- producteur du schéma
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 5a' ;
+
+    DROP SCHEMA c_bibliotheque ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 5b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 5c' ;
+
+    -- super-utilisateur
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    DROP SCHEMA c_bibliotheque ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    -- si le rôle courant peut endosser le producteur, mais n'hérite pas de ses droits,
+    -- l'exécutant est le producteur
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- si le rôle courant hérite des droits du producteur
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    DROP SCHEMA c_bibliotheque ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9c' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+    -- aurait aussi pu être 'g_asgard_producteur', mais il arrive
+    -- après 'g_asgard_manipulateur' dans l'ordre alphabétique
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t132() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''DROP SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t132b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t132b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard_SUPER!!!user" SUPERUSER ;
+    CREATE ROLE "g_asgard**PROducteur" ;
+    CREATE ROLE "g_asgard   utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATEROLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin_Délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard**PROducteur" TO "g_asgard:::MANipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard**PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin_Délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard   utilisateur" ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('DROP SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', new_producteur := 'g_asgard parent',
+            old_producteur := NULL
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard**PROducteur" ;
+
+        -- g_admin est automatiquement rendu membre du producteur
+        -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+        -- peut les rétablir.
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident(current_user)::regrole
+        ), 'échec assertion 3a' ;
+
+        REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard**PROducteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        DROP SCHEMA "c_Bibliothèque" ;
+        
+        REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        DELETE FROM z_asgard.gestion_schema_usr ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin_Délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard**PROducteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATEROLE" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE5[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- producteur du schéma
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard**PROducteur" ;
+
+    SET ROLE "g_asgard**PROducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+    ) = 'g_asgard**PROducteur', 'échec assertion 5a' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 5b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 5c' ;
+
+    -- super-utilisateur
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard**PROducteur" ;
+
+    SET ROLE "g_asgard_SUPER!!!user" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+    ) = 'g_asgard_SUPER!!!user', 'échec assertion 7a' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 7b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 7c' ;
+
+    -- si le rôle courant peut endosser le producteur, mais n'hérite pas de ses droits,
+    -- l'exécutant est le producteur
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+    ) = 'g_asgard**PROducteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- si le rôle courant hérite des droits du producteur
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard**PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard**PROducteur" ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 9a' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+
+    RESET ROLE ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9b' ;
+
+    DELETE FROM z_asgard.gestion_schema_usr ;
+    REVOKE "g_asgard**PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 9c' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE "g_asgard   utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'DROP SCHEMA', old_producteur := 'g_asgard**PROducteur'
+    ) = 'g_asgard**PROducteur', 'échec assertion 10a' ;
+    -- aurait aussi pu être 'g_asgard:::MANipulateur', mais il arrive ensuite
+    -- dans l'ordre alphabétique
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard**PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+
+    DROP ROLE "g_asgard_SUPER!!!user" ;
+    DROP ROLE "g_asgard**PROducteur" ;
+    DROP ROLE "g_asgard   utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATEROLE" ;
+    DROP ROLE "g_asgard_admin_Délégué" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t132b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''DROP SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t133()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t133()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_intermediaire NOINHERIT ;
+    CREATE ROLE g_asgard_nouveau_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+        GRANT g_asgard_intermediaire TO g_asgard_manipulateur ;
+        GRANT g_asgard_nouveau_producteur TO g_asgard_intermediaire ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT g_asgard_nouveau_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE TABLE c_bibliotheque.livre () ;
+    -- NB : au cours du test, des commandes seront lancées pour
+    -- modifier le propriétaire de cette table, mais Asgard repassera
+    -- toujours derrière pour s'assurer que le propriétaire reste
+    -- g_asgard_producteur.
+
+    GRANT CREATE ON SCHEMA c_bibliotheque TO g_asgard_nouveau_producteur ;
+    -- On autorise g_asgard_nouveau_producteur à créer des objets dans le
+    -- schéma pour que les commandes qui tentent d'en faire le nouveau
+    -- propriétaire des objets soient valides.
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER OBJECT OWNER') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', new_producteur := 'g_asgard_nouveau_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_ghost', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur', 
+            old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            old_producteur := 'g_asgard_producteur',
+            new_producteur := 'g_asgard_nouveau_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3d' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ALTER TABLE c_bibliotheque.livre
+            OWNER TO g_asgard_nouveau_producteur ;
+        
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            old_producteur := 'g_asgard_producteur',
+            new_producteur := 'g_asgard_nouveau_producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3g' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3h' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3i' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3j' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3k' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER OBJECT OWNER', 
+                old_producteur := 'g_asgard_producteur',
+                new_producteur := 'g_asgard_nouveau_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être l'ancien producteur du schéma
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou le nouveau
+    BEGIN
+            
+        SET ROLE g_asgard_nouveau_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- les deux, oui
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    ALTER TABLE c_bibliotheque.livre
+        OWNER TO g_asgard_nouveau_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre des deux producteurs mais
+    -- n'hérite des droits d'aucun
+
+    BEGIN
+            
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- le rôle courant est membre des deux producteurs, mais
+    -- hérite seulement des droits de l'ancien
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    BEGIN
+            
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- si le rôle courant hérite des droits des deux producteurs
+
+    ALTER ROLE g_asgard_intermediaire INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_nouveau_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+
+    ALTER TABLE c_bibliotheque.livre
+        OWNER TO g_asgard_nouveau_producteur ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 11a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 11b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_nouveau_producteur ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_intermediaire ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t133() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER OBJECT OWNER''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t133b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t133b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard!SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard_PRO-ducteur" ;
+    CREATE ROLE "g_asgard Intermédiaire" NOINHERIT ;
+    CREATE ROLE "g_asgard_Nouveau producteur" ;
+    CREATE ROLE "g_asgard *Utilisateur*" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATEROLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin Délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard_PRO-ducteur" TO "g_asgard:::MANipulateur" ;
+        GRANT "g_asgard Intermédiaire" TO "g_asgard:::MANipulateur" ;
+        GRANT "g_asgard_Nouveau producteur" TO "g_asgard Intermédiaire" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard_PRO-ducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT "g_asgard_Nouveau producteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin Délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard *Utilisateur*" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard_PRO-ducteur" ;
+    CREATE TABLE "c_Bibliothèque"."Livre++" () ;
+    -- NB : au cours du test, des commandes seront lancées pour
+    -- modifier le propriétaire de cette table, mais Asgard repassera
+    -- toujours derrière pour s'assurer que le propriétaire reste
+    -- "g_asgard_PRO-ducteur".
+
+    GRANT CREATE ON SCHEMA "c_Bibliothèque" TO "g_asgard_Nouveau producteur" ;
+    -- On autorise "g_asgard_Nouveau producteur" à créer des objets dans le
+    -- schéma pour que les commandes qui tentent d'en faire le nouveau
+    -- propriétaire des objets soient valides.
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER OBJECT OWNER') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', new_producteur := 'g_asgard_Nouveau producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_ghost', 
+            old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_Nouveau producteur', 
+            old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+    
+    -- g_admin est automatiquement rendu membre du producteur
+    -- du schéma créé. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_PRO-ducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE "g_asgard_PRO-ducteur" FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            old_producteur := 'g_asgard_PRO-ducteur',
+            new_producteur := 'g_asgard_Nouveau producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_PRO-ducteur', 'USAGE'),
+            'échec assertion 3c' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_Nouveau producteur', 'USAGE'),
+            'échec assertion 3d' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_PRO-ducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Nouveau producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ALTER TABLE "c_Bibliothèque"."Livre++"
+            OWNER TO "g_asgard_Nouveau producteur" ;
+        
+        REVOKE "g_asgard_PRO-ducteur" FROM g_admin ;
+        REVOKE "g_asgard_Nouveau producteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                        quote_ident('g_asgard_Nouveau producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard:::MANipulateur')::regrole,
+                        quote_ident('g_asgard Intermédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin Délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            old_producteur := 'g_asgard_PRO-ducteur',
+            new_producteur := 'g_asgard_Nouveau producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_PRO-ducteur', 'USAGE'),
+            'échec assertion 3g' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_Nouveau producteur', 'USAGE'),
+            'échec assertion 3h' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_PRO-ducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3i' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_Nouveau producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3j' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard_PRO-ducteur" FROM g_admin ;
+        REVOKE "g_asgard_Nouveau producteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                        quote_ident('g_asgard_Nouveau producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard:::MANipulateur')::regrole,
+                        quote_ident('g_asgard Intermédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3k' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATEROLE" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER OBJECT OWNER', 
+                old_producteur := 'g_asgard_PRO-ducteur',
+                new_producteur := 'g_asgard_Nouveau producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être l'ancien producteur du schéma
+    BEGIN
+            
+        SET ROLE "g_asgard_PRO-ducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_Nouveau producteur',
+            old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou le nouveau
+    BEGIN
+            
+        SET ROLE "g_asgard_Nouveau producteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_Nouveau producteur',
+            old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- les deux, oui
+
+    SET ROLE "g_asgard_PRO-ducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_PRO-ducteur',
+        old_producteur := 'g_asgard_PRO-ducteur'
+    ) = 'g_asgard_PRO-ducteur', 'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                    quote_ident('g_asgard_Nouveau producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard!SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_Nouveau producteur',
+        old_producteur := 'g_asgard_PRO-ducteur'
+    ) = 'g_asgard!SUPERuser', 'échec assertion 7a' ;
+
+    ALTER TABLE "c_Bibliothèque"."Livre++"
+        OWNER TO "g_asgard_Nouveau producteur" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                    quote_ident('g_asgard_Nouveau producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre des deux producteurs mais
+    -- n'hérite des droits d'aucun
+
+    BEGIN
+            
+        SET ROLE "g_asgard:::MANipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_Nouveau producteur',
+            old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- le rôle courant est membre des deux producteurs, mais
+    -- hérite seulement des droits de l'ancien
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard_PRO-ducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    BEGIN
+            
+        SET ROLE "g_asgard:::MANipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT OWNER', 
+            new_producteur := 'g_asgard_Nouveau producteur',
+            old_producteur := 'g_asgard_PRO-ducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE6[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- si le rôle courant hérite des droits des deux producteurs
+
+    ALTER ROLE "g_asgard Intermédiaire" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard_Nouveau producteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_Nouveau producteur',
+        old_producteur := 'g_asgard_PRO-ducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 10a' ;
+
+    ALTER TABLE "c_Bibliothèque"."Livre++"
+        OWNER TO "g_asgard_Nouveau producteur" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                    quote_ident('g_asgard_Nouveau producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE "g_asgard *Utilisateur*" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT OWNER', 
+        new_producteur := 'g_asgard_Nouveau producteur',
+        old_producteur := 'g_asgard_PRO-ducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 11a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_PRO-ducteur')::regrole, 
+                    quote_ident('g_asgard_Nouveau producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 11b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard!SUPERuser" ;
+    DROP ROLE "g_asgard_Nouveau producteur" ;
+    DROP ROLE "g_asgard_PRO-ducteur" ;
+    DROP ROLE "g_asgard *Utilisateur*" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATEROLE" ;
+    DROP ROLE "g_asgard_admin Délégué" ;
+    DROP ROLE "g_asgard Intermédiaire" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t133b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER OBJECT OWNER''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t134()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t134()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_intermediaire NOINHERIT ;
+    CREATE ROLE g_asgard_nouveau_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+        GRANT g_asgard_intermediaire TO g_asgard_manipulateur ;
+        GRANT g_asgard_nouveau_producteur TO g_asgard_intermediaire ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT g_asgard_nouveau_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE TABLE c_bibliotheque.livre () ;
+
+    CREATE SCHEMA c_librairie AUTHORIZATION g_asgard_nouveau_producteur ;
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER OBJECT SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', new_producteur := 'g_asgard_nouveau_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_ghost', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_nouveau_producteur', 
+            old_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3b' ;
+
+    REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            old_producteur := 'g_asgard_producteur',
+            new_producteur := 'g_asgard_nouveau_producteur'
+        ) = 'g_admin', 'échec assertion 3c' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3d' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3g' ;
+
+        ALTER TABLE c_bibliotheque.livre
+            SET SCHEMA c_librairie ;
+        
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        ALTER TABLE c_librairie.livre
+            SET SCHEMA c_bibliotheque ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3h' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            old_producteur := 'g_asgard_producteur',
+            new_producteur := 'g_asgard_nouveau_producteur'
+        ) = 'g_admin', 'échec assertion 3i' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3j' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard_nouveau_producteur', 'USAGE'),
+            'échec assertion 3k' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3l' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_nouveau_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3m' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+        REVOKE g_asgard_nouveau_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard_producteur')::regrole, 
+                        quote_ident('g_asgard_nouveau_producteur')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard_manipulateur')::regrole,
+                        quote_ident('g_asgard_intermediaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3n' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER OBJECT SCHEMA', 
+                old_producteur := 'g_asgard_producteur',
+                new_producteur := 'g_asgard_nouveau_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur de l'ancien schéma
+    BEGIN
+            
+        SET ROLE g_asgard_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou du nouveau
+    BEGIN
+            
+        SET ROLE g_asgard_nouveau_producteur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- les deux, oui
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    ALTER TABLE c_bibliotheque.livre
+        SET SCHEMA c_librairie ;
+
+    RESET ROLE ;
+
+    ALTER TABLE c_librairie.livre
+        SET SCHEMA c_bibliotheque ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre des deux producteurs mais
+    -- n'hérite des droits d'aucun
+
+    BEGIN
+            
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- le rôle courant est membre des deux producteurs, mais
+    -- hérite seulement des droits de l'ancien
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    BEGIN
+            
+        SET ROLE g_asgard_manipulateur ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_nouveau_producteur',
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- le rôle courant hérite des droits des deux producteurs
+
+    ALTER ROLE g_asgard_intermediaire INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_nouveau_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+
+    ALTER TABLE c_bibliotheque.livre
+        SET SCHEMA c_librairie ;
+
+    RESET ROLE ;
+
+    ALTER TABLE c_librairie.livre
+        SET SCHEMA c_bibliotheque ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard_nouveau_producteur',
+        old_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 11a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard_producteur')::regrole, 
+                    quote_ident('g_asgard_nouveau_producteur')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard_manipulateur')::regrole,
+                    quote_ident('g_asgard_intermediaire')::regrole
+                )
+    ) = 0, 'échec assertion 11b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DROP SCHEMA c_librairie ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_nouveau_producteur ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_intermediaire ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t134() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER OBJECT SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t134b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t134b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard?SUPERUSER" SUPERUSER ;
+    CREATE ROLE "g_asgard PROducteur" ;
+    CREATE ROLE "g_asgard----Intermédiaire" NOINHERIT ;
+    CREATE ROLE "g_asgard nouveau producteur !" ;
+    CREATE ROLE "g_asgard**Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATEROLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin_Délégué" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard PROducteur" TO "g_asgard:::MANipulateur" ;
+        GRANT "g_asgard----Intermédiaire" TO "g_asgard:::MANipulateur" ;
+        GRANT "g_asgard nouveau producteur !" TO "g_asgard----Intermédiaire" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+        EXECUTE 'GRANT "g_asgard nouveau producteur !" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin_Délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard**Utilisateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard PROducteur" ;
+    CREATE TABLE "c_Bibliothèque".livre () ;
+
+    CREATE SCHEMA "c_LIBRAIRIE" AUTHORIZATION "g_asgard nouveau producteur !" ;
+
+    -- ni l'ancien ni le nouveau producteur n'est renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER OBJECT SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]' OR e_mssg ~ 'FRE51[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    -- le nouveau producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- l'ancien producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', new_producteur := 'g_asgard nouveau producteur !'
+        ) ;
+
+        ASSERT False, 'échec assertion 1e' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE51[.]', 'échec assertion 1f' ;
+
+    END ;
+
+    -- le nouveau producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard_ghOst', 
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- l'ancien producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard nouveau producteur !', 
+            old_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2c' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE81[.]', 'échec assertion 2d' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE "g_asgard PROducteur" FROM g_admin ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard nouveau producteur !')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3b' ;
+
+    REVOKE "g_asgard nouveau producteur !" FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            old_producteur := 'g_asgard PROducteur',
+            new_producteur := 'g_asgard nouveau producteur !'
+        ) = 'g_admin', 'échec assertion 3c' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PROducteur', 'USAGE'),
+            'échec assertion 3d' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard nouveau producteur !', 'USAGE'),
+            'échec assertion 3e' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3f' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard nouveau producteur !')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3g' ;
+
+        ALTER TABLE "c_Bibliothèque".livre
+            SET SCHEMA "c_LIBRAIRIE" ;
+        
+        REVOKE "g_asgard PROducteur" FROM g_admin ;
+        REVOKE "g_asgard nouveau producteur !" FROM g_admin ;
+
+        RESET ROLE ;
+
+        ALTER TABLE "c_LIBRAIRIE".livre
+            SET SCHEMA "c_Bibliothèque" ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard PROducteur')::regrole, 
+                        quote_ident('g_asgard nouveau producteur !')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard:::MANipulateur')::regrole,
+                        quote_ident('g_asgard----Intermédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3h' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin_Délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            old_producteur := 'g_asgard PROducteur',
+            new_producteur := 'g_asgard nouveau producteur !'
+        ) = 'g_admin', 'échec assertion 3i' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard PROducteur', 'USAGE'),
+            'échec assertion 3j' ;
+        ASSERT pg_has_role('g_admin', 'g_asgard nouveau producteur !', 'USAGE'),
+            'échec assertion 3k' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3l' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard nouveau producteur !')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3m' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard PROducteur" FROM g_admin ;
+        REVOKE "g_asgard nouveau producteur !" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid IN (
+                        quote_ident('g_asgard PROducteur')::regrole, 
+                        quote_ident('g_asgard nouveau producteur !')::regrole
+                    )
+                    AND NOT member IN (
+                        quote_ident('g_asgard:::MANipulateur')::regrole,
+                        quote_ident('g_asgard----Intermédiaire')::regrole
+                    )
+        ) = 0, 'échec assertion 3n' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATEROLE" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'ALTER OBJECT SCHEMA', 
+                old_producteur := 'g_asgard PROducteur',
+                new_producteur := 'g_asgard nouveau producteur !'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- il ne suffit pas d'être le producteur de l'ancien schéma
+    BEGIN
+            
+        SET ROLE "g_asgard PROducteur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard nouveau producteur !',
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- ou du nouveau
+    BEGIN
+            
+        SET ROLE "g_asgard nouveau producteur !" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard nouveau producteur !',
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5c' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 5d' ;
+
+    END ;
+
+    -- les deux, oui
+
+    SET ROLE "g_asgard PROducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard PROducteur',
+        old_producteur := 'g_asgard PROducteur'
+    ) = 'g_asgard PROducteur', 'échec assertion 6a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard nouveau producteur !')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard----Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard?SUPERUSER" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard nouveau producteur !',
+        old_producteur := 'g_asgard PROducteur'
+    ) = 'g_asgard?SUPERUSER', 'échec assertion 7a' ;
+
+    ALTER TABLE "c_Bibliothèque".livre
+        SET SCHEMA "c_LIBRAIRIE" ;
+
+    RESET ROLE ;
+
+    ALTER TABLE "c_LIBRAIRIE".livre
+        SET SCHEMA "c_Bibliothèque" ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard nouveau producteur !')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard----Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre des deux producteurs mais
+    -- n'hérite des droits d'aucun
+
+    BEGIN
+            
+        SET ROLE "g_asgard:::MANipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard nouveau producteur !',
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 8a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 8b' ;
+
+    END ;
+
+    -- le rôle courant est membre des deux producteurs, mais
+    -- hérite seulement des droits de l'ancien
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    BEGIN
+            
+        SET ROLE "g_asgard:::MANipulateur" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER OBJECT SCHEMA', 
+            new_producteur := 'g_asgard nouveau producteur !',
+            old_producteur := 'g_asgard PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 9a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE7[.]', 'échec assertion 9b' ;
+
+    END ;
+
+    -- le rôle courant hérite des droits des deux producteurs
+
+    ALTER ROLE "g_asgard----Intermédiaire" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard nouveau producteur !" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard nouveau producteur !',
+        old_producteur := 'g_asgard PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 10a' ;
+
+    ALTER TABLE "c_Bibliothèque".livre
+        SET SCHEMA "c_LIBRAIRIE" ;
+
+    RESET ROLE ;
+
+    ALTER TABLE "c_LIBRAIRIE".livre
+        SET SCHEMA "c_Bibliothèque" ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard nouveau producteur !')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard----Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 10b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE "g_asgard**Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER OBJECT SCHEMA', 
+        new_producteur := 'g_asgard nouveau producteur !',
+        old_producteur := 'g_asgard PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 11a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid IN (
+                    quote_ident('g_asgard PROducteur')::regrole, 
+                    quote_ident('g_asgard nouveau producteur !')::regrole
+                )
+                AND NOT member IN (
+                    quote_ident('g_asgard:::MANipulateur')::regrole,
+                    quote_ident('g_asgard----Intermédiaire')::regrole
+                )
+    ) = 0, 'échec assertion 11b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DROP SCHEMA "c_LIBRAIRIE" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard?SUPERUSER" ;
+    DROP ROLE "g_asgard nouveau producteur !" ;
+    DROP ROLE "g_asgard PROducteur" ;
+    DROP ROLE "g_asgard**Utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATEROLE" ;
+    DROP ROLE "g_asgard_admin_Délégué" ;
+    DROP ROLE "g_asgard----Intermédiaire" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t134b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER OBJECT SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t135()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t135()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+    CREATE ROLE g_asgard_un_role ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE TABLE c_bibliotheque.livre () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('PRIVILEGES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'PRIVILEGES',
+            new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        GRANT SELECT ON TABLE c_bibliotheque.livre TO g_asgard_un_role ;
+        REVOKE SELECT ON TABLE c_bibliotheque.livre FROM g_asgard_un_role ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'PRIVILEGES',
+            new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'PRIVILEGES',
+                new_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE8[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE g_asgard_un_role ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE8[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- producteur du schéma
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 6a' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre TO g_asgard_un_role ;
+    REVOKE SELECT ON TABLE c_bibliotheque.livre FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre TO g_asgard_un_role ;
+    REVOKE SELECT ON TABLE c_bibliotheque.livre FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du producteur mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    GRANT SELECT ON TABLE c_bibliotheque.livre TO g_asgard_un_role ;
+    REVOKE SELECT ON TABLE c_bibliotheque.livre FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+    -- NB : 'g_asgard_producteur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard_manipulateur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_un_role ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t135() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''PRIVILEGES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t135b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t135b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard*PROducteur" ;
+    CREATE ROLE "g_asgard&Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATERÔLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin délégué" ;
+    CREATE ROLE "g_asgard Un rôle" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard&Utilisateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard*PROducteur" ;
+    CREATE TABLE "c_Bibliothèque"."Livre++" () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('PRIVILEGES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            old_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            new_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'PRIVILEGES',
+            new_producteur := 'g_asgard*PROducteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        GRANT SELECT ON TABLE "c_Bibliothèque"."Livre++" TO "g_asgard Un rôle" ;
+        REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre++" FROM "g_asgard Un rôle" ;
+
+        REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'PRIVILEGES',
+            new_producteur := 'g_asgard*PROducteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATERÔLE" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'PRIVILEGES',
+                new_producteur := 'g_asgard*PROducteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE8[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE "g_asgard Un rôle" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'PRIVILEGES', 
+            new_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE8[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- producteur du schéma
+
+    SET ROLE "g_asgard*PROducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 6a' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre++" TO "g_asgard Un rôle" ;
+    REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre++" FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard SUPERuser', 'échec assertion 7a' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre++" TO "g_asgard Un rôle" ;
+    REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre++" FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du producteur mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 9a' ;
+
+    GRANT SELECT ON TABLE "c_Bibliothèque"."Livre++" TO "g_asgard Un rôle" ;
+    REVOKE SELECT ON TABLE "c_Bibliothèque"."Livre++" FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE "g_asgard&Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'PRIVILEGES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 10a' ;
+    -- NB : 'g_asgard:::MANipulateur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard*PROducteur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard SUPERuser" ;
+    DROP ROLE "g_asgard*PROducteur" ;
+    DROP ROLE "g_asgard&Utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATERÔLE" ;
+    DROP ROLE "g_asgard_admin délégué" ;
+    DROP ROLE "g_asgard Un rôle" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t135b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''PRIVILEGES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t136()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t136()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+    CREATE ROLE g_asgard_un_role ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE TABLE c_bibliotheque.livre () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('POLICIES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'POLICIES',
+            new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        CREATE POLICY asgard_lecture_policy ON c_bibliotheque.livre
+            FOR SELECT USING (True) ;
+        DROP POLICY asgard_lecture_policy ON c_bibliotheque.livre ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE g_asgard_admin_delegue ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'POLICIES',
+            new_producteur := 'g_asgard_producteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE g_asgard_producteur FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                    AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE g_asgard_createrole ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'POLICIES',
+                new_producteur := 'g_asgard_producteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE12[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE g_asgard_un_role ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE12[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- producteur du schéma
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 6a' ;
+
+    CREATE POLICY asgard_lecture_policy ON c_bibliotheque.livre
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON c_bibliotheque.livre ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    CREATE POLICY asgard_lecture_policy ON c_bibliotheque.livre
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON c_bibliotheque.livre ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du producteur mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    CREATE POLICY asgard_lecture_policy ON c_bibliotheque.livre
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON c_bibliotheque.livre ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 10a' ;
+    -- NB : 'g_asgard_producteur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard_manipulateur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_un_role ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t136() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''POLICIES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t136b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t136b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard*PROducteur" ;
+    CREATE ROLE "g_asgard&Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATERÔLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin délégué" ;
+    CREATE ROLE "g_asgard Un rôle" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard&Utilisateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard*PROducteur" ;
+    CREATE TABLE "c_Bibliothèque"."Livre++" () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('POLICIES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            old_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            new_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- sous PostgreSQL 15-, g_admin est capable de s'auto-désigner
+    -- s'il n'a pas les droits requis sur le producteur du schéma
+
+    -- g_admin est automatiquement rendu membre du producteur
+    -- des schémas créés. On lui retire ces droits pour vérifier qu'il
+    -- peut les rétablir.
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 3a' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+
+        SET ROLE g_admin ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'POLICIES',
+            new_producteur := 'g_asgard*PROducteur'
+        ) = 'g_admin', 'échec assertion 3b' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 3c' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3d' ;
+
+        CREATE POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++"
+            FOR SELECT USING (True) ;
+        DROP POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++" ;
+
+        REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+        RESET ROLE ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3e' ;
+
+        -- ... idem pour un de ses membres
+        SET ROLE "g_asgard_admin délégué" ;
+
+        ASSERT z_asgard.asgard_cherche_executant(
+            'POLICIES',
+            new_producteur := 'g_asgard*PROducteur'
+        ) = 'g_admin', 'échec assertion 3f' ;
+
+        ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 3g' ;
+
+        ASSERT quote_ident('g_admin')::regrole IN (
+            SELECT member FROM pg_auth_members 
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND admin_option
+                    AND grantor = quote_ident('g_admin')::regrole
+        ), 'échec assertion 3h' ;
+
+        RESET ROLE ;
+
+        REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+        ASSERT (
+            SELECT count(*) FROM pg_auth_members
+                WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                    AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+        ) = 0, 'échec assertion 3i' ;
+
+        -- ... mais un autre rôle disposant de CREATEROLE 
+        -- ne pourra pas en faire de même.
+        BEGIN
+            
+            SET ROLE "g_asgard_CREATERÔLE" ;
+
+            PERFORM z_asgard.asgard_cherche_executant(
+                'POLICIES',
+                new_producteur := 'g_asgard*PROducteur'
+            ) ;
+
+            ASSERT False, 'échec assertion 4a' ;
+
+            EXCEPTION WHEN insufficient_privilege THEN
+                GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+                ASSERT e_mssg ~ 'FRE12[.]', 'échec assertion 4b' ;
+
+        END ; 
+
+    END IF ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE "g_asgard Un rôle" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'POLICIES', 
+            new_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE12[.]', 'échec assertion 5b' ;
+
+    END ;
+
+    -- producteur du schéma
+
+    SET ROLE "g_asgard*PROducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 6a' ;
+
+    CREATE POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++"
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard SUPERuser', 'échec assertion 7a' ;
+
+    CREATE POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++"
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du producteur mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 9a' ;
+
+    CREATE POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++"
+        FOR SELECT USING (True) ;
+    DROP POLICY asgard_lecture_policy ON "c_Bibliothèque"."Livre++" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du producteur
+
+    SET ROLE "g_asgard&Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'POLICIES', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 10a' ;
+    -- NB : 'g_asgard:::MANipulateur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard*PROducteur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard SUPERuser" ;
+    DROP ROLE "g_asgard*PROducteur" ;
+    DROP ROLE "g_asgard&Utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATERÔLE" ;
+    DROP ROLE "g_asgard_admin délégué" ;
+    DROP ROLE "g_asgard Un rôle" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t136b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''POLICIES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t137()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t137()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_cible ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue ;
+    CREATE ROLE g_asgard_un_role ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_cible TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_cible TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    CREATE TABLE c_bibliotheque.livre () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER DEFAULT PRIVILEGES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            old_producteur := 'g_asgard_cible'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- g_asgard_cible n'étant pas présumé être le 
+    -- producteur du schéma (et, de fait, il ne l'est pas), 
+    -- g_admin ne pourra pas s'auto-conférer de permission
+    -- sur ce rôle s'il n'en est pas déjà membre, 
+    -- quelle que soit la version de PostgreSQL
+    BEGIN
+
+        SET ROLE g_admin ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_cible'
+        ) ;
+
+        ASSERT False, 'échec assertion 3a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 3b' ;
+
+    END ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE g_asgard_un_role ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_cible'
+        ) ;
+
+        ASSERT False, 'échec assertion 4a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 4b' ;
+
+    END ;
+
+    -- rôle quelconque avec CREATEROLE
+    BEGIN
+        
+        SET ROLE g_asgard_createrole ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES',
+            new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 5b' ;
+
+    END ; 
+
+    -- le rôle cible sur lui-même
+
+    SET ROLE g_asgard_cible ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_cible'
+    ) = 'g_asgard_cible', 'échec assertion 6a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque GRANT SELECT ON TABLES TO g_asgard_un_role ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque REVOKE SELECT ON TABLES FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_cible'
+    ) = 'g_asgard_superuser', 'échec assertion 7a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque GRANT SELECT ON TABLES TO g_asgard_un_role ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque REVOKE SELECT ON TABLES FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du rôle cible mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_cible'
+    ) = 'g_asgard_cible', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_cible TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_cible'
+    ) = 'g_asgard_manipulateur', 'échec assertion 9a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque GRANT SELECT ON TABLES TO g_asgard_un_role ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE g_asgard_cible
+        IN SCHEMA c_bibliotheque REVOKE SELECT ON TABLES FROM g_asgard_un_role ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du rôle cible
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_cible'
+    ) = 'g_asgard_cible', 'échec assertion 10a' ;
+    -- NB : 'g_asgard_manipulateur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard_cible' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_cible')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA c_bibliotheque CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_cible ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_un_role ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t137() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER DEFAULT PRIVILEGES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t137b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t137b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard*PROducteur" ;
+    CREATE ROLE "g_asgard SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard_C!ble" ;
+    CREATE ROLE "g_asgard&Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATERÔLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin délégué" ;
+    CREATE ROLE "g_asgard Un rôle" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard_C!ble" TO "g_asgard:::MANipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard_C!ble" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard&Utilisateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard*PROducteur" ;
+    CREATE TABLE "c_Bibliothèque"."Livre++" () ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('ALTER DEFAULT PRIVILEGES') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            old_producteur := 'g_asgard_C!ble'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN invalid_parameter_value THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE80[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- "g_asgard_C!ble" n'étant pas présumé être le 
+    -- producteur du schéma (et, de fait, il ne l'est pas), 
+    -- g_admin ne pourra pas s'auto-conférer de permission
+    -- sur ce rôle s'il n'en est pas déjà membre, 
+    -- quelle que soit la version de PostgreSQL
+    BEGIN
+
+        SET ROLE g_admin ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_C!ble'
+        ) ;
+
+        ASSERT False, 'échec assertion 3a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 3b' ;
+
+    END ;
+
+    -- rôle quelconque
+    BEGIN
+            
+        SET ROLE "g_asgard Un rôle" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES', 
+            new_producteur := 'g_asgard_C!ble'
+        ) ;
+
+        ASSERT False, 'échec assertion 4a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 4b' ;
+
+    END ;
+
+    -- rôle quelconque avec CREATEROLE
+    BEGIN
+        
+        SET ROLE "g_asgard_CREATERÔLE" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'ALTER DEFAULT PRIVILEGES',
+            new_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 5a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE9[.]', 'échec assertion 5b' ;
+
+    END ; 
+
+    -- le rôle cible sur lui-même
+
+    SET ROLE "g_asgard_C!ble" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_C!ble'
+    ) = 'g_asgard_C!ble', 'échec assertion 6a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" GRANT SELECT ON TABLES TO "g_asgard Un rôle" ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" REVOKE SELECT ON TABLES FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_C!ble')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 6b' ;
+
+    -- super-utilisateur
+    SET ROLE "g_asgard SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_C!ble'
+    ) = 'g_asgard SUPERuser', 'échec assertion 7a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" GRANT SELECT ON TABLES TO "g_asgard Un rôle" ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" REVOKE SELECT ON TABLES FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_C!ble')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 7b' ;
+
+    -- le rôle courant est membre du rôle cible mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_C!ble'
+    ) = 'g_asgard_C!ble', 'échec assertion 8a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_C!ble')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 8b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard_C!ble" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_C!ble'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 9a' ;
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" GRANT SELECT ON TABLES TO "g_asgard Un rôle" ;
+    ALTER DEFAULT PRIVILEGES FOR ROLE "g_asgard_C!ble"
+        IN SCHEMA "c_Bibliothèque" REVOKE SELECT ON TABLES FROM "g_asgard Un rôle" ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_C!ble')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 9b' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du rôle cible
+
+    SET ROLE "g_asgard&Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'ALTER DEFAULT PRIVILEGES', 
+        new_producteur := 'g_asgard_C!ble'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 10a' ;
+    -- NB : 'g_asgard_C!ble' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard:::MANipulateur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_C!ble')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 10b' ;
+
+    DROP SCHEMA "c_Bibliothèque" CASCADE ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard*PROducteur" ;
+    DROP ROLE "g_asgard SUPERuser" ;
+    DROP ROLE "g_asgard_C!ble" ;
+    DROP ROLE "g_asgard&Utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATERÔLE" ;
+    DROP ROLE "g_asgard_admin délégué" ;
+    DROP ROLE "g_asgard Un rôle" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t137b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''ALTER DEFAULT PRIVILEGES''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t138()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t138()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_producteur ;
+    CREATE ROLE g_asgard_superuser SUPERUSER ;
+    CREATE ROLE g_asgard_utilisateur NOINHERIT ;
+    CREATE ROLE g_asgard_manipulateur ;
+    CREATE ROLE g_asgard_createrole CREATEROLE ;
+    CREATE ROLE g_asgard_admin_delegue NOINHERIT ;
+    CREATE ROLE g_asgard_un_role ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE g_asgard_manipulateur NOINHERIT ;
+        GRANT g_asgard_producteur TO g_asgard_manipulateur ;
+    ELSE
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO g_asgard_admin_delegue ;
+    GRANT g_asgard_manipulateur TO g_asgard_utilisateur ;
+
+    CREATE SCHEMA c_bibliotheque AUTHORIZATION g_asgard_producteur ;
+    
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_librairie', 'g_asgard_ghost') ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('MODIFY GESTION SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            old_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas et le rôle courant n'est
+    -- pas membre de g_admin
+    BEGIN
+
+        SET ROLE g_asgard_un_role ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            new_producteur := 'g_asgard_ghost'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- le producteur n'existe pas et le rôle courant
+    -- est g_admin
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghost'
+    ) = 'g_admin', 'échec assertion 3' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Librairie'
+        WHERE nom_schema = 'c_librairie' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe, le rôle courant est g_admin
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_admin', 'échec assertion 4' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe, le rôle courant est g_admin,
+    -- auquel on a retiré ses droits sur ce rôle
+    -- -> ça ne change rien, car il suffit que le rôle
+    -- soit membre de g_admin
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_admin', 'échec assertion 5a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 5b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 5c' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 5d' ;
+
+    -- le producteur n'existe pas et le rôle courant est
+    -- membre de g_admin sans hériter de ses droits
+
+    SET ROLE g_asgard_admin_delegue ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghost'
+    ) = 'g_admin', 'échec assertion 6' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe et le rôle courant est
+    -- membre de g_admin sans hériter de ses droits
+
+    SET ROLE g_asgard_admin_delegue ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_admin', 'échec assertion 7' ;
+
+    RESET ROLE ;
+
+    -- le producteur n'existe pas et le rôle courant
+    -- hérite des droits de g_admin
+
+    ALTER ROLE g_asgard_admin_delegue INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_admin TO g_asgard_admin_delegue
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_admin_delegue ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghost'
+    ) = 'g_asgard_admin_delegue', 'échec assertion 8' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Grande librairie'
+        WHERE nom_schema = 'c_librairie' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe et le rôle courant hérite
+    -- des droits de g_admin
+
+    SET ROLE g_asgard_admin_delegue ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_admin_delegue', 'échec assertion 9a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 9b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9c' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 9d' ;
+
+    -- le producteur existe, le rôle courant n'en est
+    -- pas membre et n'est pas membre de g_admin
+
+    BEGIN
+            
+        SET ROLE g_asgard_un_role ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 10a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 10b' ;
+
+    END ;
+
+    -- idem, si ce n'est que le rôle a CREATEROLE (et ça
+    -- ne change rien)
+    BEGIN
+        
+        SET ROLE g_asgard_createrole ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA',
+            new_producteur := 'g_asgard_producteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 11a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 11b' ;
+
+    END ; 
+
+    -- le rôle courant est le producteur
+
+    SET ROLE g_asgard_producteur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 12a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Grande bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 12b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 12c' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 12d' ;
+
+    -- le rôles courant est un super-utilisateur
+    SET ROLE g_asgard_superuser ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_superuser', 'échec assertion 13a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Petite bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 13b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 13c' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 13d' ;
+
+    -- le rôle courant est membre du rôle cible mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_producteur', 'échec assertion 14a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 14b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE g_asgard_manipulateur INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_asgard_producteur TO g_asgard_manipulateur
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE g_asgard_manipulateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 15a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Moyenne bibliothèque'
+        WHERE nom_schema = 'c_bibliotheque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard_producteur', 'USAGE'),
+            'échec assertion 15b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 15c' ;
+
+    REVOKE g_asgard_producteur FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 15d' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du rôle cible
+
+    SET ROLE g_asgard_utilisateur ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_producteur'
+    ) = 'g_asgard_manipulateur', 'échec assertion 16a' ;
+    -- NB : 'g_asgard_producteur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard_manipulateur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard_producteur')::regrole
+                AND NOT member = quote_ident('g_asgard_manipulateur')::regrole
+    ) = 0, 'échec assertion 16b' ;
+
+    DROP SCHEMA c_bibliotheque ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE g_asgard_producteur ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_utilisateur ;
+    DROP ROLE g_asgard_manipulateur ;
+    DROP ROLE g_asgard_createrole ;
+    DROP ROLE g_asgard_admin_delegue ;
+    DROP ROLE g_asgard_un_role ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t138() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''MODIFY GESTION SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t138b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t138b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g_asgard*PROducteur" ;
+    CREATE ROLE "g_asgard SUPERuser" SUPERUSER ;
+    CREATE ROLE "g_asgard&Utilisateur" NOINHERIT ;
+    CREATE ROLE "g_asgard:::MANipulateur" ;
+    CREATE ROLE "g_asgard_CREATERÔLE" CREATEROLE ;
+    CREATE ROLE "g_asgard_admin délégué" NOINHERIT ;
+    CREATE ROLE "g_asgard Un rôle" ;
+
+    IF current_setting('server_version_num')::int < 160000
+    THEN
+        ALTER ROLE "g_asgard:::MANipulateur" NOINHERIT ;
+        GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur" ;
+    ELSE
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT False, SET True' ;
+    END IF ;
+
+    GRANT g_admin TO "g_asgard_admin délégué" ;
+    GRANT "g_asgard:::MANipulateur" TO "g_asgard&Utilisateur" ;
+
+    CREATE SCHEMA "c_Bibliothèque" AUTHORIZATION "g_asgard*PROducteur" ;
+    
+    INSERT INTO z_asgard.gestion_schema_usr (creation, nom_schema, producteur)
+        VALUES (False, 'c_Librairie?!', 'g_asgard_ghOst') ;
+
+    -- le producteur n'est pas renseigné
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant('MODIFY GESTION SCHEMA') ;
+
+        ASSERT False, 'échec assertion 1a' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1b' ;
+
+    END ;
+
+    BEGIN
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            old_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 1c' ;
+
+    EXCEPTION WHEN null_value_not_allowed THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE50[.]', 'échec assertion 1d' ;
+
+    END ;
+
+    -- le producteur n'existe pas et le rôle courant n'est
+    -- pas membre de g_admin
+    BEGIN
+
+        SET ROLE "g_asgard Un rôle" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            new_producteur := 'g_asgard_ghOst'
+        ) ;
+
+        ASSERT False, 'échec assertion 2a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 2b' ;
+
+    END ;
+
+    -- le producteur n'existe pas et le rôle courant
+    -- est g_admin
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghOst'
+    ) = 'g_admin', 'échec assertion 3' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Librairie'
+        WHERE nom_schema = 'c_Librairie?!' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe, le rôle courant est g_admin
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_admin', 'échec assertion 4' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe, le rôle courant est g_admin,
+    -- auquel on a retiré ses droits sur ce rôle
+    -- -> ça ne change rien, car il suffit que le rôle
+    -- soit membre de g_admin
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    SET ROLE g_admin ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_admin', 'échec assertion 5a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 5b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 5c' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 5d' ;
+
+    -- le producteur n'existe pas et le rôle courant est
+    -- membre de g_admin sans hériter de ses droits
+
+    SET ROLE "g_asgard_admin délégué" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghOst'
+    ) = 'g_admin', 'échec assertion 6' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe et le rôle courant est
+    -- membre de g_admin sans hériter de ses droits
+
+    SET ROLE "g_asgard_admin délégué" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_admin', 'échec assertion 7' ;
+
+    RESET ROLE ;
+
+    -- le producteur n'existe pas et le rôle courant
+    -- hérite des droits de g_admin
+
+    ALTER ROLE "g_asgard_admin délégué" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT g_admin TO "g_asgard_admin délégué"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard_admin délégué" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard_ghOst'
+    ) = 'g_asgard_admin délégué', 'échec assertion 8' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Grande librairie'
+        WHERE nom_schema = 'c_Librairie?!' ;
+
+    RESET ROLE ;
+
+    -- le producteur existe et le rôle courant hérite
+    -- des droits de g_admin
+
+    SET ROLE "g_asgard_admin délégué" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard_admin délégué', 'échec assertion 9a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 9b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 9c' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 9d' ;
+
+    -- le producteur existe, le rôle courant n'en est
+    -- pas membre et n'est pas membre de g_admin
+
+    BEGIN
+            
+        SET ROLE "g_asgard Un rôle" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA', 
+            new_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 10a' ;
+
+    EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+        ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 10b' ;
+
+    END ;
+
+    -- idem, si ce n'est que le rôle a CREATEROLE (et ça
+    -- ne change rien)
+    BEGIN
+        
+        SET ROLE "g_asgard_CREATERÔLE" ;
+
+        PERFORM z_asgard.asgard_cherche_executant(
+            'MODIFY GESTION SCHEMA',
+            new_producteur := 'g_asgard*PROducteur'
+        ) ;
+
+        ASSERT False, 'échec assertion 11a' ;
+
+        EXCEPTION WHEN insufficient_privilege THEN
+            GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT ;
+
+            ASSERT e_mssg ~ 'FRE13[.]', 'échec assertion 11b' ;
+
+    END ; 
+
+    -- le rôle courant est le producteur
+
+    SET ROLE "g_asgard*PROducteur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 12a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Grande bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 12b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 12c' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 12d' ;
+
+    -- le rôles courant est un super-utilisateur
+    SET ROLE "g_asgard SUPERuser" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard SUPERuser', 'échec assertion 13a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Petite bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 13b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 13c' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 13d' ;
+
+    -- le rôle courant est membre du rôle cible mais
+    -- n'hérite pas de ses droits
+    
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 14a' ;
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 14b' ;
+
+    -- le rôle courant est membre du producteur et hérite
+    -- de ses droits
+
+    ALTER ROLE "g_asgard:::MANipulateur" INHERIT ;
+
+    IF current_setting('server_version_num')::int >= 160000
+    THEN
+        EXECUTE 'GRANT "g_asgard*PROducteur" TO "g_asgard:::MANipulateur"
+            WITH INHERIT True' ;
+    END IF ;
+
+    SET ROLE "g_asgard:::MANipulateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard:::MANipulateur', 'échec assertion 15a' ;
+
+    UPDATE z_asgard.gestion_schema_usr 
+        SET niv1 = 'Moyenne bibliothèque'
+        WHERE nom_schema = 'c_Bibliothèque' ;
+
+    RESET ROLE ;
+
+    ASSERT pg_has_role('g_admin', 'g_asgard*PROducteur', 'USAGE'),
+            'échec assertion 15b' ;
+
+    ASSERT quote_ident('g_admin')::regrole IN (
+        SELECT member FROM pg_auth_members 
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND admin_option
+                AND grantor = quote_ident(current_user)::regrole
+    ), 'échec assertion 15c' ;
+
+    REVOKE "g_asgard*PROducteur" FROM g_admin ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 15d' ;
+
+    -- si le rôle courant est membre d'un rôle qui hérite des droits du rôle cible
+
+    SET ROLE "g_asgard&Utilisateur" ;
+
+    ASSERT z_asgard.asgard_cherche_executant(
+        'MODIFY GESTION SCHEMA', 
+        new_producteur := 'g_asgard*PROducteur'
+    ) = 'g_asgard*PROducteur', 'échec assertion 16a' ;
+    -- NB : 'g_asgard:::MANipulateur' serait également un exécutant possible,
+    -- mais il arrive après 'g_asgard*PROducteur' dans l'ordre alphabétique.
+
+    RESET ROLE ;
+
+    ASSERT (
+        SELECT count(*) FROM pg_auth_members
+            WHERE roleid = quote_ident('g_asgard*PROducteur')::regrole
+                AND NOT member = quote_ident('g_asgard:::MANipulateur')::regrole
+    ) = 0, 'échec assertion 16b' ;
+
+    DROP SCHEMA "c_Bibliothèque" ;
+    DELETE FROM z_asgard.gestion_schema_usr ;
+
+    DROP ROLE "g_asgard*PROducteur" ;
+    DROP ROLE "g_asgard SUPERuser" ;
+    DROP ROLE "g_asgard&Utilisateur" ;
+    DROP ROLE "g_asgard:::MANipulateur" ;
+    DROP ROLE "g_asgard_CREATERÔLE" ;
+    DROP ROLE "g_asgard_admin délégué" ;
+    DROP ROLE "g_asgard Un rôle" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t138b() IS 'ASGARD recette. TEST : Test de la fonction asgard_cherche_executant - opération ''MODIFY GESTION SCHEMA''.' ;
+
+
+-- FUNCTION: z_asgard_recette.t139()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t139()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    ALTER ROLE g_admin RENAME TO g_admin_temp ;
+    ALTER ROLE g_admin_ext RENAME TO g_admin_ext_temp ;
+    ALTER ROLE g_consult RENAME TO g_consult_temp ;
+    ALTER ROLE "consult.defaut" RENAME TO "consult.defaut_temp" ;
+    
+    DROP EXTENSION asgard ;
+
+    -- pré-création de g_admin sans CREATEROLE et INHERIT
+    CREATE ROLE g_admin NOINHERIT ;
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO g_admin WITH GRANT OPTION', current_database()) ;
+    
+    -- sans pré-création des autres rôles
+
+    CREATE EXTENSION asgard ;
+
+    ASSERT (
+        SELECT rolinherit AND rolcreaterole 
+        FROM pg_catalog.pg_roles
+        WHERE rolname = 'g_admin'
+    ), 'échec assertion 1' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_admin_ext'
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 2' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_consult'
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 3' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid = quote_ident('consult.defaut')::regrole
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 4' ;
+
+    ASSERT quote_ident('consult.defaut')::regrole IN (
+        SELECT pg_auth_members.member 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_consult'
+                AND NOT pg_auth_members.admin_option
+    ), 'échec assertion 5' ;
+
+    DROP EXTENSION asgard ;
+
+    REVOKE g_consult FROM g_admin ;
+    REVOKE "consult.defaut" FROM g_admin ;
+    REVOKE g_admin_ext FROM g_admin ;
+    REVOKE g_consult FROM "consult.defaut" ;
+
+    -- avec pré-création des autres rôles
+
+    CREATE EXTENSION asgard ;
+
+    ASSERT (
+        SELECT rolinherit AND rolcreaterole 
+        FROM pg_catalog.pg_roles
+        WHERE rolname = 'g_admin'
+    ), 'échec assertion 6' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_admin_ext'
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 7' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_consult'
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 8' ;
+
+    ASSERT 'g_admin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid = quote_ident('consult.defaut')::regrole
+                AND pg_auth_members.admin_option
+    ), 'échec assertion 9' ;
+
+    ASSERT quote_ident('consult.defaut')::regrole IN (
+        SELECT pg_auth_members.member 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_consult'
+                AND NOT pg_auth_members.admin_option
+    ), 'échec assertion 10' ;
+
+    DROP EXTENSION asgard ;
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM g_admin', current_database()) ;
+    DROP ROLE g_admin_ext ;
+    DROP ROLE g_consult ;
+    DROP ROLE "consult.defaut" ;
+    DROP ROLE g_admin ;
+    
+    ALTER ROLE g_admin_temp RENAME TO g_admin ;
+    ALTER ROLE g_admin_ext_temp RENAME TO g_admin_ext ;
+    ALTER ROLE g_consult_temp RENAME TO g_consult ;
+    ALTER ROLE "consult.defaut_temp" RENAME TO "consult.defaut" ;
+    
+    CREATE EXTENSION asgard ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t139() IS 'ASGARD recette. TEST : Contrôle des permissions des rôles d''Asgard.' ;
+
+
+-- FUNCTION: z_asgard_recette.t140()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t140()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    -- g_admin_ext
+    ASSERT 'g_admin_ext' = (
+        SELECT string_agg(DISTINCT proowner::regrole::text, ', ')
+            FROM pg_catalog.pg_proc
+            WHERE pronamespace = 'z_asgard'::regnamespace
+    ), 'échec assertion 1' ;
+
+    ASSERT 'g_admin_ext' = (
+        SELECT string_agg(DISTINCT relowner::regrole::text, ', ')
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'z_asgard'::regnamespace
+    ), 'échec assertion 2' ;
+
+    ASSERT 'g_admin_ext' = (
+        SELECT string_agg(DISTINCT typowner::regrole::text, ', ')
+            FROM pg_catalog.pg_type
+            WHERE typnamespace = 'z_asgard'::regnamespace
+    ), 'échec assertion 3' ;
+
+    -- g_admin
+    ASSERT 'g_admin' = (
+        SELECT string_agg(DISTINCT proowner::regrole::text, ', ')
+            FROM pg_catalog.pg_proc
+            WHERE pronamespace = 'z_asgard_admin'::regnamespace
+                AND NOT proname = 'asgard_visibilite_admin_after'
+    ), 'échec assertion 4a' ;
+
+    ASSERT (
+        SELECT rolsuper
+            FROM pg_catalog.pg_proc 
+                INNER JOIN pg_catalog.pg_roles ON pg_roles.oid = proowner
+            WHERE pronamespace = 'z_asgard_admin'::regnamespace
+                AND proname = 'asgard_visibilite_admin_after'
+    ), 'échec assertion 4b' ;
+    -- par exception, le propriétaire de asgard_visibilite_admin_after
+    -- doit être un superutilisateur.
+
+    ASSERT 'g_admin' = (
+        SELECT string_agg(DISTINCT relowner::regrole::text, ', ')
+            FROM pg_catalog.pg_class
+            WHERE relnamespace = 'z_asgard_admin'::regnamespace
+    ), 'échec assertion 5' ;
+
+    ASSERT 'g_admin' = (
+        SELECT string_agg(DISTINCT typowner::regrole::text, ', ')
+            FROM pg_catalog.pg_type
+            WHERE typnamespace = 'z_asgard_admin'::regnamespace
+    ), 'échec assertion 6' ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t140() IS 'ASGARD recette. TEST : Vérifie que g_admin_ext est propriétaire de toutes les fonctions, types et relations du schéma z_asgard, et que g_admin est propriétaire des celles de z_asgard_admin.' ;
+
+
+-- FUNCTION: z_asgard_recette.t141()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t141()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE g_asgard_cible ;
+    CREATE ROLE g_asgard_login_1 LOGIN ;
+    CREATE ROLE g_asgard_login_2 LOGIN ;
+    CREATE ROLE g_asgard_login_3 LOGIN ;
+    CREATE ROLE g_asgard_login_4 LOGIN ;
+    CREATE ROLE g_asgard_intermediaire ;
+    GRANT g_asgard_intermediaire TO g_asgard_login_4 ;
+    GRANT g_asgard_cible TO g_asgard_intermediaire ;
+    CREATE ROLE g_asgard_superuser LOGIN SUPERUSER ;
+    CREATE ROLE g_asgard_nologin ;
+
+    ASSERT (
+        SELECT z_asgard_admin.asgard_all_login_grant_role('g_asgard_cible', False)
+    ) >= 4, 'échec assertion 1' ;
+	-- dépend du nombre de rôles de connexion non super-utilisateur qui existent
+    -- sur le serveur de recette
+
+    ASSERT 'g_asgard_login_1' IN (
+        SELECT pg_auth_members.member::regrole::text
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 2a' ;
+
+    ASSERT 'g_asgard_login_2' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 2b' ;
+
+    ASSERT 'g_asgard_login_3' IN (
+        SELECT pg_auth_members.member::regrole::text
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 2c' ;
+
+    ASSERT quote_ident('consult.defaut') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 2d' ;
+
+    ASSERT NOT 'g_asgard_login_4' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 3a' ;
+
+    ASSERT NOT 'g_asgard_superuser' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 3b' ;
+
+    ASSERT NOT 'g_asgard_nologin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 3c' ;
+
+    ASSERT (
+        SELECT z_asgard_admin.asgard_all_login_grant_role('g_asgard_cible')
+    ) = 1, 'échec assertion 4' ;
+
+    ASSERT 'g_asgard_login_4' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 5' ;
+
+    ASSERT NOT 'g_asgard_superuser' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 6a' ;
+
+    ASSERT NOT 'g_asgard_nologin' IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = 'g_asgard_cible'
+    ), 'échec assertion 6b' ;
+
+    DROP ROLE g_asgard_login_1 ;
+    DROP ROLE g_asgard_login_2 ;
+    DROP ROLE g_asgard_login_3 ;
+    DROP ROLE g_asgard_login_4 ;
+    DROP ROLE g_asgard_superuser ;
+    DROP ROLE g_asgard_intermediaire ;
+    DROP ROLE g_asgard_nologin ;
+    DROP ROLE g_asgard_cible ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t141() IS 'ASGARD recette. TEST : Test de la fonction asgard_all_login_grant_role.' ;
+
+
+-- FUNCTION: z_asgard_recette.t141b()
+
+CREATE OR REPLACE FUNCTION z_asgard_recette.t141b()
+    RETURNS boolean
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE
+   e_mssg text ;
+   e_detl text ;
+BEGIN
+
+    CREATE ROLE "g*Asgard_cible" ;
+    CREATE ROLE "g*Asgard_login_1" LOGIN ;
+    CREATE ROLE "g*Asgard_login_2" LOGIN ;
+    CREATE ROLE "g*Asgard_login_3" LOGIN ;
+    CREATE ROLE "g*Asgard_login_4" LOGIN ;
+    CREATE ROLE "g*Asgard_intermediaire" ;
+    GRANT "g*Asgard_intermediaire" TO "g*Asgard_login_4" ;
+    GRANT "g*Asgard_cible" TO "g*Asgard_intermediaire" ;
+    CREATE ROLE "g*Asgard_superuser" LOGIN SUPERUSER ;
+    CREATE ROLE "g*Asgard_nologin" ;
+
+    ASSERT (
+        SELECT z_asgard_admin.asgard_all_login_grant_role('g*Asgard_cible', False)
+    ) >= 4, 'échec assertion 1' ;
+	-- dépend du nombre de rôles de connexion non super-utilisateur qui existent
+    -- sur le serveur de recette
+
+    ASSERT quote_ident('g*Asgard_login_1') IN (
+        SELECT pg_auth_members.member::regrole::text
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 2a' ;
+
+    ASSERT quote_ident('g*Asgard_login_2') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 2b' ;
+
+    ASSERT quote_ident('g*Asgard_login_3') IN (
+        SELECT pg_auth_members.member::regrole::text
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 2c' ;
+
+    ASSERT quote_ident('consult.defaut') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 2d' ;
+
+    ASSERT NOT quote_ident('g*Asgard_login_4') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 3a' ;
+
+    ASSERT NOT quote_ident('g*Asgard_superuser') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 3b' ;
+
+    ASSERT NOT quote_ident('g*Asgard_nologin') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 3c' ;
+
+    ASSERT (
+        SELECT z_asgard_admin.asgard_all_login_grant_role('g*Asgard_cible')
+    ) = 1, 'échec assertion 4' ;
+
+    ASSERT quote_ident('g*Asgard_login_4') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 5' ;
+
+    ASSERT NOT quote_ident('g*Asgard_superuser') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 6a' ;
+
+    ASSERT NOT quote_ident('g*Asgard_nologin') IN (
+        SELECT pg_auth_members.member::regrole::text 
+            FROM pg_auth_members
+            WHERE pg_auth_members.roleid::regrole::text = quote_ident('g*Asgard_cible')
+    ), 'échec assertion 6b' ;
+
+    DROP ROLE "g*Asgard_login_1" ;
+    DROP ROLE "g*Asgard_login_2" ;
+    DROP ROLE "g*Asgard_login_3" ;
+    DROP ROLE "g*Asgard_login_4" ;
+    DROP ROLE "g*Asgard_superuser" ;
+    DROP ROLE "g*Asgard_intermediaire" ;
+    DROP ROLE "g*Asgard_nologin" ;
+    DROP ROLE "g*Asgard_cible" ;
+
+    RETURN True ;
+    
+EXCEPTION WHEN OTHERS OR ASSERT_FAILURE THEN
+    GET STACKED DIAGNOSTICS e_mssg = MESSAGE_TEXT,
+                            e_detl = PG_EXCEPTION_DETAIL ;
+    RAISE NOTICE '%', e_mssg
+        USING DETAIL = e_detl ;
+        
+    RETURN False ;
+    
+END
+$_$ ;
+
+COMMENT ON FUNCTION z_asgard_recette.t141b() IS 'ASGARD recette. TEST : Test de la fonction asgard_all_login_grant_role.' ;
+

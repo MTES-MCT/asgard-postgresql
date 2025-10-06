@@ -11,7 +11,7 @@ PKG_NAME=#PKG_NAME#
 PKG_VERSION=#PKG_VERSION#
 
 # Itération sur l'ensenmble des versions de PostgreSQL gérées
-for version in 10 11 12 13 14 15; do
+for version in 10 11 12 13 14 15 16 17 18; do
   # L'emplacement des extensions est dépendant de la version de PostgreSQL
   PG_EXT_DIR=/usr/share/postgresql/$version/extension
   if [ -d $PG_EXT_DIR ]; then
